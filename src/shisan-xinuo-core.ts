@@ -1,13 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { exec } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 export const name = 'shisan-xinuo-core'
 
 export const inject = ['systemPrompt', 'tools']
 
-const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 本会话强制生效）
+export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 本会话强制生效）
 
 以下纪律逐条执行，不是参考建议。
 
@@ -77,6 +78,117 @@ export function judgeL3(cmd: string): string | null {
     }
   }
   return null
+}
+
+// ── v0.3 Config 化：L3 规则包从引擎下沉为 content/rules.json 数据层（契约=docs/config-contract.md）──
+
+export interface CompiledRules {
+  patterns: Array<{ domain: string; re: RegExp; noExempt: boolean }>
+  exempts: RegExp[]
+}
+
+export interface RulesLoadResult {
+  rules: CompiledRules
+  source: string
+  valid: boolean
+  reason?: string
+  domains: number
+}
+
+const VALID_FLAG_SET = /^[imsu]*$/
+
+// 结构校验+编译：坏正则条目跳过并记 error（其余照常）；返回编译产物与错误清单。
+// 契约：l3Domains 必须是非空数组且至少 1 条编译成功，否则整体视为无效（fail-closed 由调用方回退内置默认）。
+export function compileRules(raw: unknown): { patterns: CompiledRules['patterns']; exempts: RegExp[]; errors: string[] } {
+  const errors: string[] = []
+  const patterns: CompiledRules['patterns'] = []
+  const exempts: RegExp[] = []
+  const r = raw as { version?: unknown; l3Domains?: unknown; readonlyExempts?: unknown } | null
+  if (!r || typeof r !== 'object') return { patterns, exempts, errors: ['根不是对象'] }
+  if (r.version !== 1) errors.push(`version 必须为 1（实际 ${JSON.stringify(r.version)}）`)
+  if (!Array.isArray(r.l3Domains) || r.l3Domains.length === 0) {
+    errors.push('l3Domains 必须是非空数组')
+    return { patterns, exempts, errors }
+  }
+  for (const [i, e] of (r.l3Domains as Array<Record<string, unknown>>).entries()) {
+    const domain = e?.domain
+    const pattern = e?.pattern
+    if (typeof domain !== 'string' || domain.trim() === '') { errors.push(`l3Domains[${i}].domain 非法`); continue }
+    if (typeof pattern !== 'string' || pattern === '') { errors.push(`l3Domains[${i}].pattern 非法`); continue }
+    const flags = e.flags === undefined ? 'i' : e.flags
+    if (typeof flags !== 'string' || !VALID_FLAG_SET.test(flags)) { errors.push(`l3Domains[${i}].flags 非法（仅 imsu，禁 g）`); continue }
+    try {
+      patterns.push({ domain, re: new RegExp(pattern, flags), noExempt: e.noExempt === true })
+    } catch (err) {
+      errors.push(`l3Domains[${i}] 正则编译失败：${String(err).slice(0, 80)}`)
+    }
+  }
+  if (Array.isArray(r.readonlyExempts)) {
+    for (const [i, e] of (r.readonlyExempts as Array<Record<string, unknown>>).entries()) {
+      const pattern = e?.pattern
+      if (typeof pattern !== 'string' || pattern === '') { errors.push(`readonlyExempts[${i}].pattern 非法`); continue }
+      const flags = e.flags === undefined ? 'i' : e.flags
+      if (typeof flags !== 'string' || !VALID_FLAG_SET.test(flags)) { errors.push(`readonlyExempts[${i}].flags 非法（仅 imsu，禁 g）`); continue }
+      try {
+        exempts.push(new RegExp(pattern, flags))
+      } catch (err) {
+        errors.push(`readonlyExempts[${i}] 正则编译失败：${String(err).slice(0, 80)}`)
+      }
+    }
+  }
+  if (patterns.length === 0) errors.push('无任何有效 l3Domains 条目')
+  return { patterns, exempts, errors }
+}
+
+const DEFAULT_RULES: CompiledRules = {
+  patterns: L3_PATTERNS.map((p) => ({ domain: p.domain, re: p.re, noExempt: p.domain === '编码执行' })),
+  exempts: [...READONLY_EXEMPTS],
+}
+
+// 读文件→校验→fail-closed：任何失败回退内置默认（防护不静默解除），失败原因随结果带回供落账。
+export function loadRulesFile(path: string): RulesLoadResult {
+  if (!existsSync(path)) {
+    return { rules: DEFAULT_RULES, source: path, valid: false, reason: '文件不存在', domains: DEFAULT_RULES.patterns.length }
+  }
+  let raw: unknown
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (e) {
+    return { rules: DEFAULT_RULES, source: path, valid: false, reason: `JSON 解析失败：${String(e).slice(0, 80)}`, domains: DEFAULT_RULES.patterns.length }
+  }
+  const { patterns, exempts, errors } = compileRules(raw)
+  if (patterns.length === 0) {
+    return { rules: DEFAULT_RULES, source: path, valid: false, reason: errors.join('；'), domains: DEFAULT_RULES.patterns.length }
+  }
+  const result: RulesLoadResult = { rules: { patterns, exempts }, source: path, valid: errors.length === 0, domains: patterns.length }
+  if (errors.length > 0) result.reason = errors.join('；')
+  return result
+}
+
+// 规则注入式判定（config 化后的活动判定面；judgeL3 保持内置默认语义供回归对照）。
+export function judgeL3With(rules: CompiledRules, cmd: string): string | null {
+  for (const p of rules.patterns) {
+    if (p.re.test(cmd)) {
+      if (p.noExempt) return p.domain
+      for (const ex of rules.exempts) {
+        if (ex.test(cmd)) return null
+      }
+      return p.domain
+    }
+  }
+  return null
+}
+
+// 文本类 content 装载（discipline.md 同 fail-closed 语义：无效回退引擎内嵌默认）。
+export function loadTextWithFallback(path: string, fallback: string): { text: string; source: string; valid: boolean; reason?: string } {
+  if (!existsSync(path)) return { text: fallback, source: path, valid: false, reason: '文件不存在' }
+  try {
+    const t = readFileSync(path, 'utf8')
+    if (t.trim() === '') return { text: fallback, source: path, valid: false, reason: '文件为空' }
+    return { text: t, source: path, valid: true }
+  } catch (e) {
+    return { text: fallback, source: path, valid: false, reason: String(e).slice(0, 80) }
+  }
 }
 
 // GATE 收口检查：实质工作回合（≥1 次工具调用）正常收尾（completed）才要求 GATE。
@@ -164,8 +276,9 @@ function extractCommand(exec: { name?: string; arguments?: unknown }): string {
 // ── T1 discipline_gate：收口验证从「模型自报」升级为「宿主真值」（roadmap §3 T1 / release-plan v0.2）──
 
 // 收口命令预检：命中 L3 危险域=拒跑（gate 不是绕过 L3 的侧门），否则放行宿主执行。
-export function planGate(cmd: string): { action: 'run' | 'refuse'; domain?: string } {
-  const domain = judgeL3(cmd)
+// judge 可注入（v0.3：跟随 content/rules.json 活动规则；默认=引擎内置）。
+export function planGate(cmd: string, judge: (c: string) => string | null = judgeL3): { action: 'run' | 'refuse'; domain?: string } {
+  const domain = judge(cmd)
   return domain ? { action: 'refuse', domain } : { action: 'run' }
 }
 
@@ -213,11 +326,13 @@ export interface GateToolDeps {
   runCmd?: typeof runGateCommand
   log: (entry: Record<string, unknown>) => void | Promise<void>
   onStats?: (verdict: string) => void
+  judge?: (cmd: string) => string | null
 }
 
 // 工具定义构造器（对接真相=app.asar 内建工具样例：parameters DSL {名:{type,required,description}} + output{schema,render} + execute(args,exec)）
 export function buildGateToolDefinition(deps: GateToolDeps) {
   const runCmd = deps.runCmd ?? runGateCommand
+  const judge = deps.judge ?? judgeL3
   return {
     name: 'discipline_gate',
     description:
@@ -257,7 +372,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       const files = args.files === undefined ? undefined : String(args.files).slice(0, 300)
       const exempt = args.exempt === undefined ? undefined : String(args.exempt).slice(0, 300)
 
-      const plan = planGate(cmd)
+      const plan = planGate(cmd, judge)
       if (plan.action === 'refuse') {
         deps.onStats?.('refused')
         void deps.log({ kind: 'gate-tool', status: 'refused', domain: plan.domain, level, v, cmd: cmd.slice(0, 200), claimedExit })
@@ -312,6 +427,15 @@ export function apply(ctx: Context) {
   void log({ kind: 'arm', mode: observeMode ? 'A' : 'B' })
   console.log(`[shisan-xinuo] arm=${observeMode ? 'A (observe: no inject, no ask)' : 'B (full treatment)'}`)
 
+  // ── v0.3 content 层装载（fail-closed：无效回退引擎内置默认，防护不静默解除；装载事件落账可审计）──
+  const contentDir = fileURLToPath(new URL('../content/', import.meta.url))
+  const rulesLoad = loadRulesFile(process.env.SHISANUO_RULES ?? contentDir + 'rules.json')
+  void log({ kind: 'rules', source: rulesLoad.source, valid: rulesLoad.valid, domains: rulesLoad.domains, ...(rulesLoad.reason ? { reason: rulesLoad.reason } : {}) })
+  console.log(`[shisan-xinuo] rules: source=${rulesLoad.source} valid=${rulesLoad.valid} domains=${rulesLoad.domains}${rulesLoad.reason ? ` reason=${rulesLoad.reason}` : ''}`)
+  const disciplineLoad = loadTextWithFallback(process.env.SHISANUO_DISCIPLINE ?? contentDir + 'discipline.md', CORE_DISCIPLINE)
+  void log({ kind: 'discipline', source: disciplineLoad.source, valid: disciplineLoad.valid, ...(disciplineLoad.reason ? { reason: disciplineLoad.reason } : {}) })
+  const activeJudge = (c: string): string | null => judgeL3With(rulesLoad.rules, c)
+
   // ── 会话统计（宿主机判，数据直供 A/B「GATE 出现率」+ v0.2 gate-tool 真值计数）──
   const stats = {
     checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
@@ -320,7 +444,7 @@ export function apply(ctx: Context) {
 
   const toolDispose = ctx.on('tools/pre-execute', async (exec: { name?: string; arguments?: unknown }, next: () => Promise<unknown>) => {
     const cmd = extractCommand(exec)
-    const hit = judgeL3(String(cmd))
+    const hit = activeJudge(String(cmd))
     void log({ kind: 'pre-execute', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit })
     if (hit) {
       stats.intercepted++
@@ -403,7 +527,7 @@ export function apply(ctx: Context) {
     const promptDispose = ctx.systemPrompt.section({
       name: 'shisanxinuo:core-discipline',
       order: 300,
-      text: CORE_DISCIPLINE,
+      text: disciplineLoad.text,
     })
     console.log('[shisan-xinuo] core discipline section registered')
     const statusDispose = ctx.systemPrompt.section({
@@ -430,6 +554,7 @@ export function apply(ctx: Context) {
         }
         const def = buildGateToolDefinition({
           log: (entry) => void log(entry),
+          judge: activeJudge,
           onStats: (verdict) => {
             const g = stats.gateTool
             g.calls++
