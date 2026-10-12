@@ -60,12 +60,12 @@ function readLines(file) {
 function aggregate(lines) {
   const byKind = {}
   for (const l of lines) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
-  const arm = { A: 0, B: 0 }
+  const arm = { A: 0, B: 0, C: 0 }
   const l3 = { detected: 0, intercepted: 0 }
   const behavior = { turns: 0, hasText: 0, restated: 0, levelDeclared: 0, gateOk: 0, gateOkTool: 0, gateMissing: 0, gateSkip: 0, qualified: 0, hollow: 0 }
   const gateTool = { calls: 0, pass: 0, 'honest-fail': 0, mismatch: 0, refused: 0, error: 0 }
   for (const l of lines) {
-    if (l.kind === 'arm' && (l.mode === 'A' || l.mode === 'B')) arm[l.mode]++
+    if (l.kind === 'arm' && (l.mode === 'A' || l.mode === 'B' || l.mode === 'C')) arm[l.mode]++
     else if (l.kind === 'l3-detected') l3.detected++
     else if (l.kind === 'l3-intercept') l3.intercepted++
     else if (l.kind === 'behavior') {
@@ -133,7 +133,7 @@ function fmtReport(a) {
   const rate = (n, d) => (d === 0 ? '—' : `${((n / d) * 100).toFixed(1)}%`)
   return [
     `exec-log 聚合：${a.lines} 行 ${JSON.stringify(a.byKind)}`,
-    `arm: A=${a.arm.A} B=${a.arm.B}`,
+    `arm: A=${a.arm.A} B=${a.arm.B} C=${a.arm.C}`,
     `L3: 命中记录=${a.l3.detected} 拦截=${a.l3.intercepted}`,
     `behavior: 回合=${b.turns} 有文本=${b.hasText}｜复述 ${b.restated}/${b.hasText}=${rate(b.restated, b.hasText)}｜判级 ${b.levelDeclared}/${b.hasText}=${rate(b.levelDeclared, b.hasText)}`,
     `GATE 文本面: ok=${b.gateOk} ok-tool=${b.gateOkTool} missing=${b.gateMissing} skip=${b.gateSkip}｜qualified=${b.qualified} hollow=${b.hollow}`,

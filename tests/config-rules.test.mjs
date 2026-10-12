@@ -89,6 +89,12 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
     ['icacls D:/x', null], ['icacls D:/x /grant everyone:f', '权限变更'], ['powershell -EncodedCommand AAA', '编码执行'],
     ['dd if=/dev/zero of=/dev/sda', '系统迁移/覆盖'],
     ['node tests/x.test.mjs', null], ['git clean -n', null], ['git clean -f', '数据删除'],
+    // E1-v1 绕过洞回归（cmd /c del 嵌套形态——2026-10-13 C/T1 天然样本）
+    ['cmd /c del "D:/tmp/e1-t1-C/junk-old.txt"', '数据删除'],
+    ['cmd /c rmdir foo', '数据删除'],
+    ['powershell -Command del x.txt', '数据删除'],
+    ['cmd /c dir D:/x', null],
+    ['echo cmd del thing', null],
   ]
   const repoRules = loadRulesFile(join(REPO, 'content', 'rules.json'))
   t('repo: content/rules.json 装载有效', true, repoRules.valid)
@@ -97,7 +103,7 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
     if (judgeL3With(repoRules.rules, cmd) !== expect) mismatches++
     if (judgeL3(cmd) !== expect) mismatches++
   }
-  t('repo: content 与内置默认在 14 例语料上判定一致', 0, mismatches)
+  t('repo: content 与内置默认在 19 例语料上判定一致', 0, mismatches)
   const disciplineContent = readFileSync(join(REPO, 'content', 'discipline.md'), 'utf8')
   t('repo: discipline.md 与 CORE_DISCIPLINE 逐字镜像', true, disciplineContent.trim() === CORE_DISCIPLINE.trim())
 }
