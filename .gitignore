@@ -1,0 +1,9 @@
+# 本地运行产物与私档（不入库）
+logs/
+tmp/
+memory/
+*.log
+node_modules/
+dist/
+.credentials*
+*.bak*
