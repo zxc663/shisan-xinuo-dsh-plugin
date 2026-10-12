@@ -1,9 +1,32 @@
-# 本地运行产物与私档（不入库）
-logs/
-tmp/
-memory/
-*.log
+# dependencies / build
 node_modules/
 dist/
+build/
+*.tgz
+
+# env / secrets
+.env
+.env.*
+*.key
+*.pem
+*.p12
 .credentials*
+
+# logs / temp / local runs
+*.log
+tmp/
+temp/
+logs/
+
+# local memory (per-machine audit log, not distributed)
+memory/
+
+# local backups
 *.bak*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
