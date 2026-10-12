@@ -1,6 +1,6 @@
 // T1 discipline_gate 单测——真值判定三态/L3 拒跑/注入式 execute 全路径（正/负/边界）。
 // 运行：node tests/gate-tool.test.mjs
-import { planGate, judgeGateToolResult, gateToolMessage, buildGateToolDefinition } from '../src/shisan-xinuo-core.ts'
+import { planGate, judgeGateToolResult, gateToolMessage, buildGateToolDefinition, withToolGate, parseSessionEvent } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0
 let fail = 0
@@ -118,6 +118,17 @@ async function runExecute(args, runCmdImpl, verdicts = [], logs = []) {
   )
   t('exec: v 截断 ≤200', true, logs[0].v.length <= 200)
 }
+
+// ── withToolGate 合成判定（文本 GATE 机判与工具收口的合流）──
+t('wtg: missing+用过工具=ok-tool', 'ok-tool', withToolGate('missing', true))
+t('wtg: ok+用过工具=ok-tool', 'ok-tool', withToolGate('ok', true))
+t('wtg: skip+用过工具=仍 skip（中断回合不检）', 'skip', withToolGate('skip', true))
+t('wtg: missing+没用工具=missing', 'missing', withToolGate('missing', false))
+t('wtg: ok+没用工具=ok', 'ok', withToolGate('ok', false))
+
+// ── parseSessionEvent name 透传（回合桶工具识别依赖）──
+t('env: tool/call 透传 name', 'discipline_gate', parseSessionEvent({ type: 'tool/call', data: { turn: 1, callId: 'c1', name: 'discipline_gate', arguments: '{}' } })?.name)
+t('env: 非 tool/call 无 name=undefined', undefined, parseSessionEvent({ type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } })?.name)
 
 console.log(cases.join('\n'))
 console.log(`\n${pass} pass, ${fail} fail`)

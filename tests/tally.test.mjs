@@ -78,16 +78,13 @@ function run(args) {
   t('attack: 伪造 gate-ok 被抓', code === 1 && out.includes('turn=99'), out)
 }
 
-// 5) 攻击样本 C：篡改既有条目（同快照同行数下聚合一变）+ 行数倒退
+// 5) 攻击样本 C：behavior.gate 枚举外值（伪造「合格」判定形态）
 {
-  // 先冻结快照（snapshot 固定写 logs/tally-report.last.json，临时把日志复制到真实位置做一次 freeze，再还原——
-  // 更简单：直接把快照逻辑当作文件比对测试：手工构造快照文件放 TD，改 tally 的 SNAPSHOT 路径不可行，
-  // 故用「快照=同目录冻结产物」策略：freeze 总写 repo/logs；此处改为验证不变量面的 ts 回退攻击）
   const f = join(TD, 'atkC.jsonl')
-  const lines = [...good, { ts: '2026-10-13T00:59:00.000Z', kind: 'behavior', turn: 4, hasText: true, restated: true, levelDeclared: true, gate: 'skip', gateQuality: 'none' }]
+  const lines = [...good, { ts: '2026-10-13T01:00:07.000Z', kind: 'behavior', turn: 5, hasText: true, restated: true, levelDeclared: true, gate: 'excellent', gateQuality: 'qualified' }]
   writeFileSync(f, lines.map((l) => JSON.stringify(l)).join('\n') + '\n')
   const { code, out } = run(['--check', '--no-snapshot', `--file=${f}`])
-  t('attack: ts 回退被抓', code === 1 && out.includes('ts 回退'), out)
+  t('attack: gate 枚举外值被抓', code === 1 && out.includes('非法值') && out.includes('excellent'), out)
 }
 
 // 6) 攻击样本 D：未知 kind（新日志类型未登记白名单）

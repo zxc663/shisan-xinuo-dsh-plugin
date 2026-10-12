@@ -128,9 +128,9 @@ export function assistantText(content: unknown): string {
 // session/event 信封拆解：事件是 {type, seq, time, data}，业务字段全在 data 内层。
 // 非 GATE 检查相关事件（无数字 turn）返回 null。
 export function parseSessionEvent(event: unknown): {
-  type: string; turn: number; content: unknown; endKind: string
+  type: string; turn: number; content: unknown; endKind: string; name?: string
 } | null {
-  const e = event as { type?: unknown; data?: { turn?: unknown; message?: { content?: unknown }; reason?: { kind?: unknown } } } | null
+  const e = event as { type?: unknown; data?: { turn?: unknown; message?: { content?: unknown }; reason?: { kind?: unknown }; name?: unknown } } | null
   if (!e || typeof e !== 'object' || typeof e.type !== 'string') return null
   const d = e.data
   if (!d || typeof d !== 'object' || typeof d.turn !== 'number') return null
@@ -139,7 +139,14 @@ export function parseSessionEvent(event: unknown): {
     turn: d.turn,
     content: d.message?.content,
     endKind: String(d.reason?.kind ?? 'unknown'),
+    name: typeof d.name === 'string' ? d.name : undefined,
   }
+}
+
+// 工具化收口合成判定：文本 GATE 判定非 skip 且本回合调过 discipline_gate → ok-tool（工具收口=合法形态）。
+export function withToolGate(baseVerdict: string, usedGateTool: boolean): string {
+  if (usedGateTool && baseVerdict !== 'skip') return 'ok-tool'
+  return baseVerdict
 }
 
 function extractCommand(exec: { name?: string; arguments?: unknown }): string {
@@ -336,8 +343,8 @@ export function apply(ctx: Context) {
   })
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
-  // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText} ──
-  const turnBuckets = new Map<unknown, { turn: number; toolCalls: number; firstText: string; lastText: string }>()
+  // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
+  const turnBuckets = new Map<unknown, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean }>()
 
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
@@ -347,12 +354,13 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '' }
+        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '', gateTool: false }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
       if (ev.type === 'tool/call') {
         b.toolCalls++
+        if ((ev as { name?: unknown }).name === 'discipline_gate') b.gateTool = true
       } else if (ev.type === 'assistant/message') {
         const t = assistantText(ev.content)
         if (t) {
@@ -360,18 +368,18 @@ export function apply(ctx: Context) {
           b.lastText = t
         }
       } else if (ev.type === 'turn/end') {
-        const verdict = judgeGate(b.lastText, b.toolCalls, ev.endKind)
+        const verdict = withToolGate(judgeGate(b.lastText, b.toolCalls, ev.endKind), b.gateTool)
         // 行为指标行：每轮必落（复述/判级分母由 tally 按 hasText 过滤）
         void log({
           kind: 'behavior', turn: ev.turn, hasText: b.firstText !== '',
           restated: judgeRestated(b.firstText), levelDeclared: judgeLevelDeclared(b.firstText),
-          gate: verdict, gateQuality: judgeGateQuality(b.lastText),
+          gate: verdict, gateQuality: b.gateTool ? 'qualified' : judgeGateQuality(b.lastText),
         })
         if (verdict !== 'skip') {
           stats.checked++
-          if (verdict === 'ok') {
+          if (verdict === 'ok' || verdict === 'ok-tool') {
             stats.gateOk++
-            stats.lastGate = '有'
+            stats.lastGate = verdict === 'ok-tool' ? '有(工具)' : '有'
             void log({ kind: 'gate-ok', turn: ev.turn, tail: b.lastText.slice(-200) })
           } else {
             stats.gateMissing++

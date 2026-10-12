@@ -56,7 +56,7 @@ function aggregate(lines) {
   for (const l of lines) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
   const arm = { A: 0, B: 0 }
   const l3 = { detected: 0, intercepted: 0 }
-  const behavior = { turns: 0, hasText: 0, restated: 0, levelDeclared: 0, gateOk: 0, gateMissing: 0, gateSkip: 0, qualified: 0, hollow: 0 }
+  const behavior = { turns: 0, hasText: 0, restated: 0, levelDeclared: 0, gateOk: 0, gateOkTool: 0, gateMissing: 0, gateSkip: 0, qualified: 0, hollow: 0 }
   const gateTool = { calls: 0, pass: 0, 'honest-fail': 0, mismatch: 0, refused: 0, error: 0 }
   for (const l of lines) {
     if (l.kind === 'arm' && (l.mode === 'A' || l.mode === 'B')) arm[l.mode]++
@@ -68,6 +68,7 @@ function aggregate(lines) {
       if (l.restated) behavior.restated++
       if (l.levelDeclared) behavior.levelDeclared++
       if (l.gate === 'ok') behavior.gateOk++
+      else if (l.gate === 'ok-tool') behavior.gateOkTool++
       else if (l.gate === 'missing') behavior.gateMissing++
       else behavior.gateSkip++
       if (l.gateQuality === 'qualified') behavior.qualified++
@@ -98,32 +99,26 @@ function checkWhitelist(lines) {
     for (const [f, cap] of Object.entries(CAPS)) {
       if (typeof l[f] === 'string' && l[f].length > cap) v.push(`line ${i + 1}: 字段 ${f} 超 ${cap} 字符截断帽（实际 ${l[f].length}）`)
     }
-    if (l.kind === 'behavior' && !['ok', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
+    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
   })
   return v
 }
 
 function checkInvariants(lines) {
   const v = []
-  let lastTs = 0
   const behaviorByTurn = new Map()
   for (const l of lines) {
-    if (typeof l.ts === 'string') {
-      const t = Date.parse(l.ts)
-      if (!Number.isNaN(t)) {
-        if (t < lastTs) v.push(`ts 回退：${l.ts} 晚于前一条`)
-        lastTs = t
-      }
-    }
     if (l.kind === 'behavior') behaviorByTurn.set(`${l.turn}:${l.gate}`, (behaviorByTurn.get(`${l.turn}:${l.gate}`) ?? 0) + 1)
   }
-  // gate-ok / gate-missing 行必须能与同 turn 的 behavior 判定对上（防伪造收口证据）
+  // 注：不做全局 ts 单调校验——exec-log 由桌面+headless 多进程并发追加，跨进程时间戳交错是合法形态（实测 696 行含 2 处），
+  // 单调性不是该日志的不变量；篡改历史由快照对账（同行数聚合比对+行数倒退）负责。
+  // gate-ok / gate-missing 行必须能与同 turn 的 behavior 判定对上（防伪造收口证据；ok-tool 回合同样落 gate-ok）
   for (const l of lines) {
-    if (l.kind === 'gate-ok' && !behaviorByTurn.has(`${l.turn}:ok`)) v.push(`gate-ok turn=${l.turn} 无对应 behavior(gate=ok) 行——疑似植入/伪造`)
+    if (l.kind === 'gate-ok' && !behaviorByTurn.has(`${l.turn}:ok`) && !behaviorByTurn.has(`${l.turn}:ok-tool`)) v.push(`gate-ok turn=${l.turn} 无对应 behavior(gate=ok/ok-tool) 行——疑似植入/伪造`)
     if (l.kind === 'gate-missing' && !behaviorByTurn.has(`${l.turn}:missing`)) v.push(`gate-missing turn=${l.turn} 无对应 behavior(gate=missing) 行——疑似植入/伪造`)
   }
   const agg = aggregate(lines)
-  if (agg.behavior.gateOk + agg.behavior.gateMissing + agg.behavior.gateSkip !== agg.behavior.turns) v.push('behavior 三态计数之和 ≠ 总数')
+  if (agg.behavior.gateOk + agg.behavior.gateOkTool + agg.behavior.gateMissing + agg.behavior.gateSkip !== agg.behavior.turns) v.push('behavior 四态计数之和 ≠ 总数')
   return v
 }
 
@@ -135,7 +130,7 @@ function fmtReport(a) {
     `arm: A=${a.arm.A} B=${a.arm.B}`,
     `L3: 命中记录=${a.l3.detected} 拦截=${a.l3.intercepted}`,
     `behavior: 回合=${b.turns} 有文本=${b.hasText}｜复述 ${b.restated}/${b.hasText}=${rate(b.restated, b.hasText)}｜判级 ${b.levelDeclared}/${b.hasText}=${rate(b.levelDeclared, b.hasText)}`,
-    `GATE 文本面: ok=${b.gateOk} missing=${b.gateMissing} skip=${b.gateSkip}｜qualified=${b.qualified} hollow=${b.hollow}`,
+    `GATE 文本面: ok=${b.gateOk} ok-tool=${b.gateOkTool} missing=${b.gateMissing} skip=${b.gateSkip}｜qualified=${b.qualified} hollow=${b.hollow}`,
     `gate-tool 真值面: 调用=${a.gateTool.calls} pass=${a.gateTool.pass} honest-fail=${a.gateTool['honest-fail']} mismatch=${a.gateTool.mismatch} refused=${a.gateTool.refused} error=${a.gateTool.error}`,
   ].join('\n')
 }
