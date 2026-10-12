@@ -37,7 +37,21 @@
 - `version` 非 1：拒用（回退默认+reason 注明）——规则包不支持跨结构版本静默兼容，未来结构升级走 version=2 显式迁移。
 - 引擎升级新增域时：content 旧文件不含新域=用户显式选择不启用该域（合法差异）；随仓 content 与内置默认的等价性由单测在 14 例语料上回归。
 
+## 7. v0.4 追加：工具预算器（content/budget.json）
+
+| 项 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `version` | 整数=1 | 1 | 结构版本 |
+| `levels["L1"/"L2-S"/"L2-F"]` | `{allow?: string[]}` 或 `"*"` | L1=7 工具白名单/L2-S=13/L2-F="*" | 判级→工具面掩码；`*`=全量 |
+
+- **fail-open**（与 L3 规则的 fail-closed 相反，方向性有意不同）：预算是优化不是防护——无效配置不裁剪（全量面），防「配置笔误把工具面裁没」。
+- **引擎固定**：`BUDGET_ALWAYS_ALLOW`（discipline_gate/read/pwsh/write/edit）强制并入任何 allow 白名单——预算永不裁掉收口验证与基本读写。
+- 触发：①`SHISANUO_BUDGET_LEVEL` 环境变量（启动即裁，测试用）②模型首条判级声明（会话中裁，对现行 agent 即时生效+对后续 agent 生效）。
+- 机制：`ctx.tools.restrict(mask)` 挂 **agent/created 的 agent.ctx**（根 ctx 全局掩码被宿主拒绝——实跑实证）；per-agent 注册包 `agent.ctx.effect` 双保险清理。
+- 效果测量：`tools-wire` 日志行（每请求实际工具数/字符数，取自 request/header 真值）——预算效果以此为准。
+
 ## 6. 行为变化可重复验证（DoD 核心项）
+
 
 「改 rules.json → 测试观察行为变，非仅文件变」——tests/config-rules.test.mjs §3 固化了三条可复现证据：
 1. 加域：自定义 `deploy-to-prod` 域 → 同一命令 `deploy-to-prod --go live` 从放行变为拦截；

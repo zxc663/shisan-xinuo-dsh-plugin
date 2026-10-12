@@ -26,6 +26,10 @@ const FIELD_WHITELIST = {
   'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error'],
   rules: ['source', 'valid', 'domains', 'reason'],
   discipline: ['source', 'valid', 'reason'],
+  budget: ['source', 'valid', 'reason'],
+  'budget-applied': ['level', 'trigger', 'mask', 'allow', 'deny'],
+  'tools-inventory': ['count', 'names'],
+  'tools-wire': ['count', 'chars'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
