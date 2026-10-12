@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { exec } from 'node:child_process'
 
 export const name = 'shisan-xinuo-core'
 
@@ -28,9 +29,10 @@ const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 本会话强�
 - 不假实现：未做/未验证的事显式标注，绝不编造运行结果或退出码；没跑验证就写没跑。
 - 判「不复现/不存在」需判据逐字对齐+真实调用链+对照组，否则降级「未定论」。
 
-## 收口（每个任务块结束时必出，单行）
-GATE: {level=<L1/L2-S/L2-F>, v=<改动范围>, cmd=<可重跑的验证命令>, exit=<真实退出码>, files=<变更文件>, exempt=<未验证事项,无则填—>}
-cmd 必须真实执行过且可重跑，exit 必须真实退出码——宁交「未验证」的诚实，不交「假完成」。
+## 收口（每个任务块结束时必做）
+- 首选：调用 discipline_gate 工具——宿主真实执行你的验证 cmd、取真实退出码并与你声称的 exit 比对；不符或验证未通过=修复后重验，未通过前不得宣告任务完成。
+- 工具不可用/被拒时退回文本 GATE 单行（自报形态）：GATE: {level=…, v=…, cmd=…, exit=真实退出码, files=…, exempt=…}
+- cmd 必须真实可重跑——宁交「未验证」的诚实，不交「假完成」。
 
 ## 方法与容错
 - 能复用绝不自研：先检索现成方案，找不到才自写并说明原因。
@@ -152,6 +154,138 @@ function extractCommand(exec: { name?: string; arguments?: unknown }): string {
   return JSON.stringify(a ?? {}).slice(0, 200)
 }
 
+// ── T1 discipline_gate：收口验证从「模型自报」升级为「宿主真值」（roadmap §3 T1 / release-plan v0.2）──
+
+// 收口命令预检：命中 L3 危险域=拒跑（gate 不是绕过 L3 的侧门），否则放行宿主执行。
+export function planGate(cmd: string): { action: 'run' | 'refuse'; domain?: string } {
+  const domain = judgeL3(cmd)
+  return domain ? { action: 'refuse', domain } : { action: 'run' }
+}
+
+// 真值判定：match=声明与实测一致（诚实度）；verdict=验证本身是否通过（exit 0）。
+// 三态分离（release-plan §7.2 证据三分离）：honest-fail=诚实声明了失败验证，同样不得宣告完成。
+export function judgeGateToolResult(claimedExit: number, realExit: number): {
+  match: boolean; verdict: 'pass' | 'honest-fail' | 'mismatch'
+} {
+  const match = claimedExit === realExit
+  if (!match) return { match, verdict: 'mismatch' }
+  return { match, verdict: realExit === 0 ? 'pass' : 'honest-fail' }
+}
+
+export function gateToolMessage(verdict: string, claimedExit: number, realExit: number | null, extra = ''): string {
+  if (verdict === 'refused') return `REFUSED：验证命令命中 L3 危险域（${extra}），宿主拒绝执行。请改用只读/无害的验证命令重新调用本工具收口。`
+  if (verdict === 'error') return `ERROR：宿主执行验证命令失败（${extra}）。命令未产生有效退出码——检查命令可执行性后重试，或声明未验证事项。`
+  if (verdict === 'mismatch') return `MISMATCH：宿主实测 exit=${realExit}，与你声称的 claimedExit=${claimedExit} 不符。任务不得宣告完成——重新检查并修复，然后重新验证并再次调用本工具。`
+  if (verdict === 'honest-fail') return `HONEST-FAIL：声明与实测一致（exit=${realExit}），但验证本身未通过（非零退出码）。任务不得宣告完成——修复后重验。`
+  return `PASS：宿主实测 exit=${realExit}，与声称一致，验证通过。收口成立。`
+}
+
+const GATE_CMD_TIMEOUT_MS = 30_000
+const GATE_TAIL_CAP = 300
+
+// 真实执行（副作用面，测试经注入替换）：Windows 下走 cmd.exe（Node exec 默认 ComSpec）。
+export async function runGateCommand(
+  cmd: string,
+  opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; spawnError?: string }> {
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: opts.timeoutMs ?? GATE_CMD_TIMEOUT_MS, signal: opts.signal, maxBuffer: 1024 * 256 }, (err, stdout, stderr) => {
+      const timedOut = Boolean(err && (err as NodeJS.ErrnoException & { killed?: boolean }).killed)
+      resolve({
+        code: err && typeof (err as { code?: number | string }).code === 'number' ? (err as { code: number }).code : err ? null : 0,
+        stdout: String(stdout).slice(-GATE_TAIL_CAP),
+        stderr: String(stderr).slice(-GATE_TAIL_CAP),
+        timedOut,
+        spawnError: err && !timedOut && typeof (err as { code?: unknown }).code !== 'number' ? String(err.message).slice(0, 200) : undefined,
+      })
+    })
+  })
+}
+
+export interface GateToolDeps {
+  runCmd?: typeof runGateCommand
+  log: (entry: Record<string, unknown>) => void | Promise<void>
+  onStats?: (verdict: string) => void
+}
+
+// 工具定义构造器（对接真相=app.asar 内建工具样例：parameters DSL {名:{type,required,description}} + output{schema,render} + execute(args,exec)）
+export function buildGateToolDefinition(deps: GateToolDeps) {
+  const runCmd = deps.runCmd ?? runGateCommand
+  return {
+    name: 'discipline_gate',
+    description:
+      '任务收口验证（每任务块结束必调）：宿主真实执行你声明的验证命令并取真实退出码，与你声称的 claimedExit 比对。不符/未通过会打回。命令在 Windows cmd.exe 下运行；危险命令会被拒绝。这是「完成」的唯一可信通道。',
+    parameters: {
+      level: { type: 'string', required: true, description: '任务判级：L1 | L2-S | L2-F' },
+      v: { type: 'string', required: true, description: '改动范围一句话' },
+      cmd: { type: 'string', required: true, description: '可重跑的验证命令（宿主将真实执行）' },
+      claimedExit: { type: 'number', required: true, description: '你声称该命令将返回的退出码（通常是 0）' },
+      files: { type: 'string', required: false, description: '变更文件清单（逗号分隔）' },
+      exempt: { type: 'string', required: false, description: '未验证事项声明（无则省略）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error'] },
+          claimedExit: { type: 'number' },
+          realExit: { type: 'number' },
+          match: { type: 'boolean' },
+          verdict: { type: 'string' },
+          stdoutTail: { type: 'string' },
+          stderrTail: { type: 'string' },
+          message: { type: 'string' },
+        },
+        required: ['status', 'message'],
+      },
+      render(_args: unknown, value: unknown) {
+        return [{ type: 'text', text: JSON.stringify(value) }]
+      },
+    },
+    async execute(args: Record<string, unknown>, execCtx: { signal?: AbortSignal } = {}) {
+      const level = String(args.level ?? '')
+      const v = String(args.v ?? '').slice(0, 200)
+      const cmd = String(args.cmd ?? '')
+      const claimedExit = Number(args.claimedExit)
+      const files = args.files === undefined ? undefined : String(args.files).slice(0, 300)
+      const exempt = args.exempt === undefined ? undefined : String(args.exempt).slice(0, 300)
+
+      const plan = planGate(cmd)
+      if (plan.action === 'refuse') {
+        deps.onStats?.('refused')
+        void deps.log({ kind: 'gate-tool', status: 'refused', domain: plan.domain, level, v, cmd: cmd.slice(0, 200), claimedExit })
+        const value = { status: 'refused' as const, verdict: 'refused', domain: plan.domain, message: gateToolMessage('refused', claimedExit, null, plan.domain) }
+        return value
+      }
+      if (!cmd.trim()) {
+        deps.onStats?.('error')
+        void deps.log({ kind: 'gate-tool', status: 'error', level, v, cmd: '', claimedExit, error: 'empty-cmd' })
+        return { status: 'error' as const, verdict: 'error', message: gateToolMessage('error', claimedExit, null, '验证命令为空') }
+      }
+
+      const r = await runCmd(cmd, { signal: execCtx.signal })
+      const base = { level, v, cmd: cmd.slice(0, 200), claimedExit, files, exempt, stdoutTail: r.stdout, stderrTail: r.stderr }
+
+      if (r.timedOut || r.code === null) {
+        deps.onStats?.('error')
+        void deps.log({ kind: 'gate-tool', status: 'error', ...base, realExit: null, error: r.timedOut ? 'timeout' : (r.spawnError ?? 'spawn-error') })
+        return {
+          status: 'error' as const, verdict: 'error', realExit: null, stdoutTail: r.stdout, stderrTail: r.stderr,
+          message: gateToolMessage('error', claimedExit, null, r.timedOut ? '执行超时（>30s）' : (r.spawnError ?? '无法启动命令')),
+        }
+      }
+
+      const { match, verdict } = judgeGateToolResult(claimedExit, r.code)
+      deps.onStats?.(verdict)
+      void deps.log({ kind: 'gate-tool', status: verdict, ...base, realExit: r.code, match })
+      return {
+        status: verdict, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
+        message: gateToolMessage(verdict, claimedExit, r.code),
+      }
+    },
+  }
+}
+
 const LOG_DIR = 'D:/DeepSeek/dsh-plugin-dev/logs'
 const LOG_FILE = LOG_DIR + '/exec-log.jsonl'
 // A 臂观测模式旗标：存在=不注入不拦截，仅保留宿主侧测量（预注册 §3；切臂=建/删旗标+重启）
@@ -171,8 +305,11 @@ export function apply(ctx: Context) {
   void log({ kind: 'arm', mode: observeMode ? 'A' : 'B' })
   console.log(`[shisan-xinuo] arm=${observeMode ? 'A (observe: no inject, no ask)' : 'B (full treatment)'}`)
 
-  // ── 会话统计（宿主机判，数据直供 A/B「GATE 出现率」）──
-  const stats = { checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string }
+  // ── 会话统计（宿主机判，数据直供 A/B「GATE 出现率」+ v0.2 gate-tool 真值计数）──
+  const stats = {
+    checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
+    gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, last: '未调用' as string },
+  }
 
   const toolDispose = ctx.on('tools/pre-execute', async (exec: { name?: string; arguments?: unknown }, next: () => Promise<unknown>) => {
     const cmd = extractCommand(exec)
@@ -268,11 +405,42 @@ export function apply(ctx: Context) {
         [
           '## 纪律状态（宿主机检实时·本节由插件自动更新，不可仿写）',
           `- 工作回合已检 ${stats.checked} 次（GATE 齐 ${stats.gateOk}/缺 ${stats.gateMissing}）｜L3 拦截 ${stats.intercepted} 次｜上一工作回合 GATE: ${stats.lastGate}`,
-          '- GATE 缺口>0 或上回合 GATE=无 时，下一任务收口必须补齐 GATE 单行。',
+          `- discipline_gate 真值收口：${stats.gateTool.calls} 次（通过 ${stats.gateTool.pass}/不符 ${stats.gateTool.mismatch}/诚实失败 ${stats.gateTool.honestFail}/拒 ${stats.gateTool.refused}/错 ${stats.gateTool.error}）｜上次=${stats.gateTool.last}`,
+          '- GATE 缺口>0 或上回合 GATE=无 时，下一任务收口必须调用 discipline_gate（或补齐文本 GATE 单行）。',
         ].join('\n'),
     })
     console.log('[shisan-xinuo] live status banner installed')
     statusDisposes.push(promptDispose, statusDispose)
+
+    // ── T1 discipline_gate 工具注册（B/C 臂；A 臂观测=不注册，保持「无处置」对照纯净）──
+    let gateToolDispose: (() => void) | undefined
+    const toolsAny = ctx.tools as { register?: (def: unknown) => unknown } | undefined
+    if (typeof toolsAny?.register === 'function') {
+      try {
+        const verdictKey: Record<string, 'pass' | 'mismatch' | 'honestFail' | 'refused' | 'error'> = {
+          pass: 'pass', mismatch: 'mismatch', 'honest-fail': 'honestFail', refused: 'refused', error: 'error',
+        }
+        const def = buildGateToolDefinition({
+          log: (entry) => void log(entry),
+          onStats: (verdict) => {
+            const g = stats.gateTool
+            g.calls++
+            g.last = verdict
+            const k = verdictKey[verdict]
+            if (k) g[k]++
+          },
+        })
+        const d = toolsAny.register(def)
+        if (typeof d === 'function') gateToolDispose = d
+        console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
+      } catch (e) {
+        // 注册失败=降级为纯文本 GATE 模式；拦截与机检不受影响（错误处理不拖垮宿主面）
+        console.error('[shisan-xinuo] gate tool registration FAILED (fallback to text GATE):', String(e).slice(0, 200))
+      }
+    } else {
+      console.warn('[shisan-xinuo] ctx.tools.register unavailable — gate tool skipped, text GATE fallback only')
+    }
+    statusDisposes.push(() => gateToolDispose?.())
   }
 
   return () => {
