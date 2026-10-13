@@ -157,6 +157,31 @@ export function opsToCommand(ops, dir) {
   return `if (${parts.join(' -and ')}) { exit 0 } else { exit 1 }`
 }
 
+// 从含 think 块/散文的输出中抽取 ops JSON：按 "ops" 出现位置回溯到外层 {，再大括号配平截取。
+export function extractOps(out) {
+  const hits = []
+  for (let i = out.indexOf('"ops"'); i >= 0; i = out.indexOf('"ops"', i + 1)) hits.push(i)
+  for (const k of hits.reverse()) {
+    const s = out.lastIndexOf('{', k)
+    if (s < 0) continue
+    let depth = 0
+    for (let j = s; j < out.length; j++) {
+      if (out[j] === '{') depth++
+      else if (out[j] === '}') {
+        depth--
+        if (depth === 0) {
+          try {
+            return JSON.parse(out.slice(s, j + 1)).ops
+          } catch {
+            break
+          }
+        }
+      }
+    }
+  }
+  return null
+}
+
 // 出题人：独立会话只产出一条验证命令；求值＝在任务目录执行该命令取真实退出码
 function runAdversary(arm, t, dir, producerOut, strict = false) {
   const overlay = join(OVERLAY, ADV[arm])
@@ -232,19 +257,9 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
   // V5 受约束出题：JSON 算子 → 宿主模板生成检查表达式（无自由命令 ⇒ 无副作用面）
   if (OPS) {
     let synth = null
-    // 从最后一个 {"ops" 起尝试解析（think 块/散文里可能更早出现花括号，贪婪匹配会解析失败）
-    const start = out.lastIndexOf('{"ops"')
-    if (start >= 0) {
-      const sub = out.slice(start)
-      for (let end = sub.length; end > 0 && !synth; end = sub.lastIndexOf('}', end - 1)) {
-        try {
-          const parsed = JSON.parse(sub.slice(0, end + 1))
-          synth = opsToCommand(parsed.ops, dir)
-        } catch {
-          /* 逐步缩短后重试 */
-        }
-      }
-    }
+    // 抽取：支持 think 块与空白变体（见 extractOps）
+    const ops = extractOps(out)
+    if (ops) synth = opsToCommand(ops, dir)
     const candsOps = synth ? [synth] : []
     let advExitOps = null
     let advStdoutOps = ''

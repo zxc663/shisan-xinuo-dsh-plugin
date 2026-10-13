@@ -27,7 +27,8 @@ const r = await fetch(BASE, {
     model,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0,
-    max_tokens: 1024,
+    // 思考型出题模型会把预算花在推理上——留足空间，避免 JSON 被截断（实测 1024 时 T4E 全数截断）
+    max_tokens: Number(process.env.SHISANUO_ADV_MAXTOKENS ?? 4096),
   }),
 })
 const t = await r.text()
