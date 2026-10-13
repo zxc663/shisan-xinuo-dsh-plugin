@@ -53,7 +53,7 @@ DSH profile 的 `cordis.patch.yml` 追加：
 ## 测试与测量
 
 ```bash
-for f in tests/*.test.mjs test/*.test.mjs; do node "$f"; done   # 9 套单测（无需构建；Node ≥22.18 默认 type stripping 即可）
+npm test   # 13 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # headless 三臂实验（环境经上表变量注入）
@@ -75,7 +75,7 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 ## 目录
 
 - `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/预算/遥测）
-- `content/` 规则包（Config 面）｜ `scripts/` tally/e1-run/e1v4-analyze ｜ `tests/` 9 套单测
+- `content/` 规则包（Config 面）｜ `scripts/` tally/e1-run/e1v4-analyze/run-all-tests ｜ `tests/` 13 套单测
 - `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告 ｜ `CHANGELOG.md` 版本记录（内部）
 
 ## 版本史与路线（详见 CHANGELOG.md）
@@ -83,3 +83,12 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 v0.1 机制雏形 → v0.2 真值闭环（gate 工具）→ v0.3 可修改性（Config 化）→ v0.4 上下文控制（预算器）→ v0.5 判定制度+E1 → **v1.0 工程验收（内部）**。
 
 下一程（方向校准报告提出，待批准）：v2 任务控制器（状态机+验收条件持有+收口强制——本插件核心缺口的正解）→ v3 能力路由（分层注入+Skill 按需）→ v4 错误模型+持久化 → v5 有效性终判（n≥5 四臂+脱敏对照）。路线=docs/product-recalibration-20261013.md。
+
+## 审计吸收（2026-10-13 · 第三方白盒审计）
+
+- **F-01 收口防假**：文本 GATE 不再计入合规；断言任务由**宿主在回合收尾自动复核**（全过=收口成立 `ok-auto`；未过=steer 打回）；无断言任务必须真调 `discipline_gate`，不可验证如实记 `unverified`。
+- **F-02 完全权限**：`discipline_gate` 的 L3 拒跑**不再被 full-access 豁免**（全权只免审批卡交互）。
+- **F-05 预算**：裁剪仅认显式 `L=…` 状态行；`pwsh` 常驻白名单——该机制定位=**token 收敛，非安全边界**（主张 4 按此理解）。
+- **F-04/F-06/F-08/F-09**：对账白名单与写入面同步（24/24，新增机检测试）｜补 5 例漏拦样本（含 `base64 -d | sh` 新域）＋复核脚本修复入测｜指纹匹配加词边界｜devDeps/去硬编码/`npm test`/CI（Node 22/24）。
+- **如实边界**：分回合跳过、推导覆盖面（F-03/F-07）、重定向覆写类语义样本——均已声明；宿主层实验日志不入库，第三方不可独立复现（审计 §3.2），单测与检查脚本可独立复现。
+- 完整处置清单：`docs/audit-response-20261013.md`。
