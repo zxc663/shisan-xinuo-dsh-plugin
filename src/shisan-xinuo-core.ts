@@ -841,7 +841,15 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
         const r = deps.acceptance.register(list, goal, execCtx, mode)
         void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, preservedAuto: r.preservedAuto ?? 0, reason, goal })
         const how = mode === 'replace' ? '替换工具自登记断言（用户原文推导断言保留）' : '合并登记（保留既有断言）'
-        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map((a) => explainAssertion(a)).join('；')}。收口时 discipline_gate 将自动复核。` }
+        // C8：与先前的争议配对——"争议→补交"应被记为一次修复（而非只留一句道歉）
+        const disputedAt = (deps as { disputedAt?: number }).disputedAt
+        let amendNote = ''
+        if (disputedAt) {
+          ;(deps as { disputedAt?: number }).disputedAt = undefined
+          void deps.log({ kind: 'task-amend-after-dispute', count: r.count, goal })
+          amendNote = ' 另：本会话此前登记过一次争议（自认先前收口无效），本次登记已与之配对，记为一次**补交修复**——请随后调用 discipline_gate 重跑验证，让修复有真值证据。'
+        }
+        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map((a) => explainAssertion(a)).join('；')}。收口时 discipline_gate 将自动复核。${amendNote}` }
       }
       // C7：争议标记——模型可自认先前那次收口无效（只记录、**不改判定**；撤销/改判保留给人在会话外）
       if (action === 'dispute') {
@@ -852,10 +860,14 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
         }
         void deps.log({ kind: 'gate-disputed', status: 'recorded', reason, goal })
         const cur = deps.acceptance.list(execCtx)
+        // C8：把"坦白"接到"修复"——记录争议时刻，等下一次 register 时与之配对（补交）
+        ;(deps as { disputedAt?: number }).disputedAt = Date.now()
         return {
           status: 'recorded',
           count: cur.length,
-          message: `已记录争议（**不改判定**）：${reason}。宿主保留原 pass 记录并标注其为争议态——撤销或改判只由人在会话外执行；请把该争议如实告知用户，不要据此声称任务已完成。`,
+          message:
+            `已记录争议（**不改判定**）：${reason}。宿主保留原 pass 记录并标注其为争议态——撤销或改判只由人在会话外执行；请把该争议如实告知用户，不要据此声称任务已完成。` +
+            '若你已想清楚更合适的判据：用 `discipline_task` 的 register 登记它，再用 `discipline_gate` 重跑验证——**这是本机制期望的补救路径**（宿主会把"争议→补交"记为一次修复，而不是只留一句道歉）。',
         }
       }
       if (action === 'clear') {

@@ -52,6 +52,8 @@ const FIELD_WHITELIST = {
   'gate-v-unanchored': ['status', 'v', 'cmd'],
   // C7 争议标记
   'gate-disputed': ['status', 'reason', 'goal'],
+  // C8 争议→补交配对
+  'task-amend-after-dispute': ['count', 'goal'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

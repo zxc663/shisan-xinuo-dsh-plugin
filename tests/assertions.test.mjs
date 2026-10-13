@@ -147,6 +147,16 @@ function mkBridge(init = []) {
   t('C7: dispute 记录成功', 'recorded', rOk.status)
   t('C7: 消息声明不改判定', true, rOk.message.includes('不改判定'))
   t('C7: 不改动断言记录', 1, bridge.recs.length)
+  // C8：争议→补交配对（register 后应记为一次修复）
+  const logs = []
+  const deps = { log: (e) => logs.push(e), acceptance: bridge }
+  const def2 = buildTaskToolDefinition(deps)
+  await def2.execute({ action: 'dispute', reason: '先前那次验证无效' }, {})
+  const rAmend = await def2.execute({ action: 'register', assertions: 'exists:D:\\x\\p' }, {})
+  t('C8: 补交登记成功', 'ok', rAmend.status)
+  t('C8: 消息标注补交修复', true, rAmend.message.includes('补交修复'))
+  t('C8: 落 task-amend-after-dispute', true, logs.some((e) => e.kind === 'task-amend-after-dispute'))
+  t('C8: 配对后不重复触发', false, (await def2.execute({ action: 'register', assertions: 'exists:D:\\x\\q' }, {})).message.includes('补交修复'))
 }
 {
   const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'p' }, source: 'tool' }])
