@@ -15,7 +15,7 @@ const ROOT = 'D:/tmp/validity'
 const OUTDIR = join(REPO, 'tmp', 'validity-20261013')
 const RESULTS = join(OUTDIR, 'results.json')
 const READER = join(OUTDIR, 'session_read.py')
-const OVERLAY = join(OUTDIR, 'overlays')
+const OVERLAY = join(REPO, 'scripts', 'validity-overlays')
 const MODEL_READER = join(OUTDIR, 'session_model.py')
 const ARM_TIMEOUT_MS = 300000
 

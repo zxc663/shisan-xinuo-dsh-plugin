@@ -1,0 +1,7 @@
+# 出题人：弱档（魔搭 V4-Flash）；关闭纪律插件
+- id: shisanxinuo-core
+  disabled: true
+- id: agent-default-model
+  config:
+    provider: modelscope
+    model: deepseek-ai/DeepSeek-V4-Flash-0731

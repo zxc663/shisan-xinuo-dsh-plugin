@@ -1,0 +1,5 @@
+# 执行档：强档（魔搭 V4-Pro）；纪律插件保持挂载
+- id: agent-default-model
+  config:
+    provider: modelscope
+    model: deepseek-ai/DeepSeek-V4-Pro
