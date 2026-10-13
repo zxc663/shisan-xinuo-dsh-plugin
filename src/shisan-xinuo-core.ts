@@ -488,7 +488,7 @@ export function formatAssertionResults(results: AssertionResult[]): string {
 // 任务记录验收桥（apply() 注入实现；工具与测试只依赖此接口）
 export interface AssertionRecord { assertion: AcceptanceAssertion; source: 'auto' | 'tool' }
 export interface AcceptanceBridge {
-  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown) => { count: number; mark: string }
+  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown, mode?: 'merge' | 'replace') => { count: number; mark: string; replacedAuto?: number }
   clear: (ctx?: unknown) => void
   list: (ctx?: unknown) => AssertionRecord[]
   evaluate: (a: AcceptanceAssertion, ctx?: unknown) => Promise<AssertionResult>
@@ -543,6 +543,8 @@ export interface GateToolDeps {
   isFullAccess?: () => boolean
   /** B2 验收桥：验证通过后附加复核已登记断言（资源真值）；未接线=沿用旧行为 */
   acceptance?: AcceptanceBridge
+  /** B2.2：pass＋断言全过时标记 concludeTurn（工具级强制收口；默认关，实验档显式开启） */
+  concludeOnPass?: boolean
 }
 
 // 工具定义构造器（对接真相=app.asar 内建工具样例：parameters DSL {名:{type,required,description}} + output{schema,render} + execute(args,exec)）
@@ -636,9 +638,25 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           }
           deps.acceptance.markPassed(execCtx)
           void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, assertions: formatAssertionResults(assertionResults) })
+          let concludedTurn = false
+          if (deps.concludeOnPass) {
+            const ct = (execCtx as { concludeTurn?: () => void }).concludeTurn
+            if (typeof ct === 'function') {
+              try {
+                ct()
+                concludedTurn = true
+                void deps.log({ kind: 'gate-conclude', status: 'marked', cmd: cmd.slice(0, 120) })
+              } catch (e) {
+                void deps.log({ kind: 'gate-conclude', status: 'call-error', error: String(e).slice(0, 140) })
+              }
+            } else {
+              void deps.log({ kind: 'gate-conclude', status: 'no-method', ctType: typeof ct })
+            }
+          }
           return {
             status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
             assertions: assertionResults,
+            ...(concludedTurn ? { concludedTurn } : {}),
             message: gateToolMessage('pass', claimedExit, r.code) + ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。`,
           }
         }
@@ -667,6 +685,8 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
       action: { type: 'string', required: true, description: 'register | clear | status' },
       goal: { type: 'string', required: false, description: '任务目标原文摘录（随断言记录）' },
       assertions: { type: 'string', required: false, description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
+      mode: { type: 'string', required: false, description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（整组替换；若含自动推导断言必须给 reason）' },
+      reason: { type: 'string', required: false, description: 'replace 时说明原断言为何有误（替换自动断言时必填）' },
     },
     output: {
       schema: {
@@ -687,9 +707,18 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
           void deps.log({ kind: 'task-register', status: 'empty' })
           return { status: 'empty', count: 0, message: '未解析到有效断言（格式：not_exists:路径; cmd_exit0:命令）。若目标无法机器判定，请在文本 GATE 的 exempt 中明说“未绑定断言”，不要伪造。' }
         }
-        const r = deps.acceptance.register(list, goal, execCtx)
-        void deps.log({ kind: 'task-register', status: 'ok', mark: r.mark, count: r.count, goal })
-        return { status: 'ok', count: r.count, message: `已登记 ${r.count} 条验收断言：${list.map(explainAssertion).join('；')}。收口时 discipline_gate 将自动复核。` }
+        const mode = String(args.mode ?? 'merge').toLowerCase() === 'replace' ? ('replace' as const) : ('merge' as const)
+        const reason = args.reason === undefined ? '' : String(args.reason).slice(0, 200)
+        const cur = deps.acceptance.list(execCtx)
+        const hasAuto = cur.some((x) => x.source === 'auto')
+        if (mode === 'replace' && hasAuto && !reason) {
+          void deps.log({ kind: 'task-register', status: 'replace-refused', count: cur.length })
+          return { status: 'refused', count: cur.length, message: 'REFUSED：当前含自动推导断言（源自用户原文），整组替换需提供 reason 说明原断言为何有误——防止悄悄削弱验收面。' }
+        }
+        const r = deps.acceptance.register(list, goal, execCtx, mode)
+        void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, replacedAuto: r.replacedAuto ?? 0, reason, goal })
+        const how = mode === 'replace' ? '整组替换' : '合并登记（保留既有断言）'
+        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map(explainAssertion).join('；')}。收口时 discipline_gate 将自动复核。` }
       }
       if (action === 'clear') {
         const cur = deps.acceptance.list(execCtx)
@@ -868,8 +897,10 @@ export function apply(ctx: Context) {
   const taskRecords = new Map<string, TaskRec>()
   const lastDerivedText = new Map<string, string>()
   const sidKeyOf = (x: unknown, fallback = 'default'): string => {
-    const c = x as { id?: unknown; session?: unknown; sessionId?: unknown; agentId?: unknown; agent?: { session?: unknown } } | null
-    const cand = c && typeof c === 'object' ? (c.session ?? c.agent?.session ?? c.sessionId ?? c.agentId ?? c) : null
+    const c = x as { id?: unknown; session?: unknown; sessionId?: unknown; agentId?: unknown; agent?: { id?: unknown; session?: unknown } } | null
+    // B2.2 定案（宿主类型）：Agent.id = SessionId —— 工具 execCtx 侧优先取 execCtx.agent.id
+    const fromAgent = c && typeof c === 'object' ? (c.agent?.id ?? c.agent?.session) : null
+    const cand = fromAgent ?? (c && typeof c === 'object' ? (c.session ?? c.sessionId ?? c.agentId ?? c) : null)
     const id = (cand as { id?: unknown } | null)?.id ?? cand
     if (typeof id === 'string' && id) return id
     if (typeof id === 'number') return String(id)
@@ -883,12 +914,22 @@ export function apply(ctx: Context) {
   }
   let execCtxProbed = false
   const acceptanceBridge: AcceptanceBridge = {
-    register: (assertions, goal, ctx) => {
+    register: (assertions, goal, ctx, mode = 'merge') => {
       const key = resolveKey(ctx)
-      const mark = assertions.map(explainAssertion).join('；').slice(0, 240)
-      taskRecords.set(key, { raw: goal, goal, assertions: assertions.map((a) => ({ assertion: a, source: 'tool' as const })), assertionsPassedAt: null, unresolvedLogged: false })
-      stats.assertion = `${assertions.length} 条待复(登记)`
-      return { count: assertions.length, mark }
+      const prev = taskRecords.get(key)
+      const prevAuto = prev?.assertions.filter((x) => x.source === 'auto').length ?? 0
+      let merged: AssertionRecord[]
+      if (mode === 'replace' || !prev) {
+        merged = assertions.map((a) => ({ assertion: a, source: 'tool' as const }))
+      } else {
+        const seen = new Set(prev.assertions.map((x) => JSON.stringify(x.assertion)))
+        const add = assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' as const }))
+        merged = [...prev.assertions, ...add]
+      }
+      taskRecords.set(key, { raw: goal || prev?.raw || '', goal: goal || prev?.goal || '', assertions: merged, assertionsPassedAt: null, unresolvedLogged: false })
+      stats.assertion = `${merged.length} 条待复(${mode === 'replace' ? '替换' : '登记'})`
+      const mark = merged.map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240)
+      return { count: merged.length, mark, replacedAuto: mode === 'replace' ? prevAuto : 0 }
     },
     clear: (ctx) => {
       taskRecords.delete(resolveKey(ctx))
@@ -1118,6 +1159,7 @@ export function apply(ctx: Context) {
           judge: activeJudge,
           isFullAccess: () => fullAccess,
           acceptance: acceptanceBridge,
+          concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
           onStats: (verdict) => {
             const g = stats.gateTool
             g.calls++
@@ -1129,6 +1171,7 @@ export function apply(ctx: Context) {
         const d = toolsAny.register(def)
         if (typeof d === 'function') gateToolDispose = d
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
+        console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS === '1' ? 'ON (experimental)' : 'off (default)'}`)
         const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
         const d2 = toolsAny.register(taskDef)
         if (typeof d2 === 'function') statusDisposes.push(() => d2())

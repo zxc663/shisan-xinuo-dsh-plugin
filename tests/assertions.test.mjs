@@ -91,7 +91,17 @@ function mkBridge(init = []) {
   return {
     calls,
     get recs() { return recs },
-    register(assertions, goal) { calls.register++; recs = assertions.map((a) => ({ assertion: a, source: 'tool' })); return { count: assertions.length, mark: 'mock' } },
+    register(assertions, goal, ctx, mode = 'merge') {
+      calls.register++
+      const prevAuto = recs.filter((x) => x.source === 'auto').length
+      if (mode === 'replace' || recs.length === 0) {
+        recs = assertions.map((a) => ({ assertion: a, source: 'tool' }))
+      } else {
+        const seen = new Set(recs.map((x) => JSON.stringify(x.assertion)))
+        recs = [...recs, ...assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' }))]
+      }
+      return { count: recs.length, mark: 'mock', replacedAuto: mode === 'replace' ? prevAuto : 0 }
+    },
     clear() { calls.clear++; recs = [] },
     list() { return recs },
     async evaluate(a) { return { assertion: a, ok: true, detail: 'mock' } },
@@ -127,6 +137,28 @@ function mkBridge(init = []) {
   const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
   t('task: tool 断言 clear 放行', 'cleared', (await def.execute({ action: 'clear' }, {})).status)
   t('task: clear 后为空', 0, bridge.recs.length)
+}
+// ── B2.2：合并/替换语义 + 收口标记 ──
+{
+  const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'keep.txt' }, source: 'tool' }])
+  const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
+  const r = await def.execute({ action: 'register', assertions: 'not_exists:D:\\x\\new.txt' }, {})
+  t('task: merge 保留既有', 2, bridge.recs.length)
+  t('task: merge 消息提示合并', true, r.message.includes('合并'))
+  await def.execute({ action: 'register', assertions: 'not_exists:D:\\x\\new.txt' }, {})
+  t('task: merge 去重', 2, bridge.recs.length)
+}
+{
+  const logs = []
+  const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'auto.txt' }, source: 'auto' }])
+  const def = buildTaskToolDefinition({ log: (e) => logs.push(e), acceptance: bridge })
+  const r1 = await def.execute({ action: 'register', mode: 'replace', assertions: 'not_exists:D:\\x\\a.txt' }, {})
+  t('task: replace 无 reason 被拒', 'refused', r1.status)
+  t('task: 拒后 auto 仍在', 1, bridge.recs.length)
+  const r2 = await def.execute({ action: 'register', mode: 'replace', reason: '原推导路径为笔误', assertions: 'not_exists:D:\\x\\a.txt' }, {})
+  t('task: replace 带 reason 放行', 'ok', r2.status)
+  t('task: replace 后仅新断言', 1, bridge.recs.length)
+  t('task: replace 落审计（含 replacedAuto）', true, logs.some((l) => l.kind === 'task-register' && l.mode === 'replace' && l.replacedAuto === 1))
 }
 
 // ── 收口复核集成（gate 工具 + Mock 断言桥）──
@@ -180,6 +212,37 @@ function mkAccept(list, evalOk = true) {
   const r = await def.execute({ level: 'L1', v: 'x', cmd: 'echo ok', claimedExit: 0 }, {})
   t('gate: 无断言 → 旧形态 pass', 'pass', r.status)
   t('gate: 无断言不带 assertions 字段', undefined, r.assertions)
+}
+// ── B2.2：concludeTurn 选择加入 ──
+{
+  let ctCalls = 0
+  const acc = mkAccept([{ kind: 'exists', path: 'D:\\a' }], true)
+  const def = buildGateToolDefinition({ runCmd: okRun, log: () => {}, onStats: () => {}, acceptance: acc, concludeOnPass: true })
+  const r = await def.execute({ level: 'L1', v: 'x', cmd: 'echo ok', claimedExit: 0 }, { concludeTurn: () => { ctCalls++ } })
+  t('gate: 开启且断言全过 → concludeTurn 被调', 1, ctCalls)
+  t('gate: 返回值标记 concludedTurn', true, r.concludedTurn === true)
+}
+{
+  let ctCalls = 0
+  const acc = mkAccept([{ kind: 'exists', path: 'D:\\a' }], false)
+  const def = buildGateToolDefinition({ runCmd: okRun, log: () => {}, onStats: () => {}, acceptance: acc, concludeOnPass: true })
+  await def.execute({ level: 'L1', v: 'x', cmd: 'echo ok', claimedExit: 0 }, { concludeTurn: () => { ctCalls++ } })
+  t('gate: 断言不过不 concludeTurn', 0, ctCalls)
+}
+{
+  let ctCalls = 0
+  const acc = mkAccept([{ kind: 'exists', path: 'D:\\a' }], true)
+  const def = buildGateToolDefinition({ runCmd: okRun, log: () => {}, onStats: () => {}, acceptance: acc })
+  const r = await def.execute({ level: 'L1', v: 'x', cmd: 'echo ok', claimedExit: 0 }, { concludeTurn: () => { ctCalls++ } })
+  t('gate: 默认关不 concludeTurn', 0, ctCalls)
+  t('gate: 默认关无 concludedTurn 字段', undefined, r.concludedTurn)
+}
+{
+  let ctCalls = 0
+  const acc = mkAccept([], true)
+  const def = buildGateToolDefinition({ runCmd: okRun, log: () => {}, onStats: () => {}, acceptance: acc, concludeOnPass: true })
+  await def.execute({ level: 'L1', v: 'x', cmd: 'echo ok', claimedExit: 0 }, { concludeTurn: () => { ctCalls++ } })
+  t('gate: 无断言不 concludeTurn（旧路径）', 0, ctCalls)
 }
 
 rmSync(BASE, { recursive: true, force: true })

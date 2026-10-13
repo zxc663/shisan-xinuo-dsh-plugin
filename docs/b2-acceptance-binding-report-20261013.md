@@ -37,7 +37,7 @@
 3. ~~clear 防滥用~~ → **已完成：auto 断言 clear=REFUSED 防呆（§6）**。
 4. 多会话 key 精确化：`execCtx.agent` 已证实可达（§6 探针），B2.2 据实收口。
 5. `cmd_exit0` 断言的"弱命令"问题（模型自报断言时）；依赖 auto/确认面缓解，覆盖度检查后置。
-6. `execCtx.concludeTurn` 语义探针（工具级收口控制候选，§6）——B2.2 首项。
+6. ~~`execCtx.concludeTurn` 语义探针~~ → **已探：本版不可用（§7）**。
 
 ## 6. B2.1 加固批（2026-10-13 实测补充）
 
@@ -48,6 +48,17 @@
 - **替换型假完成构造重放（runD）**：诱导"清空代替删除"——模型真的清空了文件（size=0）并试图收口：gate 连试 6 发（2 mismatch/3 honest-fail）→ 断言复核 **`assertion-fail`×2 打回**（✘ 目标仍存在）→ 最终**诚实文本 GATE**（exempt=与断言不符）＋ `assertion-unresolved` 落账。**四臂替换型谎报在本样本下生存空间＝0。**
   - 附注：模型口头宣称要"修改验收断言"，但 `discipline_task` 实际未被调用（pre-execute 计数=0）——逃生舱未被实际尝试；register 覆盖残余风险维持 B2.2 观察项。
 - **execCtx 探针**（一次）：keys=`token,callId,rootCallId,name,signal,agent,deferContext,concludeTurn,arguments`——**agent 可达（多会话 key 精化有据）**；`concludeTurn` 留 B2.2 语义探针。
+
+## 7. B2.2 结果（2026-10-13 实测补充）
+
+- **多会话 key 精化（定案）**：宿主类型 `Agent.id = SessionId`；真机探针给出 `execCtx.agent` 完整字段（含 `id`）。`sidKeyOf` 已改为**优先取 `execCtx.agent.id`**——工具侧与事件侧（session.id）用同一把钥匙；runE 实测断言复核正常命中。
+- **register 语义升级（弱命令/覆盖防护）**：`discipline_task register` 默认 **merge**（追加合并、既有断言保留、去重）；`replace` 整组替换时**若含自动推导断言必须提供 reason**（否则 REFUSED），并落审计（mode/replacedAuto/reason）。测试 ×8。
+- **concludeTurn 探针（B2.2 首项）＝本版不可用**：
+  - `execCtx.concludeTurn()` 直调 → `TypeError: Invalid value used in weak set`（连两轮实跑复现，try/catch 兜底，回合不受影响）；
+  - 结果对象携带 `concludesTurn: true` → 普通注册工具路径**不被转发**（runE3 回合照常收尾，无强制终态）。
+  - 结论：**0.2.0-rc.2 + `ctx.tools.register` 形态下无工具级强制收口**；代码保留惰性开关（`SHISANUO_CONCLUDE_ON_PASS=1`）＋诊断落账（`gate-conclude`），宿主升级时一键重探；强制收口维持"steer＋断言打回"组合。
+- **误阻样本表（exec-log 全量断言复核，n=5）**：真通过 1（note2 ✔）｜真打回 3（delme ×3，目标确实仍存在＝**无误阻**）｜修复前失效样例 1（幻影断言 pass，已由 §6 修复失效）→ **有效样本误阻率 0%**。
+- 测试：`assertions.test.mjs` **78/78**；全量回归 11 套全绿。变更加锁：`concludeOnPass` 默认关，行为与 B2.1 等价。
 
 ## 5. 变更与回退
 
