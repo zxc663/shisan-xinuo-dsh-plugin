@@ -402,10 +402,17 @@ export function parseAssertionSpec(spec: string): AcceptanceAssertion[] {
 
 // 路径 token 抽取：盘符路径 / ./ ../ 相对路径；目录 token + 紧随文件名（"在 D:\x\ 创建 note.txt"）拼接。
 const PATH_TOKEN_RE = /(?:[A-Za-z]:[\\/][^\s"'`,;，。；（）()【】[\]<>|]+|(?:\.{1,2}[\\/]|~[\\/])[^\s"'`,;，。；（）()【】[\]<>|]+)/g
+// 引号内路径（含空格）优先识别：删除 "D:\my docs\file.txt" 不得被截断成 D:\my 假目标
+const QUOTED_PATH_RE = /["']([A-Za-z]:[\\/][^"']*?|(?:\.{1,2}[\\/]|~[\\/])[^"']*?)["']/g
 const DIR_NAME_JOIN_RE = /([A-Za-z]:[\\/][^\s"'`,;，。；（）()【】[\]<>|]*[\\/])\s*(?:创建|新建|写入|生成|建|create|write)[^\n]{0,12}?([\w.\-]+\.[A-Za-z0-9]{1,5})/g
 const DELETE_INTENT_RE = /(删除|删掉|移除|清理掉|\bdelete\b|\bremove\b|\brm\b)/i
 const DELETE_NEGATION_RE = /(不要|别|勿|无需|不用|请勿|don'?t|do\s+not|never)[^，。;；\n]{0,10}(删除|删掉|移除|delete|remove|rm)/i
 const CREATE_INTENT_RE = /(创建|新建|写入|生成|建一个|建个|\bcreate\b|\bwrite\b)/i
+// 误阻守卫（B2.1 语料）：以下语境命中时宁可不推导（unbound 由文本 GATE 兜底），不产出可能错误的断言
+const ILLUSTRATION_RE = /(举例|例如|比如|示例|仅作说明)/
+const RESTORE_RE = /(恢复|还原|找回|撤销|撤回)/
+const BACKUP_RE = /(备份)/
+const CONTENTS_RE = /(所有文件|下的文件|里的文件|的内容|全部文件)/
 
 // 从用户原文自动推导断言（启发式 v0；来源标 auto，可被 discipline_task 改正）。
 // 删除类→not_exists；创建类→exists。误报代价=收口被打回（显式可见），不漏报为假完成。
@@ -413,16 +420,28 @@ export function deriveAssertionsFromUserText(text: string): AcceptanceAssertion[
   if (!text || typeof text !== 'string') return []
   const rawTokens = [...text.matchAll(PATH_TOKEN_RE)].map((m) => m[0].replace(/[.,;，。；：:]+$/, '').replace(/[\\/]+$/, ''))
   const joined = [...text.matchAll(DIR_NAME_JOIN_RE)].map((m) => (m[1] + m[2]).replace(/[\\/]+$/, ''))
-  // 目录 token 若已被"目录+文件名"拼接项吸收，则不再单独成断言（避免 exists(目录) 噪声断言）
-  const isDirOfJoined = (r: string): boolean => joined.some((j) => j.startsWith(r + '\\') || j.startsWith(r + '/'))
-  const uniq = [...new Set([...joined, ...rawTokens.filter((r) => !isDirOfJoined(r))].filter((p) => p.length > 1))].slice(0, 4)
+  const quoted = [...text.matchAll(QUOTED_PATH_RE)].map((m) => m[1].replace(/[\\/]+$/, ''))
+  // 裸 token 若已被"拼接项/引号路径"吸收（是其前缀目录），不再单独成断言（避免 exists(目录)/假目标噪声）
+  const collected = [...joined, ...quoted]
+  const isAbsorbed = (r: string): boolean =>
+    collected.some((j) => j.startsWith(r) && (j.length === r.length || j[r.length] === '\\' || j[r.length] === '/' || j[r.length] === ' '))
+  const uniq = [...new Set([...collected, ...rawTokens.filter((r) => !isAbsorbed(r))].filter((p) => p.length > 1 && !/[*?]/.test(p)))].slice(0, 4)
   if (uniq.length === 0) return []
+  const deleteIntent = DELETE_INTENT_RE.test(text) && !DELETE_NEGATION_RE.test(text)
+  const createIntent = CREATE_INTENT_RE.test(text)
+  const ambiguous =
+    ILLUSTRATION_RE.test(text) ||
+    (deleteIntent && createIntent) ||
+    (deleteIntent && RESTORE_RE.test(text)) ||
+    (deleteIntent && BACKUP_RE.test(text)) ||
+    ((deleteIntent || createIntent) && CONTENTS_RE.test(text))
+  if (ambiguous) return []
   const out: AcceptanceAssertion[] = []
-  if (DELETE_INTENT_RE.test(text) && !DELETE_NEGATION_RE.test(text)) {
+  if (deleteIntent) {
     for (const p of uniq) out.push({ kind: 'not_exists', path: p })
     return out.slice(0, 4)
   }
-  if (CREATE_INTENT_RE.test(text)) {
+  if (createIntent) {
     for (const p of uniq) out.push({ kind: 'exists', path: p })
     return out.slice(0, 4)
   }
@@ -673,6 +692,12 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
         return { status: 'ok', count: r.count, message: `已登记 ${r.count} 条验收断言：${list.map(explainAssertion).join('；')}。收口时 discipline_gate 将自动复核。` }
       }
       if (action === 'clear') {
+        const cur = deps.acceptance.list(execCtx)
+        const hasAuto = cur.some((x) => x.source === 'auto')
+        if (hasAuto) {
+          void deps.log({ kind: 'task-register', status: 'clear-refused', count: cur.length })
+          return { status: 'refused', count: cur.length, message: 'REFUSED：当前含自动推导断言（源自用户原文），模型不得直接清空。请用 register 覆盖为正确断言（整组替换、留审计）；确需清空请由用户操作。' }
+        }
         deps.acceptance.clear(execCtx)
         void deps.log({ kind: 'task-register', status: 'cleared' })
         return { status: 'cleared', count: 0, message: '已清空验收断言（仅在你确认原断言登记错误时使用）。' }
@@ -856,6 +881,7 @@ export function apply(ctx: Context) {
     if (taskRecords.size === 1) return [...taskRecords.keys()][0]
     return direct || 'default'
   }
+  let execCtxProbed = false
   const acceptanceBridge: AcceptanceBridge = {
     register: (assertions, goal, ctx) => {
       const key = resolveKey(ctx)
@@ -869,7 +895,23 @@ export function apply(ctx: Context) {
       stats.assertion = '未登记'
     },
     list: (ctx) => taskRecords.get(resolveKey(ctx))?.assertions ?? [],
-    evaluate: (a) => evaluateAssertion(a, { judge: activeJudge }),
+    evaluate: (a, ctx) => {
+      if (!execCtxProbed) {
+        execCtxProbed = true
+        try {
+          const keys = ctx && typeof ctx === 'object' ? Object.keys(ctx as object).join(',') : `nonobj:${typeof ctx}`
+          let agentKeys = ''
+          try {
+            const ag = (ctx as { agent?: unknown } | null)?.agent
+            agentKeys = ag && typeof ag === 'object' ? Object.keys(ag as object).slice(0, 20).join(',') : `agent:${typeof ag}`
+          } catch { agentKeys = 'agent-err' }
+          let sample = ''
+          try { sample = JSON.stringify(ctx ?? {}).slice(0, 200) } catch { sample = '<circular>' }
+          void log({ kind: 'execctx-probe', keys, agentKeys, sample })
+        } catch { /* 探针非致命 */ }
+      }
+      return evaluateAssertion(a, { judge: activeJudge })
+    },
     markPassed: (ctx) => {
       const rec = taskRecords.get(resolveKey(ctx))
       if (rec) { rec.assertionsPassedAt = Date.now(); stats.assertion = '已通过' }

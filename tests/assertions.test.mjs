@@ -29,9 +29,20 @@ t('derive: 删掉+相对路径 → not_exists', [{ kind: 'not_exists', path: './
 t('derive: 否定语义不推导', [], deriveAssertionsFromUserText('不要删除 D:\\x\\keep.txt'))
 t('derive: 创建+全路径 → exists', [{ kind: 'exists', path: 'D:\\x\\note.txt' }], deriveAssertionsFromUserText('创建文件 D:\\x\\note.txt 并写入三行'))
 t('derive: 目录+文件名拼接 → exists(拼接路径)', [{ kind: 'exists', path: 'D:\\x\\note.txt' }], deriveAssertionsFromUserText('在 D:\\x\\ 创建 note.txt，写入三行'))
+t('derive: 引号路径（含空格）不截断', [{ kind: 'not_exists', path: 'D:\\my docs\\file.txt' }], deriveAssertionsFromUserText('删除 "D:\\my docs\\file.txt"'))
+t('derive: 引号吸收裸前缀（不产生 D:\\my 假目标）', [{ kind: 'not_exists', path: 'D:\\my docs\\file.txt' }], deriveAssertionsFromUserText('删除 D:\\my "D:\\my docs\\file.txt"'))
 t('derive: 无意图动词不推导', [], deriveAssertionsFromUserText('查看 D:\\x\\f.txt 的内容'))
 t('derive: 无路径不推导', [], deriveAssertionsFromUserText('删除那个文件'))
 t('derive: 去重 + 4 条上限', 4, deriveAssertionsFromUserText('删除 D:\\a.txt D:\\b.txt D:\\c.txt D:\\d.txt D:\\e.txt').length)
+// ── 误阻语料（B2.1）：以下情境必须不推导（宁 unbound 不产错断言）──
+t('误阻: 改名改属变换 → 不推导', [], deriveAssertionsFromUserText('把 D:\\x\\a.txt 重命名为 b.txt'))
+t('误阻: 举例语境 → 不推导', [], deriveAssertionsFromUserText('删除这个解释（例如 D:\\x\\sample.txt 只是举例）'))
+t('误阻: 通配符路径 → 不推导', [], deriveAssertionsFromUserText('删除 D:\\x\\*'))
+t('误阻: 目录内容粒度不明 → 不推导', [], deriveAssertionsFromUserText('清理掉 D:\\tmp\\cache 下的所有文件'))
+t('误阻: 删除+创建并存（重建）→ 不推导', [], deriveAssertionsFromUserText('删除 D:\\x\\junk.tmp 然后重新创建它'))
+t('误阻: 恢复语境 → 不推导', [], deriveAssertionsFromUserText('回滚刚才的删除，恢复 D:\\x\\a.txt'))
+t('误阻: 备份语境 → 不推导', [], deriveAssertionsFromUserText('删除旧文件前先备份到 D:\\bak'))
+t('误阻: 英文删除正例仍推导', [{ kind: 'not_exists', path: 'D:\\x\\old.log' }], deriveAssertionsFromUserText('delete D:\\x\\old.log'))
 
 // ── 规格解析（discipline_task 入参）──
 {
@@ -106,8 +117,15 @@ function mkBridge(init = []) {
 {
   const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'p' }, source: 'auto' }])
   const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
+  const rClr = await def.execute({ action: 'clear' }, {})
+  t('task: auto 断言 clear 被拒', 'refused', rClr.status)
+  t('task: 拒后记录仍在', 1, bridge.recs.length)
   t('task: status 列表', true, (await def.execute({ action: 'status' }, {})).message.includes('auto'))
-  t('task: clear 清空', 'cleared', (await def.execute({ action: 'clear' }, {})).status)
+}
+{
+  const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'p' }, source: 'tool' }])
+  const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
+  t('task: tool 断言 clear 放行', 'cleared', (await def.execute({ action: 'clear' }, {})).status)
   t('task: clear 后为空', 0, bridge.recs.length)
 }
 
