@@ -31,6 +31,7 @@ const FIELD_WHITELIST = {
   'tools-inventory': ['count', 'names'],
   'tools-wire': ['count', 'chars'],
   'sandbox-mode': ['mode', 'enforcement'],
+  'gate-steer': ['turn', 'toolCalls'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

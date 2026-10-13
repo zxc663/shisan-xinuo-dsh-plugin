@@ -616,7 +616,7 @@ export function apply(ctx: Context) {
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<unknown, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean }>()
+  const turnBuckets = new Map<unknown, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean; steered: boolean }>()
   let inventoryLogged = false
   // 完全权限感知（用户裁决）：宿主 sandbox/mode=danger-full-access 时用户已全局授权，
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
@@ -661,7 +661,7 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '', gateTool: false }
+        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '', gateTool: false, steered: false }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
@@ -709,6 +709,36 @@ export function apply(ctx: Context) {
     }
   })
   console.log('[shisan-xinuo] gate check + session stats installed')
+
+  // ── v2 收口强制（turn-stopping + steering）：实质工作回合 gate 缺失时，向 inbox steer 一条收口指令，
+  // turn 继续不结束——模型被迫补收口（asar 实证：steer() 提交 next-step 输入并唤醒驱动器）。
+  // 防死循环：每回合最多 steer 1 次（b.steered 标记），超限放行。完全权限/A-B 臂不启用。
+  const turnStoppingDispose = ctx.on('agent/turn-stopping', (payload: { agent?: { session?: unknown; steer?: (msg: unknown) => void }; turn?: number }) => {
+    try {
+      if (armMode !== 'C' || fullAccess) return
+      const agent = payload?.agent
+      const bucketKey = agent?.session
+      if (!bucketKey || typeof payload?.turn !== 'number') return
+      const b = turnBuckets.get(bucketKey)
+      if (!b || b.turn !== payload.turn) return
+      // 只强制实质工作回合（≥1 工具调用）；已调 gate 或已有文本 GATE → 合规放行；本回合已 steer 过 → 放行
+      if (b.toolCalls < 1 || b.gateTool || b.steered) return
+      if (judgeGate(b.lastText, b.toolCalls, 'completed') === 'ok') return
+      b.steered = true
+      void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls })
+      const steerMsg = {
+        content: [{
+          type: 'text',
+          text: `[十三希诺收口强制] 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须：①调用 discipline_gate 工具（宿主将真实执行你声明的验证命令并比对退出码），或 ②在回复末尾补齐文本 GATE 单行（GATE: {level=…, v=…, cmd=…, exit=真实退出码, files=…, exempt=…}）。未收口不得宣告任务完成。`,
+        }],
+        source: { kind: 'user' },
+      }
+      agent.steer?.(steerMsg)
+      console.log(`[shisan-xinuo] gate steer injected for turn ${payload.turn} (toolCalls=${b.toolCalls})`)
+    } catch (e) {
+      console.error('[shisan-xinuo] turn-stopping check failed (non-fatal):', String(e).slice(0, 120))
+    }
+  })
 
   // 状态横幅（模型可见形态）：每请求装配时输出实时机检计数——「被盯着」的宿主侧反馈。
   // 桌面 React 卡片属客户端侧 slot 机制，runtime 插件无装载通道（留 M4 决策）。
@@ -776,5 +806,6 @@ export function apply(ctx: Context) {
     budgetDisposeWrap()
     toolDispose()
     sessionEventDispose()
+    turnStoppingDispose()
   }
 }
