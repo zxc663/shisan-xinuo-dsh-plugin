@@ -93,14 +93,11 @@ function mkBridge(init = []) {
     get recs() { return recs },
     register(assertions, goal, ctx, mode = 'merge') {
       calls.register++
-      const prevAuto = recs.filter((x) => x.source === 'auto').length
-      if (mode === 'replace' || recs.length === 0) {
-        recs = assertions.map((a) => ({ assertion: a, source: 'tool' }))
-      } else {
-        const seen = new Set(recs.map((x) => JSON.stringify(x.assertion)))
-        recs = [...recs, ...assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' }))]
-      }
-      return { count: recs.length, mark: 'mock', replacedAuto: mode === 'replace' ? prevAuto : 0 }
+      const base = mode === 'replace' ? recs.filter((x) => x.source === 'auto') : recs
+      const keptAuto = base.filter((x) => x.source === 'auto').length
+      const seen = new Set(base.map((x) => JSON.stringify(x.assertion)))
+      recs = [...base, ...assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' }))]
+      return { count: recs.length, mark: 'mock', preservedAuto: keptAuto }
     },
     clear() { calls.clear++; recs = [] },
     list() { return recs },
@@ -147,18 +144,23 @@ function mkBridge(init = []) {
   t('task: merge 消息提示合并', true, r.message.includes('合并'))
   await def.execute({ action: 'register', assertions: 'not_exists:D:\\x\\new.txt' }, {})
   t('task: merge 去重', 2, bridge.recs.length)
+  await def.execute({ action: 'register', mode: 'replace', assertions: 'exists:D:\\x\\only.txt' }, {})
+  t('task: 纯工具断言 replace=替换', 1, bridge.recs.length)
 }
 {
   const logs = []
   const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'auto.txt' }, source: 'auto' }])
   const def = buildTaskToolDefinition({ log: (e) => logs.push(e), acceptance: bridge })
   const r1 = await def.execute({ action: 'register', mode: 'replace', assertions: 'not_exists:D:\\x\\a.txt' }, {})
-  t('task: replace 无 reason 被拒', 'refused', r1.status)
-  t('task: 拒后 auto 仍在', 1, bridge.recs.length)
-  const r2 = await def.execute({ action: 'register', mode: 'replace', reason: '原推导路径为笔误', assertions: 'not_exists:D:\\x\\a.txt' }, {})
-  t('task: replace 带 reason 放行', 'ok', r2.status)
-  t('task: replace 后仅新断言', 1, bridge.recs.length)
-  t('task: replace 落审计（含 replacedAuto）', true, logs.some((l) => l.kind === 'task-register' && l.mode === 'replace' && l.replacedAuto === 1))
+  t('task: replace 放行（无需 reason）', 'ok', r1.status)
+  t('task: replace 后 auto 恒保留', true, bridge.recs.some((x) => x.source === 'auto' && x.assertion.path === 'auto.txt'))
+  t('task: replace 后新工具断言并入', true, bridge.recs.some((x) => x.source === 'tool' && x.assertion.path === 'D:\\x\\a.txt'))
+  t('task: replace 后总数=2（auto+tool）', 2, bridge.recs.length)
+  t('task: 落审计（preservedAuto=1）', true, logs.some((l) => l.kind === 'task-register' && l.mode === 'replace' && l.preservedAuto === 1))
+  const r2 = await def.execute({ action: 'register', mode: 'replace', assertions: 'exists:D:\\x\\b.txt' }, {})
+  t('task: 二次 replace 仍含 auto（模型不可移除）', true, bridge.recs.some((x) => x.source === 'auto'))
+  t('task: 二次 replace 仅换工具断言', true, !bridge.recs.some((x) => x.source === 'tool' && x.assertion.path === 'D:\\x\\a.txt') && bridge.recs.some((x) => x.source === 'tool' && x.assertion.path === 'D:\\x\\b.txt'))
+  t('task: 二次 replace 总数=2', 2, r2.count)
 }
 
 // ── 收口复核集成（gate 工具 + Mock 断言桥）──

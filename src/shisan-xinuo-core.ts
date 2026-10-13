@@ -524,7 +524,7 @@ export function matchDeniedFingerprint(store: Map<string, number>, candidate: st
 // 任务记录验收桥（apply() 注入实现；工具与测试只依赖此接口）
 export interface AssertionRecord { assertion: AcceptanceAssertion; source: 'auto' | 'tool' }
 export interface AcceptanceBridge {
-  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown, mode?: 'merge' | 'replace') => { count: number; mark: string; replacedAuto?: number }
+  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown, mode?: 'merge' | 'replace') => { count: number; mark: string; preservedAuto?: number }
   clear: (ctx?: unknown) => void
   list: (ctx?: unknown) => AssertionRecord[]
   evaluate: (a: AcceptanceAssertion, ctx?: unknown) => Promise<AssertionResult>
@@ -718,13 +718,13 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
   return {
     name: 'discipline_task',
     description:
-      '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可用本工具改正。',
+      '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可追加或替换工具自登记断言改正——用户原文推导的断言恒保留（如需改写，请用户重新下达指令）。',
     parameters: {
       action: { type: 'string', required: true, description: 'register | clear | status' },
       goal: { type: 'string', required: false, description: '任务目标原文摘录（随断言记录）' },
       assertions: { type: 'string', required: false, description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
-      mode: { type: 'string', required: false, description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（整组替换；若含自动推导断言必须给 reason）' },
-      reason: { type: 'string', required: false, description: 'replace 时说明原断言为何有误（替换自动断言时必填）' },
+      mode: { type: 'string', required: false, description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（仅替换工具自登记断言；用户原文推导断言恒保留）' },
+      reason: { type: 'string', required: false, description: '可选：说明本次改动的理由（落审计）' },
     },
     output: {
       schema: {
@@ -747,16 +747,10 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
         }
         const mode = String(args.mode ?? 'merge').toLowerCase() === 'replace' ? ('replace' as const) : ('merge' as const)
         const reason = args.reason === undefined ? '' : String(args.reason).slice(0, 200)
-        const cur = deps.acceptance.list(execCtx)
-        const hasAuto = cur.some((x) => x.source === 'auto')
-        if (mode === 'replace' && hasAuto && !reason) {
-          void deps.log({ kind: 'task-register', status: 'replace-refused', count: cur.length })
-          return { status: 'refused', count: cur.length, message: 'REFUSED：当前含自动推导断言（源自用户原文），整组替换需提供 reason 说明原断言为何有误——防止悄悄削弱验收面。' }
-        }
         const r = deps.acceptance.register(list, goal, execCtx, mode)
-        void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, replacedAuto: r.replacedAuto ?? 0, reason, goal })
-        const how = mode === 'replace' ? '整组替换' : '合并登记（保留既有断言）'
-        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map(explainAssertion).join('；')}。收口时 discipline_gate 将自动复核。` }
+        void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, preservedAuto: r.preservedAuto ?? 0, reason, goal })
+        const how = mode === 'replace' ? '替换工具自登记断言（用户原文推导断言保留）' : '合并登记（保留既有断言）'
+        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map((a) => explainAssertion(a)).join('；')}。收口时 discipline_gate 将自动复核。` }
       }
       if (action === 'clear') {
         const cur = deps.acceptance.list(execCtx)
@@ -779,6 +773,8 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const LOG_DIR = process.env.SHISANUO_LOG_DIR ?? join(REPO_ROOT, 'logs')
 const LOG_FILE = join(LOG_DIR, 'exec-log.jsonl')
+// 不留痕环境开关：SHISANUO_LOG_DISABLE=1 时不落盘（代价=放弃审计底座；启动时以 stdout 一行声明）
+const LOG_ENABLED = process.env.SHISANUO_LOG_DISABLE !== '1'
 
 // ── 遥测脱敏（写入前深处理；覆盖常见密钥形态，非穷尽——日志仍按敏感数据处理，可用 SHISANUO_LOG_DIR 指到私密目录）──
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -819,6 +815,7 @@ export function applyArmMode(): 'A' | 'B' | 'C' {
 
 export function apply(ctx: Context) {
   async function log(entry: Record<string, unknown>): Promise<void> {
+    if (!LOG_ENABLED) return
     try {
       await mkdir(LOG_DIR, { recursive: true })
       await appendFile(LOG_FILE, JSON.stringify(redactDeep({ ts: new Date().toISOString(), ...entry })) + '\n', 'utf8')
@@ -829,6 +826,7 @@ export function apply(ctx: Context) {
 
   const armMode = applyArmMode()
   const observeMode = armMode === 'A'
+  if (!LOG_ENABLED) console.log('[shisan-xinuo] exec-log disabled (SHISANUO_LOG_DISABLE=1；不留痕环境用，代价=放弃审计底座)')
   void log({ kind: 'arm', mode: armMode })
   console.log(`[shisan-xinuo] arm=${armMode}${armMode === 'A' ? ' (observe: no inject, no ask)' : armMode === 'B' ? ' (text-only: inject discipline, no enforcement)' : ' (full treatment)'}`)
 
@@ -1005,19 +1003,16 @@ export function apply(ctx: Context) {
     register: (assertions, goal, ctx, mode = 'merge') => {
       const key = resolveKey(ctx)
       const prev = taskRecords.get(key)
-      const prevAuto = prev?.assertions.filter((x) => x.source === 'auto').length ?? 0
-      let merged: AssertionRecord[]
-      if (mode === 'replace' || !prev) {
-        merged = assertions.map((a) => ({ assertion: a, source: 'tool' as const }))
-      } else {
-        const seen = new Set(prev.assertions.map((x) => JSON.stringify(x.assertion)))
-        const add = assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' as const }))
-        merged = [...prev.assertions, ...add]
-      }
+      // 判据权威：用户原文推导断言（auto）恒保留——replace 仅作用于工具自登记断言；模型不可移除/改写用户判据
+      const base = (mode === 'replace' ? prev?.assertions.filter((x) => x.source === 'auto') : prev?.assertions) ?? []
+      const autoKept = base.filter((x) => x.source === 'auto').length
+      const seen = new Set(base.map((x) => JSON.stringify(x.assertion)))
+      const add = assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' as const }))
+      const merged = [...base, ...add]
       taskRecords.set(key, { raw: goal || prev?.raw || '', goal: goal || prev?.goal || '', assertions: merged, assertionsPassedAt: null, unresolvedLogged: false })
-      stats.assertion = `${merged.length} 条待复(${mode === 'replace' ? '替换' : '登记'})`
+      stats.assertion = `${merged.length} 条待复(${mode === 'replace' ? '替换工具断言' : '登记'})`
       const mark = merged.map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240)
-      return { count: merged.length, mark, replacedAuto: mode === 'replace' ? prevAuto : 0 }
+      return { count: merged.length, mark, preservedAuto: autoKept }
     },
     clear: (ctx) => {
       taskRecords.delete(resolveKey(ctx))

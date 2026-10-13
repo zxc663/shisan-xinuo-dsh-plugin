@@ -35,7 +35,7 @@ const FIELD_WHITELIST = {
   // ── B2/B3 遥测（审计 F-04：补齐与引擎写入面的一致性；tests/tally-whitelist.test.mjs 机检防再脱节）──
   'task-auto': ['count', 'sourceKind', 'raw', 'mark'],
   'task-carryover': ['count', 'prior'],
-  'task-register': ['status', 'mark', 'count', 'goal', 'mode', 'replacedAuto', 'reason'],
+  'task-register': ['status', 'mark', 'count', 'goal', 'mode', 'preservedAuto', 'reason'],
   'assertion-unresolved': ['turn', 'count', 'gate'],
   'bypass-blocked': ['cmd', 'fingerprint'],
   'upstream-block': ['tool', 'cmd', 'upstreamKind', 'l3'],

@@ -12,7 +12,11 @@ export const SELF_EXEMPT = new Set(['CONTRIBUTING.md', 'scripts/check-voice.mjs'
 
 export const RULES = [
   { id: 'user-attribution', re: /用户(裁决|拍板|授意|令)/g, hint: '人员归因→改写为「决策：<内容>（依据：…）」' },
-  { id: 'ai-tool-name', re: /\b(Codex|Claude|ChatGPT|ZCode)\b|\bOpenAI\b(?!-completions)/gi, hint: 'AI 工具具名→删除或写「开发环境」（技术协议名如 openai-completions 不受限）' },
+  {
+    id: 'ai-tool-name',
+    re: /\bOpenAI\b(?!-completions)|\b(?:由|经|本机|用|作为|请)\s*(?:Codex|Claude|ChatGPT|ZCode)\b|\b(?:Codex|Claude|ChatGPT|ZCode)\s*(?:生成|编写|撰写|执行|运行|开工|完成|裁决|开发|产出)/gi,
+    hint: 'AI 工具具名（执行叙述）→删除或写「开发环境」；对标/竞品机制引用不受限（技术协议名如 openai-completions 亦不受限）',
+  },
   { id: 'ai-model-name', re: /\bGPT-?\d/gi, hint: 'AI 模型具名→删除' },
   { id: 'ai-authorship', re: /(由|作为)\s*(AI|模型|人工智能|[Aa]gent)\s*(生成|编写|撰写)|AI\s*(生成|编写|助手)/g, hint: 'AI 生成自述→删除' },
 ]

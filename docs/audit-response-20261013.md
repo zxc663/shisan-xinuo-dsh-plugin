@@ -48,3 +48,17 @@
 | 4 | 未发行／开发态（无 `dsh.bundle`）／绑定 cordis `4.0.5-alpha.1` | 属实 | README 文档化（并入「代价与风险」） |
 
 一句话结论（同步 README）：**不作为安全边界使用**——拦截面=枚举覆盖、验证面=真退出码，两者都治「过程」，不承诺「安全」。
+
+## 六、续审之二：口径更正与判据权威加固（2026-10-13）
+
+**口径更正（采信）**：收口强制并非独有——Claude Code `Stop` hook 提供成熟同类（返回 block 使回合继续；`continueOnBlock`/`impossible`/`stophookactive`；连续 8 次熔断＋环境变量上限；`prompt`/`agent` 型判断），Codex/Qoder 亦有同型 force-continuation hook。据此更正公开表述：`implementation-batches §9` 与 `positioning` 中「无同类净增量」论断收窄为——**行业标配存在；本仓净增量=语义细节**（`claimedExit` 三态、资源真值断言、1 次 steer 上限与收口证据形态）。
+
+**如实补充**：既有实验记录中的 3 次打回全部为用法错误（语法/退出码语义），**有机「谎报」样本至今未命中**——「抓谎报」靶心的有效性未证（与既有「有效性未证」口径一致）；构建性样本（替换型假完成重放）由断言层打回，可证机制在场，不证命中率。
+
+**判据权威加固（本次代码变更，回应「判据握在被验证者手里」）**：
+
+- `discipline_task replace`：由「可整组替换（含 auto，需 reason）」改为**仅替换工具自登记断言；用户原文推导断言（auto）恒保留**——模型不可移除/改写用户判据；更正路径=用户重新下达指令触发重推导，或如实报告阻塞（宿主记 `assertion-unresolved`）。
+- reason 门退役（其防护对象=replace 打穿 auto，已由边界层直接关闭）；`clear` 含 auto 时持续拒绝；审计字段 `replacedAuto→preservedAuto`。
+- 仍属已声明边界：模型自登记断言、`cmd_exit0` 与目标的相关性无机器校验（`echo ok; exit 0` 类可通过）——一致性≠有效性。
+
+**其余审查点定位**：gate/断言 exec 通道（边界与证据见 §五，本次不新增机制）；steer 注入形态（前缀常量＋公开文档）；循环防护=1 次 steer/回合（低于社区 8 次熔断上限），语义出口=如实阻塞报告（记 `unverified`/`assertion-unresolved`）；遥测新增 `SHISANUO_LOG_DISABLE=1` 关闭开关（不留痕环境）；工程形态（发行批路线不变）。

@@ -52,7 +52,7 @@
 ## 7. B2.2 结果（2026-10-13 实测补充）
 
 - **多会话 key 精化（定案）**：宿主类型 `Agent.id = SessionId`；真机探针给出 `execCtx.agent` 完整字段（含 `id`）。`sidKeyOf` 已改为**优先取 `execCtx.agent.id`**——工具侧与事件侧（session.id）用同一把钥匙；runE 实测断言复核正常命中。
-- **register 语义升级（弱命令/覆盖防护）**：`discipline_task register` 默认 **merge**（追加合并、既有断言保留、去重）；`replace` 整组替换时**若含自动推导断言必须提供 reason**（否则 REFUSED），并落审计（mode/replacedAuto/reason）。测试 ×8。
+- **register 语义升级（弱命令/覆盖防护）**：`discipline_task register` 默认 **merge**（追加合并、既有断言保留、去重）；`replace` **仅替换工具自登记断言——用户原文推导断言（auto）恒保留**（判据权威加固，2026-10-13；此前为「含 auto 时需 reason 方可整组替换」），并落审计（mode/preservedAuto/reason）。测试 ×10。
 - **concludeTurn 探针（B2.2 首项）＝本版不可用**：
   - `execCtx.concludeTurn()` 直调 → `TypeError: Invalid value used in weak set`（连两轮实跑复现，try/catch 兜底，回合不受影响）；
   - 结果对象携带 `concludesTurn: true` → 普通注册工具路径**不被转发**（runE3 回合照常收尾，无强制终态）。

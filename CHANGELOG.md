@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 判据权威加固批（2026-10-13，审计续审之二）
+
+- `discipline_task.replace`：仅替换工具自登记断言；**用户原文推导断言（auto）恒保留**（模型不可移除/改写判据）；reason 门退役（防护对象已由边界层关闭）；审计字段 `replacedAuto→preservedAuto`。
+- 遥测新增 `SHISANUO_LOG_DISABLE=1` 关闭开关（不留痕环境）。
+- 文档：audit-response §六（口径更正——收口强制存在行业成熟同类；有机谎报样本未命中如实记录）；README「代价与风险」补「一致性≠有效性」与循环防护对比；positioning/implementation-batches 同步更正。
+
 ## 审计续处置：代价与风险四件（2026-10-13）
 
 - 日志脱敏：遥测写入前对常见密钥形态做深脱敏（sk-/gh*/Bearer/token=…/URL 凭据），新增测试套件。
