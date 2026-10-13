@@ -389,6 +389,7 @@ export interface GateToolDeps {
   log: (entry: Record<string, unknown>) => void | Promise<void>
   onStats?: (verdict: string) => void
   judge?: (cmd: string) => string | null
+  isFullAccess?: () => boolean
 }
 
 // 工具定义构造器（对接真相=app.asar 内建工具样例：parameters DSL {名:{type,required,description}} + output{schema,render} + execute(args,exec)）
@@ -435,7 +436,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       const exempt = args.exempt === undefined ? undefined : String(args.exempt).slice(0, 300)
 
       const plan = planGate(cmd, judge)
-      if (plan.action === 'refuse') {
+      if (plan.action === 'refuse' && !deps.isFullAccess?.()) {
         deps.onStats?.('refused')
         void deps.log({ kind: 'gate-tool', status: 'refused', domain: plan.domain, level, v, cmd: cmd.slice(0, 200), claimedExit })
         const value = { status: 'refused' as const, verdict: 'refused', domain: plan.domain, message: gateToolMessage('refused', claimedExit, null, plan.domain) }
@@ -506,7 +507,7 @@ export function apply(ctx: Context) {
   const stats = {
     checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
     gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, last: '未调用' as string },
-    budget: '未裁剪' as string, wireTools: 0,
+    budget: '未裁剪' as string, wireTools: 0, fullAccess: false,
   }
 
   // ── v0.3 content 层装载（fail-closed：无效回退引擎内置默认，防护不静默解除；装载事件落账可审计）──
@@ -595,6 +596,11 @@ export function apply(ctx: Context) {
         void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'allow' })
         return next()
       }
+      if (fullAccess) {
+        // 完全权限（宿主 danger-full-access）：用户已全局授权，插件退位为仅记录，不再弹卡
+        void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'allow-full-access' })
+        return next()
+      }
       void log({ kind: 'l3-intercept', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200) })
       return {
         kind: 'ask',
@@ -612,9 +618,23 @@ export function apply(ctx: Context) {
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
   const turnBuckets = new Map<unknown, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean }>()
   let inventoryLogged = false
+  // 完全权限感知（用户裁决）：宿主 sandbox/mode=danger-full-access 时用户已全局授权，
+  // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
+  let fullAccess = false
 
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
+      const rawMode = event as { type?: unknown; data?: { mode?: unknown } }
+      if (rawMode?.type === 'sandbox/mode') {
+        const was = fullAccess
+        fullAccess = rawMode.data?.mode === 'danger-full-access'
+        if (fullAccess !== was) {
+          stats.fullAccess = fullAccess
+          void log({ kind: 'sandbox-mode', mode: String(rawMode.data?.mode), enforcement: fullAccess ? 'suspended' : 'active' })
+          console.log(`[shisan-xinuo] sandbox mode=${String(rawMode.data?.mode)} → L3 enforcement ${fullAccess ? 'SUSPENDED (user full authorization)' : 'active'}`)
+        }
+        return
+      }
       // v0.4 真值测量：request/header=发给模型的实际工具面（预算裁剪效果以此为准，非根 ctx schemas）
       const rawHeader = event as { type?: unknown; data?: { header?: { tools?: unknown } } }
       if (rawHeader?.type === 'request/header') {
@@ -712,7 +732,7 @@ export function apply(ctx: Context) {
           '## 纪律状态（宿主机检实时·本节由插件自动更新，不可仿写）',
           `- 工作回合已检 ${stats.checked} 次（GATE 齐 ${stats.gateOk}/缺 ${stats.gateMissing}）｜L3 拦截 ${stats.intercepted} 次｜上一工作回合 GATE: ${stats.lastGate}`,
           `- discipline_gate 真值收口：${stats.gateTool.calls} 次（通过 ${stats.gateTool.pass}/不符 ${stats.gateTool.mismatch}/诚实失败 ${stats.gateTool.honestFail}/拒 ${stats.gateTool.refused}/错 ${stats.gateTool.error}）｜上次=${stats.gateTool.last}`,
-          `- 工具预算：${stats.budget}｜当前请求工具面=${stats.wireTools} 个｜GATE 缺口>0 或上回合 GATE=无 时，下一任务收口必须调用 discipline_gate（或补齐文本 GATE 单行）。`,
+          `- 工具预算：${stats.budget}｜当前请求工具面=${stats.wireTools} 个${stats.fullAccess ? '｜⚠完全权限模式：L3 审批卡已按用户全局授权暂停' : ''}｜GATE 缺口>0 或上回合 GATE=无 时，下一任务收口必须调用 discipline_gate（或补齐文本 GATE 单行）。`,
         ].join('\n'),
     })
     console.log('[shisan-xinuo] live status banner installed')
@@ -729,6 +749,7 @@ export function apply(ctx: Context) {
         const def = buildGateToolDefinition({
           log: (entry) => void log(entry),
           judge: activeJudge,
+          isFullAccess: () => fullAccess,
           onStats: (verdict) => {
             const g = stats.gateTool
             g.calls++

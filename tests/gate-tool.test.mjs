@@ -90,6 +90,24 @@ async function runExecute(args, runCmdImpl, verdicts = [], logs = []) {
   t('exec: 拒跑回调', ['refused'], verdicts)
 }
 
+// 4b) 完全权限：isFullAccess=true 时 L3 命中放行（宿主侧用户已全局授权）
+{
+  const { r, logs } = await runExecute(
+    { level: 'L1', v: 'x', cmd: 'rm -rf /tmp/x', claimedExit: 0 },
+    async () => ({ code: 0, stdout: 'done', stderr: '', timedOut: false }),
+    [],
+    [],
+  )
+  // 重跑：注入 isFullAccess
+  const def2 = buildGateToolDefinition({
+    runCmd: async () => ({ code: 0, stdout: 'done', stderr: '', timedOut: false }),
+    log: (e) => logs.push(e),
+    isFullAccess: () => true,
+  })
+  const r2 = await def2.execute({ level: 'L1', v: 'x', cmd: 'rm -rf /tmp/x', claimedExit: 0 }, {})
+  t('exec: 完全权限下 L3 命中放行', 'pass', r2.status)
+}
+
 // 5) timeout 路径
 {
   const { r, logs } = await runExecute(

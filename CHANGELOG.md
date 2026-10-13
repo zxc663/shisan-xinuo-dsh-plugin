@@ -1,5 +1,14 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 完全权限感知批（2026-10-13，用户裁决：全放开模式下不应弹审批卡）
+
+- **机制**：监听 session/event 流中的 `sandbox/mode` 事件（宿主 SandboxMode 枚举=`read-only`/`workspace-write`/`danger-full-access`，asar 实证）——`danger-full-access` 时 L3 拦截退位为仅记录（`l3-detected decision=allow-full-access`），不再弹审批卡；discipline_gate 的 L3 拒跑同样放行（`isFullAccess` 注入）；恢复受限模式后拦截自动恢复。模式变更落 `sandbox-mode` 日志行（可审计）+横幅提示。
+- **语义**：完全权限=用户对当前会话的全局授权，插件尊重该授权不重复打断——与母仓「笼统授权只覆盖明示项」互补：这里的明示项=宿主 UI 显式确认的风险提示。
+- **真实宿主验证**（桌面 App，CUA 操控）：①workspace 模式：L3 拦截→审批卡弹出→allowed-once→执行（行为正确）；②切 danger-full-access：`sandbox-mode enforcement=suspended` 落账→发同款 pwsh 删除任务→**不弹卡直接执行**（`l3-detected allow-full-access`）→文件真删→gate 真值收口 pass；③模式切回 workspace-write→`enforcement=active` 落账（拦截恢复）。
+- **关键发现**：完全权限是**会话级**设置（composer 切当前会话；新建会话回默认 workspace-write——asar 文档+实测）；`sandbox/mode` 事件仅在模式变更时广播。
+- tally 白名单新增 `sandbox-mode` kind；gate-tool 单测 45 例（+fullAccess 放行分支）。
+
+
 ## 外部独立验证修复批（2026-10-13，审查基线 25b8775 → 本批）
 
 第三方 Linux/Node 22.23.2 沙箱独立复现：9 套单测全绿+口径逐项一致+**零夸大**。四处反馈全部裁决采纳/撤销如下：
