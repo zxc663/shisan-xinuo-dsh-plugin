@@ -3,7 +3,9 @@
   "comment": "L3 危险域规则包（v0.3 Config 化）。用户可改本文件定制红线：加域/删域/改正则。结构无效或列表为空时引擎回退内置默认规则（fail-closed：防护不静默解除）。noExemptDomains 中的域命中即拦、不查豁免。flags 传 RegExp flags（推荐 i）。",
   "l3Domains": [
     { "domain": "编码执行", "pattern": "-EncodedCommand\\b", "flags": "i", "noExempt": true },
-    { "domain": "数据删除", "pattern": "(?<![-\\w])rm\\s+(?:-\\S+\\s+)*\\S|\\bRemove-Item\\b|\\bClear-Content\\b|(?:^|[;&|]\\s*|\\n\\s*)(?:del|erase|rd|rmdir|ri)(?:\\s+\\S|\\s*(?:$|[;&|]))|\\b(?:cmd|cmd\\.exe|powershell|pwsh)\\b[^;&|\\n]{0,80}\\b(?:del|erase|rd|rmdir)\\b|git\\s+(?:reset\\s+--hard|clean\\b|stash\\s+clear\\b)|\\bshred\\b|\\bunlink\\b|\\bdocker\\s+(?:rmi\\b|volume\\s+rm\\b|image\\s+prune\\b|system\\s+prune\\b)", "flags": "i" },
+    { "domain": "数据删除", "pattern": "(?<![-\\w])rm\\s+(?:-\\S+\\s+)*\\S|\\bRemove-Item\\b|\\bClear-Content\\b|(?:^|[;&|]\\s*|\\n\\s*)(?:del|erase|rd|rmdir|ri)(?:\\s+\\S|\\s*(?:$|[;&|]))|\\b(?:cmd|cmd\\.exe|powershell|pwsh)\\b[^;&|\\n]{0,80}\\b(?:del|erase|rd|rmdir)\\b|git\\s+(?:reset\\s+--hard|clean\\b|stash\\s+clear\\b)|\\bshred\\b|\\bunlink\\b|\\bdocker\\s+(?:rmi\\b|volume\\s+rm\\b|image\\s+prune\\b|system\\s+prune\\b)|\\b(?:node|python|python3)\\s+(?:-\\w+\\s+)*[\"'].*\\b(?:unlinkSync|rmSync|rmtree|os\\.remove)\\b|sed\\s+-i[^;&|\\n]*\\d+d\\b", "flags": "i" },
+    { "domain": "远端执行", "pattern": "\\b(?:curl|wget)\\b[^;&|]*(?:\\|\\s*(?:sh|bash|zsh|powershell)\\b|\\|\\s*\\.\\s)", "flags": "i" },
+    { "domain": "敏感路径写", "pattern": "(?:>>?|\\bSet-Content\\b|\\bOut-File\\b|\\bAdd-Content\\b)[^;&|\\n]*[\\/\\\\]\\.(?:ssh|aws|gnupg)[\\/\\\\]|(?:>>?|\\bSet-Content\\b|\\bOut-File\\b|\\bAdd-Content\\b)[^;&|\\n]*(?:authorized_keys|\\.bashrc|\\.profile\\b|\\.npmrc|\\.netrc)", "flags": "i" },
     { "domain": "远端写/发布", "pattern": "\\bgit\\s+push[^;&|]*(?:--force|-f\\s|--force-with-lease|--delete\\b|--tags?\\b)|\\b(?:npm|pnpm|yarn)\\s+(?:publish|unpublish)\\b|\\bgh\\s+release\\s+(?:create|delete)\\b|\\bdocker\\s+push\\b", "flags": "i" },
     { "domain": "生产配置写", "pattern": "(?:^|[\\s\"'|;&])/etc/|\\breg\\s+add\\b|\\bschtasks\\s+/create\\b|\\bcrontab\\b|\\bnetsh\\b", "flags": "i" },
     { "domain": "权限变更", "pattern": "\\bchmod\\s+777\\b|\\bchown\\b|\\busermod\\b|\\buseradd\\b|\\bnet\\s+user\\b|\\bicacls\\b|\\bcacls\\b|\\btakeown\\b|\\bSet-Acl\\b", "flags": "i" },
@@ -18,6 +20,6 @@
     { "pattern": "\\btakeown\\s+/\\?", "flags": "i" },
     { "pattern": "--dry-run\\b", "flags": "i" },
     { "pattern": "git\\s+clean\\b[^\\n;&|]*?(?:^|\\s)-n(?:\\s|$)", "flags": "im" },
-    { "pattern": "^\\s*(?:echo|Write-Output|Write-Host|printf)\\s[^;&|]*$", "flags": "i" }
+    { "pattern": "^\\s*(?:echo|Write-Output|Write-Host|printf)\\s(?![^;&|]*>>?)[^;&|]*$", "flags": "i" }
   ]
 }

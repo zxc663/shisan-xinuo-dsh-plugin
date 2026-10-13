@@ -47,7 +47,9 @@ export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 本会
 // L3 危险域执行层枚举（对齐母仓 risk_scan 思路：清单外高危域命中即拦）
 export const L3_PATTERNS: Array<{ domain: string; re: RegExp }> = [
   { domain: '编码执行', re: /-EncodedCommand\b/i },
-  { domain: '数据删除', re: /(?<![-\w])rm\s+(?:-\S+\s+)*\S|\bRemove-Item\b|\bClear-Content\b|(?:^|[;&|]\s*|\n\s*)(?:del|erase|rd|rmdir|ri)(?:\s+\S|\s*(?:$|[;&|]))|\b(?:cmd|cmd\.exe|powershell|pwsh)\b[^;&|\n]{0,80}\b(?:del|erase|rd|rmdir)\b|git\s+(?:reset\s+--hard|clean\b|stash\s+clear\b)|\bshred\b|\bunlink\b|\bdocker\s+(?:rmi\b|volume\s+rm\b|image\s+prune\b|system\s+prune\b)/i },
+  { domain: '数据删除', re: /(?<![-\w])rm\s+(?:-\S+\s+)*\S|\bRemove-Item\b|\bClear-Content\b|(?:^|[;&|]\s*|\n\s*)(?:del|erase|rd|rmdir|ri)(?:\s+\S|\s*(?:$|[;&|]))|\b(?:cmd|cmd\.exe|powershell|pwsh)\b[^;&|\n]{0,80}\b(?:del|erase|rd|rmdir)\b|git\s+(?:reset\s+--hard|clean\b|stash\s+clear\b)|\bshred\b|\bunlink\b|\bdocker\s+(?:rmi\b|volume\s+rm\b|image\s+prune\b|system\s+prune\b)|\b(?:node|python|python3)\s+(?:-\w+\s+)*["'].*\b(?:unlinkSync|rmSync|rmtree|os\.remove)\b|sed\s+-i[^;&|\n]*\d+d\b/i },
+  { domain: '远端执行', re: /\b(?:curl|wget)\b[^;&|]*(?:\|\s*(?:sh|bash|zsh|powershell)\b|\|\s*\.\s)/i },
+  { domain: '敏感路径写', re: /(?:>>?|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b)[^;&|\n]*[\/\\]\.(?:ssh|aws|gnupg)[\/\\]|(?:>>?|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b)[^;&|\n]*(?:authorized_keys|\.bashrc|\.profile\b|\.npmrc|\.netrc)/i },
   { domain: '远端写/发布', re: /\bgit\s+push[^;&|]*(?:--force|-f\s|--force-with-lease|--delete\b|--tags?\b)|\b(?:npm|pnpm|yarn)\s+(?:publish|unpublish)\b|\bgh\s+release\s+(?:create|delete)\b|\bdocker\s+push\b/i },
   { domain: '生产配置写', re: /(?:^|[\s"'|;&])\/etc\/|\breg\s+add\b|\bschtasks\s+\/create\b|\bcrontab\b|\bnetsh\b/i },
   { domain: '权限变更', re: /\bchmod\s+777\b|\bchown\b|\busermod\b|\buseradd\b|\bnet\s+user\b|\bicacls\b|\bcacls\b|\btakeown\b|\bSet-Acl\b/i },
@@ -64,7 +66,7 @@ const READONLY_EXEMPTS: RegExp[] = [
   /\btakeown\s+\/\?/i, // 帮助
   /--dry-run\b/i, // 全域 dry-run
   /\bgit\s+clean\b[^\n;&|]*?(?:^|\s)-n(?:\s|$)/m, // clean -n dry-run（-dn 组合不含独立 -n 仍拦）
-  /^\s*(?:echo|Write-Output|Write-Host|printf)\s[^;&|]*$/i, // 单段纯输出提及（无分隔符=不执行任何危险段）
+  /^\s*(?:echo|Write-Output|Write-Host|printf)\s(?![^;&|]*>>?)[^;&|]*$/i, // 单段纯输出提及（无分隔符且无重定向=不执行任何危险段；echo > file 是真实写操作不豁免）
 ]
 
 export function judgeL3(cmd: string): string | null {
@@ -317,12 +319,16 @@ export function withToolGate(baseVerdict: string, usedGateTool: boolean): string
   return baseVerdict
 }
 
-function extractCommand(exec: { name?: string; arguments?: unknown }): string {
+export function extractCommand(exec: { name?: string; arguments?: unknown }): string {
   const a = (exec as { arguments?: unknown })?.arguments
   if (typeof a === 'string') return a
   if (a && typeof a === 'object') {
     const o = a as Record<string, unknown>
-    for (const k of ['command', 'cmd', 'script', 'content', 'file_path', 'path']) {
+    const keys = ['command', 'cmd', 'script', 'file_path', 'path']
+    // write/edit 的 content 是大段文件正文：对它跑命令正则=误拦主路径（外部审查实测 3/3），
+    // 只取 file_path 供「敏感目标路径」类规则使用
+    const skipContent = exec?.name === 'write' || exec?.name === 'edit'
+    for (const k of skipContent ? keys : [...keys, 'content']) {
       if (typeof o[k] === 'string') return o[k] as string
     }
   }
