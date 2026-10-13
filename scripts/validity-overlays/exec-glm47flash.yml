@@ -1,0 +1,5 @@
+# 执行档：代际阶梯最高可及档 glm-4.7-flash；纪律插件保持挂载
+- id: agent-default-model
+  config:
+    provider: zhipu-cloud
+    model: glm-4.7-flash

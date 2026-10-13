@@ -94,6 +94,10 @@ const ARMS = {
   T1E: (t, dir) => PINNED(t, dir), // 弱档执行 × 推理档出题（glm-z1-flash）
   T2: (t, dir) => PINNED(t, dir),  // 推理档执行（glm-z1-flash），无对抗
   T2E: (t, dir) => PINNED(t, dir), // 推理档执行 × 弱档出题（glm-4-flash）
+  // 代际阶梯（R18）：同一 Flash 线的世代递增——T3=4.5-flash、T4=4.7-flash；T4E 加出题层（z1 出题）
+  T3: (t, dir) => PINNED(t, dir),
+  T4: (t, dir) => PINNED(t, dir),
+  T4E: (t, dir) => PINNED(t, dir),
 }
 
 // D′ 语义的环境变量（外部锚＋关闭启发式推导＋拦截退位）
@@ -109,6 +113,7 @@ const ARM_PATCH = {
   ME3: [],
   T1: ['exec-glm4flash.yml'], T1E: ['exec-glm4flash.yml'],
   T2: ['exec-z1flash.yml'], T2E: ['exec-z1flash.yml'],
+  T3: ['exec-glm45flash.yml'], T4: ['exec-glm47flash.yml'], T4E: ['exec-glm47flash.yml'],
 }
 
 // 对抗档 overlay（切模型＋关闭纪律插件）；键存在即启用出题人步骤
@@ -120,6 +125,7 @@ const ADV = {
   ME3: 'adv-flash.yml',
   T1E: 'adv-z1flash.yml',
   T2E: 'adv-glm4flash.yml',
+  T4E: 'adv-z1flash.yml',
 }
 
 // 出题人：独立会话只产出一条验证命令；求值＝在任务目录执行该命令取真实退出码

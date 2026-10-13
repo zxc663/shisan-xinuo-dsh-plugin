@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PHASES = [
+  // R18 代际阶梯：在同一条 Flash 线上取世代递增的执行档，检验"能力-价值曲线"是否真的有序
+  { name: 'ladder-hard', args: ['--arms=T3,T4,T4E', '--kinds=hard'] },
   // 2026-10-13 重排（R10）：魔搭配额耗尽 ⇒ 多档矩阵暂停（避免继续产出废行）。
   // 本链只跑免费档可完成的部分；多档矩阵待配额恢复后手动续跑（已完成行会被跳过）：
   //   node scripts/validity-run.mjs --arms=W,WE,S,SE --kinds=anchored
