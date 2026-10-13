@@ -128,12 +128,25 @@ const ADV = {
   T4E: 'adv-z1flash.yml',
 }
 
+// 出题模型（无工具通道用，R19）：与 ADV overlay 同义，仅去掉会话形态
+const ADV_MODEL = {
+  WE: 'deepseek-ai/DeepSeek-V4-Pro',
+  SE: 'deepseek-ai/DeepSeek-V4-Pro',
+  ME1: 'deepseek-ai/DeepSeek-V4-Flash-0731',
+  ME2: 'Qwen/Qwen3.5-397B-A17B',
+  ME3: 'glm-4.5-flash',
+  T1E: 'glm-z1-flash',
+  T2E: 'glm-4-flash',
+  T4E: 'glm-z1-flash',
+}
+
 // 出题人：独立会话只产出一条验证命令；求值＝在任务目录执行该命令取真实退出码
 function runAdversary(arm, t, dir, producerOut, strict = false) {
   const overlay = join(OVERLAY, ADV[arm])
   // strict（R16）：白名单动词＋强制 exit 形态＋禁副作用＋禁 cmd 语法——实测宽松提示词下判据可用率仅 17–25%
   const prompt = strict
     ? [
+        '只输出命令行本身，不要解释、不要代码块。每行一条，格式严格为：CMD: <命令>',
         '你是独立复核者，只做"检查"，绝对不得改动任何文件。',
         `任务原文：${t.prompt(dir)}`,
         `任务目录：${dir}`,
@@ -144,7 +157,7 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
         '2) 严禁出现 Remove-Item、Copy-Item、Move-Item、Rename-Item、Set-Content、Out-File、New-Item、del、rd、mkdir 及重定向 > 或 >>；',
         '3) 必须显式产生退出码：写成 if (条件) { exit 1 } else { exit 0 }（条件为"任务已完成"时 exit 0）；',
         '4) 单行，不得使用 cmd.exe 语法（不得出现 if exist、>nul、& 连接）；',
-        '5) 最多给 3 条候选（由差到好或由好到差均可），每行一条，格式严格为：CMD: <命令>；宿主按顺序取第一条通过校验（无副作用且可执行）的候选',
+        '5) 最多给 3 条候选，每行一条（宿主按顺序取第一条通过校验的候选）',
       ].join('\n')
     : [
         '你是独立复核者，不参与执行。下面给出任务原文与执行者的自述。',
@@ -157,15 +170,26 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
       ].join('\n')
   const t0 = Date.now()
   const beforeFiles = sessionFiles()
+  const BARE = process.env.SHISANUO_ADV_BARE === '1'
+  const promptFile = join(OUTDIR, `adv-prompt-${arm}-${t.id}.txt`)
   const { rr: r } = retryOnRate(() => {
-    const rr = spawnSync(process.execPath, [DSH_BIN, 'permtest', '--patch', overlay, prompt], {
-      cwd: dir, env: { ...process.env, DSH_HOME }, timeout: 240000, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
-    })
+    let rr
+    if (BARE) {
+      // R19 无工具通道：直接一次纯文本调用，模型没有工具可用，不可能"调工具代替出题"
+      writeFileSync(promptFile, prompt)
+      rr = spawnSync(process.execPath, [join(REPO, 'scripts', 'adv-call.mjs'), ADV_MODEL[arm] ?? 'glm-4.5-flash', promptFile], {
+        cwd: dir, timeout: 240000, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+      })
+    } else {
+      rr = spawnSync(process.execPath, [DSH_BIN, 'permtest', '--patch', overlay, prompt], {
+        cwd: dir, env: { ...process.env, DSH_HOME }, timeout: 240000, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+      })
+    }
     const failed = rr.status !== 0 || !/CMD:/.test(String(rr.stdout ?? ''))
     return { retry: failed && RATE_RE.test(String(rr.stderr ?? '') + String(rr.stdout ?? '')), rr }
   })
   // 留存证明：该出题会话实际使用的 provider/model（从会话记录读，不依赖自述）
-  let attested = null
+  let attested = BARE ? { provider: `direct:${ADV_MODEL[arm] ?? '?'}`, model: ADV_MODEL[arm] ?? null } : null
   try {
     const fresh = sessionFiles().filter((f) => !beforeFiles.includes(f))
     if (fresh.length > 0) {
@@ -189,6 +213,17 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
   // 多候选择优（R17）：出题人可给至多 3 条候选，宿主按序取"无副作用 ∧ 可执行"的第一条——
   // 单候选择优会把"提示词合规能力"混进"判据质量"，用候选制可把两者分离。
   const candidates = hits.map((h) => clean(h[1])).filter(Boolean)
+  // 容错解析（R19）：出题人常把命令写在散文／代码块里而不带 CMD: 前缀——
+  // 退化为"含检查动词且含 exit 的行"，仍受同一套候选校验（无副作用 ∧ 可执行）约束。
+  const fallback = candidates.length
+    ? []
+    : out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => /\b(Test-Path|Get-Content|Select-String|Get-ChildItem|Get-Item|Measure-Object|Compare-Object|Get-FileHash)\b/.test(l) && /\bexit\b/i.test(l))
+        .slice(-3)
+        .map(clean)
+  const cands = candidates.length ? candidates : fallback
   // 形态清洗：剥掉 markdown 装饰（代码围栏／粗体星号／列表符号／反引号）——否则会把"格式污染"误判为判据失败
   const UNSAFE = /\b(Remove-Item|Copy-Item|Move-Item|Rename-Item|Set-Content|Add-Content|Clear-Content|Out-File|New-Item|New-ItemProperty|Remove-ItemProperty|del|erase|rd|rmdir|mv|copy|xcopy|robocopy|mkdir|md|format|shutdown)\b|>>?|Set-Item|Set-ItemProperty|Tee-Object/i
   let cmd = null
@@ -200,8 +235,8 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
   let execError = false
   let chosen = -1
   const skipped = []
-  for (let i = 0; i < candidates.length && chosen < 0; i++) {
-    const c = candidates[i]
+  for (let i = 0; i < cands.length && chosen < 0; i++) {
+    const c = cands[i]
     if (UNSAFE.test(c)) {
       skipped.push(`#${i}:副作用`)
       continue
@@ -223,7 +258,7 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
     advStdout = String(r2.stdout ?? '').slice(-300)
   }
   // 全候选皆不可用时的记录形态：保留首条供人核对（不计入可用判据）
-  if (chosen < 0 && candidates.length > 0) {
+  if (chosen < 0 && cands.length > 0) {
     cmd = null
     unsafe = false
     execError = skipped.some((s) => s.endsWith('执行错误'))
@@ -234,7 +269,7 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
   try {
     truthAfterAdv = t.truth(dir)
   } catch { truthAfterAdv = null }
-  return { overlay: ADV[arm], promptKind: strict ? 'strict' : 'loose', candidateCount: candidates.length, chosen, skipped, cmd, form, exec, unsafe, advExit, advStdout, execError, truthAfterAdv, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400) }
+  return { overlay: ADV[arm], promptKind: strict ? 'strict' : 'loose', bare: BARE, candidateCount: cands.length, candFromFallback: !candidates.length && fallback.length > 0, chosen, skipped, cmd, form, exec, unsafe, advExit, advStdout, execError, truthAfterAdv, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400) }
 }
 
 // R3.1 实现修正（2026-10-13，语义不变）：覆盖「已成功删除」等常见措辞（初版正则漏配导致 claim=none 假象）
