@@ -92,8 +92,9 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 ## 目录
 
 - `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/预算/遥测）
-- `content/` 规则包（Config 面）｜ `scripts/` tally/e1-run/e1v4-analyze/run-all-tests ｜ `tests/` 13 套单测
-- `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告 ｜ `CHANGELOG.md` 版本记录（内部）
+- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 15 套单测
+- `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告/GUI 验证规程 ｜ `CHANGELOG.md` 版本记录（内部）
+- `CONTRIBUTING.md` 公开文本规范（提交/注释/文档＋机检）
 
 ## 版本史与路线（详见 CHANGELOG.md）
 

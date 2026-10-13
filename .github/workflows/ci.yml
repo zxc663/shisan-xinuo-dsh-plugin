@@ -10,8 +10,16 @@ jobs:
         node: [22, 24]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
       - name: 全量测试（含白名单一致性机检）
         run: node scripts/run-all-tests.mjs
+      - name: 提交信息规范（推送范围）
+        if: github.event_name == 'push'
+        run: node scripts/check-voice.mjs --commits "${{ github.event.before }}..${{ github.sha }}"
+      - name: 提交信息规范（PR 范围）
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-voice.mjs --commits "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"

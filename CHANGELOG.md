@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 公开文本规范与机检门禁（2026-10-13）
+
+- 新增 `CONTRIBUTING.md`：提交信息/代码注释/文档规范（决策只写内容与依据；公开文本不出现内部环境与 AI 工具具名）。
+- 新增 `scripts/check-voice.mjs`＋`tests/repo-voice.test.mjs`：工作树机检内置 `npm test`；CI 对推送/PR 新增提交范围执行提交信息检查（含格式校验）。
+- 存量对齐：既有文档与注释中的归因/具名用语改为中性表述，不对技术事实做改动。
+
 ## B3b 生成器与全量语义回归（2026-10-13，拦截换芯收口 · B3 全清）
 
 - **生成器**（`scripts/gen-permission-rules.mjs`）：`content/rules.json → .dsh/rules.yaml`——19 条规则（不可豁免域 ask→豁免 allow→其余域 ask）；ASCII 大小写折叠（上游 regex 模式无 `i` 标志）；镜像上游 ReDoS 护栏做生成期预检（fail loud）；确定性输出＋provenance 头＋`--check`。内容面两条旧形态等价简改（rm 子句／node-python 选项组有界化），豁免 flags `im→i`；单测 33 断言（第 14 套）。
@@ -8,7 +14,7 @@
 - **集成发现**：`patternMode: regex` 连坐上游内置基线——v0.7.15 builtin 为 glob 写法（`+s`/`4???` 等），regex 模式编译失败致**整个条目静默失活**（首轮三跑零拦截实证）；处置＝配置行 `builtin.enabled: false`，转换版基线（`builtin.path`）记后续候选。
 - 报告：`docs/b3b-generator-and-semantic-regression-20261013.md`；决策表回执：`docs/reuse-decision-permission-rules.md` B3b 节。
 
-## 完全权限感知批（2026-10-13，用户裁决：全放开模式下不应弹审批卡）
+## 完全权限感知批（2026-10-13：完全权限模式下拦截退位为仅记录，不弹审批卡）
 
 - **机制**：监听 session/event 流中的 `sandbox/mode` 事件（宿主 SandboxMode 枚举=`read-only`/`workspace-write`/`danger-full-access`，asar 实证）——`danger-full-access` 时 L3 拦截退位为仅记录（`l3-detected decision=allow-full-access`），不再弹审批卡；discipline_gate 的 L3 拒跑同样放行（`isFullAccess` 注入）；恢复受限模式后拦截自动恢复。模式变更落 `sandbox-mode` 日志行（可审计）+横幅提示。
 - **语义**：完全权限=用户对当前会话的全局授权，插件尊重该授权不重复打断——与母仓「笼统授权只覆盖明示项」互补：这里的明示项=宿主 UI 显式确认的风险提示。

@@ -1,7 +1,7 @@
 # M3 A/B 主实验预注册（dsh 十三希诺纪律插件）
 
 > 落档时间：2026-10-12 11:5x。**本档先于任何计分样本落盘**——判据、任务文本、检测正则、显著性阈值全部预注册，跑分后不得回头改（改=新实验，旧数据作废）。
-> 上位文档：design-specs/dsh-smallmodel-verification-agenda-20261012.md（验证议程）；计划 v4（.zcode/plans/）M3 里程碑。
+> 上位文档：design-specs/dsh-smallmodel-verification-agenda-20261012.md（验证议程）；计划 v4（plans 目录）M3 里程碑。
 
 ## 0. 诚实条款（先于一切）
 

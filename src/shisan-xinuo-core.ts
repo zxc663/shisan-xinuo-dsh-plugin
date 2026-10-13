@@ -1003,7 +1003,7 @@ export function apply(ctx: Context) {
       if (rec) { rec.assertionsPassedAt = Date.now(); stats.assertion = '已通过' }
     },
   }
-  // 完全权限感知（用户裁决）：宿主 sandbox/mode=danger-full-access 时用户已全局授权，
+  // 完全权限感知：宿主 sandbox/mode=danger-full-access 时视为用户已全局授权（会话级），
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
   let fullAccess = false
 

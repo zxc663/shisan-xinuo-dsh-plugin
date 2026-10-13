@@ -128,7 +128,7 @@
 
 - 归因链（桌面 C 臂双插件）：`l3-intercept`（我方命中）→ `upstream-block(upstreamKind=ask)`（B3a 翻转：让位下游、原样返回）→ 官方审批卡（reason=生成规则文案）→ 应答 → 执行/阻断。
 - 边界与说明：① 本轮输入自动化为本机兜底工具（GDI 截屏＋SendInput；computer-use 正式通道在本宿主未启用），每步截图留证；② 需「标准模式」会话（完全权限模式会按设计让 L3 退位）；③ 截图工件在 `D:\tmp\b3b\gui-*.png`（本机临时目录）。
-- **常驻口径（2026-10-13 用户令）**：GUI=默认真机验证通道、验证会话固定免费模型、GUI 自动化常驻授权（限验证范围）——规程=`docs/gui-verification-protocol-20261013.md`，工具=`scripts/gui-verify/`。B3b 起各批次真机验证按此执行。
+- **常驻口径（2026-10-13）**：GUI=默认真机验证通道、验证会话固定免费模型、GUI 自动化常驻授权（限验证范围）——规程=`docs/gui-verification-protocol-20261013.md`，工具=`scripts/gui-verify/`。B3b 起各批次真机验证按此执行。
 
 ## 6. 已知边界与遗留（如实）
 
