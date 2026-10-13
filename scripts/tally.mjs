@@ -64,6 +64,8 @@ const FIELD_WHITELIST = {
   'level-divergence': ['turn', 'declared', 'host', 'toolCalls'],
   // C9 只读工具目录
   'tools-catalog': ['level', 'visible', 'denied'],
+  // C14 skill 类注入体积（度量；裁剪不在插件面）
+  'skill-catalog-cost': ['sourceKind', 'chars'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
