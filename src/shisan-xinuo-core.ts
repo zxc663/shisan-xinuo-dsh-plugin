@@ -897,7 +897,7 @@ export function buildToolsCatalogDefinition(deps: {
     name: 'discipline_tools',
     description:
       '工具面目录（只读）：列出当前可见工具、本档位被裁剪掉的工具名与恢复路径。本工具**不接受**任何"恢复／放开"请求——恢复只由人在会话外操作。',
-    parameters: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {}, required: [] },
     output: {
       schema: { type: 'object', properties: { status: { type: 'string' }, message: { type: 'string' } }, required: ['status', 'message'] },
       render(_a: unknown, v: unknown) {
