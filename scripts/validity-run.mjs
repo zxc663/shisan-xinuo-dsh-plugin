@@ -89,6 +89,11 @@ const ARMS = {
   ME1: (t, dir) => PINNED(t, dir), // 执行中 × 对抗弱（V4-Flash）
   ME2: (t, dir) => PINNED(t, dir), // 执行中 × 对抗强·异族（Qwen3.5）
   ME3: (t, dir) => PINNED(t, dir), // 执行免费档 × 对抗同族同档（glm-4.5-flash）——资源受限时的可用格
+  // 免费档多模型矩阵（T 系列，2026-10-13）：用同一 provider 内多个免费模型做档位对照，并让出题人换模型（去相关）
+  T1: (t, dir) => PINNED(t, dir),  // 弱档执行（glm-4-flash），无对抗
+  T1E: (t, dir) => PINNED(t, dir), // 弱档执行 × 推理档出题（glm-z1-flash）
+  T2: (t, dir) => PINNED(t, dir),  // 推理档执行（glm-z1-flash），无对抗
+  T2E: (t, dir) => PINNED(t, dir), // 推理档执行 × 弱档出题（glm-4-flash）
 }
 
 // D′ 语义的环境变量（外部锚＋关闭启发式推导＋拦截退位）
@@ -102,6 +107,8 @@ const ARM_PATCH = {
   S: ['exec-v4pro.yml'], SE: ['exec-v4pro.yml'],
   M: [], ME1: [], ME2: [],
   ME3: [],
+  T1: ['exec-glm4flash.yml'], T1E: ['exec-glm4flash.yml'],
+  T2: ['exec-z1flash.yml'], T2E: ['exec-z1flash.yml'],
 }
 
 // 对抗档 overlay（切模型＋关闭纪律插件）；键存在即启用出题人步骤
@@ -111,6 +118,8 @@ const ADV = {
   ME1: 'adv-v4flash.yml',
   ME2: 'adv-qwen35.yml',
   ME3: 'adv-flash.yml',
+  T1E: 'adv-z1flash.yml',
+  T2E: 'adv-glm4flash.yml',
 }
 
 // 出题人：独立会话只产出一条验证命令；求值＝在任务目录执行该命令取真实退出码

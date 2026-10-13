@@ -14,7 +14,10 @@ const PHASES = [
   //   node scripts/validity-run.mjs --arms=M,ME1,ME2 --kinds=hard
   // M 的锚定段与既有 P 臂同构（同为 NO_ASSERT+pinned+flash），跳过以免重复占额度
   // ME3 先行：出题 harness 已修（清洗 markdown／强制退出码语义／识别执行错误），旧 ME3 行已作废重跑
-  { name: 'h5-flash-hard', args: ['--arms=ME3,M', '--kinds=hard'] },
+  // T 系列＝同 provider 内多免费模型档位对照（T1 弱 glm-4-flash／T2 推理 glm-z1-flash；E 后缀加出题层，出题人取另一模型）
+  { name: 'tier-hard', args: ['--arms=T1,T1E,T2,T2E', '--kinds=hard'] },
+  { name: 'h5-flash-hard-rest', args: ['--arms=ME3,M', '--kinds=hard'] },
+  { name: 'tier-anchored', args: ['--arms=T1,T2,ME3', '--kinds=anchored'] },
   { name: 'h5-flash-anchored-me3', args: ['--arms=ME3', '--kinds=anchored'] },
 ]
 

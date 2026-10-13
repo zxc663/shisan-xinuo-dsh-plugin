@@ -1,0 +1,7 @@
+# 出题人：推理档 glm-z1-flash；关闭纪律插件
+- id: shisanxinuo-core
+  disabled: true
+- id: agent-default-model
+  config:
+    provider: zhipu-cloud
+    model: glm-z1-flash

@@ -1,0 +1,5 @@
+# 执行档：免费弱档 glm-4-flash；纪律插件保持挂载
+- id: agent-default-model
+  config:
+    provider: zhipu-cloud
+    model: glm-4-flash
