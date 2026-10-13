@@ -776,6 +776,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           }
           deps.acceptance.markPassed(execCtx)
           const evidence = classifyEvidence(cmd)
+          ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(true, execCtx)
           const vAnchored = isVAnchored(String((base as { v?: string }).v ?? ''))
           if (!vAnchored) void deps.log({ kind: 'gate-v-unanchored', status: 'pass', v: String((base as { v?: string }).v ?? '').slice(0, 120), cmd: String(cmd).slice(0, 120) })
           ;(deps as { failCount?: number }).failCount = 0 // 通过即重置失败阶梯
@@ -800,6 +801,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             assertions: assertionResults,
             ...(concludedTurn ? { concludedTurn } : {}),
             evidence,
+            closed: true, // 断言全部通过 ⇒ 闭环（A1）
             message:
               gateToolMessage('pass', claimedExit, r.code) +
               ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。` +
@@ -811,6 +813,22 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         }
       }
       void deps.log({ kind: 'gate-tool', status: verdict, ...base, realExit: r.code, match })
+      // A1：无登记断言时的"通过"走这里——按证据强度决定是否**闭环**（弱证据且无断言 ⇒ 通过但不闭环）
+      if (verdict === 'pass') {
+        const evWeak = classifyEvidence(cmd)
+        const closedWeak = evWeak === 'strong'
+        ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(closedWeak, execCtx)
+        if (!closedWeak) void deps.log({ kind: 'gate-pass-weak', status: 'pass', evidence: evWeak, cmd: String(cmd).slice(0, 120) })
+        return {
+          status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
+          evidence: evWeak, closed: closedWeak,
+          message:
+            gateToolMessage('pass', claimedExit, r.code) +
+            (closedWeak
+              ? ' 证据强度=强（使用了检查类算子）。'
+              : ' 证据强度=**弱**且无登记断言 ⇒ **本次通过不闭环**：宿主不据此认定任务完成。请补一条针对目标的判据（not_exists/exists/path_contains/cmd_exit0）后重跑，或如实声明未验证。'),
+        }
+      }
       // C5 失败阶梯：同一实例内连续失败逐级收紧（n=2 只收算子；n>=3 停止试凑、交回用户）
       const failN = ((deps as { failCount?: number }).failCount ?? 0) + 1
       ;(deps as { failCount?: number }).failCount = failN
@@ -1135,7 +1153,7 @@ export function apply(ctx: Context) {
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; closedAuto: boolean; steered: boolean }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean }>()
   let inventoryLogged = false
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
@@ -1266,7 +1284,7 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '', gateTool: false, gateVerdict: null, closedAuto: false, steered: false }
+        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
@@ -1363,7 +1381,8 @@ export function apply(ctx: Context) {
         return
       }
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
-      if (b.steered || b.gateVerdict === 'pass') return
+      // A1：只有"闭环的 pass"才放行；弱证据 pass（gateClosed=false）继续走收口强制
+      if (b.steered || (b.gateVerdict === 'pass' && b.gateClosed)) return
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
       const assertionsOpen = pending.length > 0 && !(rec?.assertionsPassedAt)
@@ -1477,6 +1496,12 @@ export function apply(ctx: Context) {
             const bk = sidKeyOf(execCtx2, '')
             const bkt = bk ? turnBuckets.get(bk) : undefined
             if (bkt) bkt.gateVerdict = verdict
+          },
+          // A1：闭环与否由 gate 结果决定（弱证据且无断言 ⇒ 通过但不闭环，不得据此结束回合）
+          onClosed: (closed, execCtx2) => {
+            const bk = sidKeyOf(execCtx2 as never, '')
+            const bkt = bk ? turnBuckets.get(bk) : undefined
+            if (bkt) bkt.gateClosed = closed
           },
         })
         const d = toolsAny.register(def)

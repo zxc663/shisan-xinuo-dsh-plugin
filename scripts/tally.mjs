@@ -56,6 +56,8 @@ const FIELD_WHITELIST = {
   'task-amend-after-dispute': ['count', 'goal'],
   // C3 判级低报（第一档：只记录）
   'gate-level-understated': ['declared', 'host', 'cmd'],
+  // A1 弱证据通过（不闭环）
+  'gate-pass-weak': ['status', 'evidence', 'cmd'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

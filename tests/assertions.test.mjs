@@ -159,6 +159,19 @@ function mkBridge(init = []) {
   t('C8: 配对后不重复触发', false, (await def2.execute({ action: 'register', assertions: 'exists:D:\\x\\q' }, {})).message.includes('补交修复'))
 }
 {
+  // A1：通过 ≠ 闭环——弱证据（无检查类算子）且无登记断言 ⇒ closed=false
+  const acc = mkAccept([], true)
+  const okZero = async () => ({ code: 0, stdout: '', stderr: '', timedOut: false })
+  const def = buildGateToolDefinition({ runCmd: okZero, log: () => {}, onStats: () => {}, acceptance: acc })
+  const rWeak = await def.execute({ level: 'L1', v: 'x', cmd: 'cd D:\\', claimedExit: 0 }, {})
+  t('A1: 弱证据 status 仍是 pass', 'pass', rWeak.status)
+  t('A1: 弱证据不闭环', false, rWeak.closed)
+  t('A1: 弱证据消息声明不闭环', true, rWeak.message.includes('不闭环'))
+  const rStrong = await def.execute({ level: 'L1', v: 'x', cmd: 'if (Test-Path "D:\\a") { exit 1 } else { exit 0 }', claimedExit: 0 }, {})
+  t('A1: 强证据闭环', true, rStrong.closed)
+  t('A1: 强证据消息不含不闭环', false, rStrong.message.includes('不闭环'))
+}
+{
   const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'p' }, source: 'tool' }])
   const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
   t('task: tool 断言 clear 放行', 'cleared', (await def.execute({ action: 'clear' }, {})).status)
