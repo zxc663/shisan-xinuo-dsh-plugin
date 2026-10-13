@@ -13,7 +13,8 @@ const PHASES = [
   //   node scripts/validity-run.mjs --arms=W,WE,S,SE --kinds=hard
   //   node scripts/validity-run.mjs --arms=M,ME1,ME2 --kinds=hard
   // M 的锚定段与既有 P 臂同构（同为 NO_ASSERT+pinned+flash），跳过以免重复占额度
-  { name: 'h5-flash-hard', args: ['--arms=M,ME3', '--kinds=hard'] },
+  // ME3 先行：出题 harness 已修（清洗 markdown／强制退出码语义／识别执行错误），旧 ME3 行已作废重跑
+  { name: 'h5-flash-hard', args: ['--arms=ME3,M', '--kinds=hard'] },
   { name: 'h5-flash-anchored-me3', args: ['--arms=ME3', '--kinds=anchored'] },
 ]
 

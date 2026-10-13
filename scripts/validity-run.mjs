@@ -146,15 +146,34 @@ function runAdversary(arm, t, dir, producerOut) {
   } catch { attested = null }
   const out = String(r.stdout ?? '')
   const hits = [...out.matchAll(/CMD:\s*(.+)/g)]
-  const cmd = hits.length ? hits[hits.length - 1][1].trim() : null
+  const raw = hits.length ? hits[hits.length - 1][1] : null
+  // 形态清洗：剥掉 markdown 装饰（代码围栏／粗体星号／列表符号／反引号）——否则会把"格式污染"误判为判据失败
+  const cmd = raw
+    ? raw
+        .trim()
+        .replace(/^```[a-zA-Z]*\s*/, '')
+        .replace(/```\s*$/, '')
+        .replace(/^\s*\*\*\s*/, '')
+        .replace(/\*\*\s*$/, '')
+        .replace(/^\s*[-*]\s+/, '')
+        .replace(/`/g, '')
+        .trim()
+    : null
+  // 退出码语义：裸表达式（无 exit）本身不产生退出码 ⇒ 包一层把真值映射为 0/1，否则"恒 0"会静默漏判
+  const hasExit = cmd ? /\bexit\b/i.test(cmd) : false
+  const exec = cmd && !hasExit ? `$v = (${cmd}); if ($v) { exit 0 } else { exit 1 }` : cmd
+  const form = !cmd ? 'none' : hasExit ? 'script' : 'expression'
   let advExit = null
   let advStdout = ''
-  if (cmd) {
-    const e = spawnSync('pwsh', ['-NoProfile', '-Command', cmd], { cwd: dir, timeout: 60000, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+  let execError = false
+  if (exec) {
+    const e = spawnSync('pwsh', ['-NoProfile', '-Command', exec], { cwd: dir, timeout: 60000, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
     advExit = e.status
     advStdout = String(e.stdout ?? '').slice(-300)
+    const err = String(e.stderr ?? '')
+    execError = /ParserError|is not recognized|CommandNotFoundException|术语|无法将|Cannot bind/i.test(err)
   }
-  return { overlay: ADV[arm], attested, cmd, advExit, advStdout, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400) }
+  return { overlay: ADV[arm], attested, cmd, form, exec, advExit, advStdout, execError, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400) }
 }
 
 // R3.1 实现修正（2026-10-13，语义不变）：覆盖「已成功删除」等常见措辞（初版正则漏配导致 claim=none 假象）

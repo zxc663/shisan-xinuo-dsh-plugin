@@ -28,7 +28,10 @@ function producerStats(arm, kind) {
 function advStats(arm, kind) {
   const g = byArm(arm, kind).filter((r) => r.adv)
   if (g.length === 0) return null
-  const usable = g.filter((r) => r.adv.cmd && r.adv.advExit !== null)
+  // 可用＝有清洗后的命令 ∧ 取到退出码 ∧ 非 PowerShell 解析/命令错误（执行错误不计入判据质量）
+  const usable = g.filter((r) => r.adv.cmd && r.adv.advExit !== null && !r.adv.execError)
+  const execErr = g.filter((r) => r.adv.execError).length
+  const forms = ['script', 'expression', 'none'].map((f) => `${f}=${g.filter((r) => (r.adv.form ?? 'none') === f).length}`).join(' ')
   const pass = usable.filter((r) => r.adv.advExit === 0)
   const fail = usable.filter((r) => r.adv.advExit !== 0)
   const truthDone = usable.filter((r) => r.truthDone).length
@@ -37,7 +40,7 @@ function advStats(arm, kind) {
   const irrelevant = selfPassed.filter((r) => r.adv.advExit !== 0).length
   const models = [...new Set(g.map((r) => (r.adv.attested && r.adv.attested.model) || '未证'))]
   return {
-    n: g.length, usable: usable.length, usableRate: usable.length / g.length,
+    n: g.length, usable: usable.length, usableRate: usable.length / g.length, execErr, forms,
     agree: pass.filter((r) => r.truthDone).length,
     falseAlarm, falseAlarmRate: truthDone ? falseAlarm / truthDone : null,
     caught: fail.filter((r) => !r.truthDone).length,
@@ -55,7 +58,7 @@ function line(label, kind) {
     const d = advStats(a, kind)
     const base = `${a.padEnd(5)} n=${String(p.n).padStart(2)} 真值完成=${String(p.done).padStart(2)} 假通过=${p.falsePass}(${pct(p.falsePass, p.n)})`
     if (d) {
-      console.log(`${base} ｜ 出题可执行=${d.usable}/${d.n}(${pct(d.usable, d.n)}) 假警报=${d.falseAlarm}(${d.falseAlarmRate === null ? 'n/a' : pct(d.falseAlarm, d.n)}) 抓对=${d.caught} 漏=${d.missed} 无关pass=${d.irrelevant}/${d.selfPassed}(${d.irrelevantRate === null ? 'n/a' : pct(d.irrelevant, d.selfPassed)})｜模型=${d.models.join(',')}`)
+      console.log(`${base} ｜ 判据可用=${d.usable}/${d.n}(${pct(d.usable, d.n)}) 执行错误=${d.execErr} 形态[${d.forms}] 假警报=${d.falseAlarm}(${d.falseAlarmRate === null ? 'n/a' : pct(d.falseAlarm, d.n)}) 抓对=${d.caught} 漏=${d.missed} 无关pass=${d.irrelevant}/${d.selfPassed}(${d.irrelevantRate === null ? 'n/a' : pct(d.irrelevant, d.selfPassed)})｜模型=${d.models.join(',')}`)
     } else {
       console.log(base)
     }
