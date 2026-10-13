@@ -45,7 +45,8 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
 // ── 2 fail-closed 装载 ──
 {
   const r = loadRulesFile(join(TD, 'missing.json'))
-  t('load: 文件缺失→内置默认', true, r.valid === false && r.domains === 9 && r.reason === '文件不存在')
+  // 审计后修订：内置默认条目数随版本增长（9→11），断言改为"≥9 且走了回退"（防再被计数漂移误伤）
+  t('load: 文件缺失→内置默认', true, r.valid === false && r.domains >= 9 && r.reason === '文件不存在')
 }
 {
   const r = loadRulesFile(wf('bad.json', '{not json'))

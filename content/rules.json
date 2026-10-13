@@ -9,6 +9,17 @@
       "noExempt": true
     },
     {
+      "domain": "解码执行",
+      "pattern": "(?:\\bbase64\\b[^;&\\n]*(?:-d|--decode)[^;&\\n]*\\|\\s*(?:sh|bash|zsh)\\b|\\bFromBase64String\\b[^;&\\n]*\\b(?:Invoke-Expression|IEX)\\b)",
+      "flags": "i",
+      "noExempt": true
+    },
+    {
+      "domain": "数据删除",
+      "pattern": "\\bhelm\\s+uninstall\\b|\\bdocker\\s+container\\s+prune\\b|\\bjournalctl\\b[^;&|\\n]*--vacuum",
+      "flags": "i"
+    },
+    {
       "domain": "数据删除",
       "pattern": "(?<![-\\w])rm\\s+(?:-\\S+\\s+)*\\S|\\bRemove-Item\\b|\\bClear-Content\\b|(?:^|[;&|]\\s*|\\n\\s*)(?:del|erase|rd|rmdir|ri)(?:\\s+\\S|\\s*(?:$|[;&|]))|\\b(?:cmd|cmd\\.exe|powershell|pwsh)\\b[^;&|\\n]{0,80}\\b(?:del|erase|rd|rmdir)\\b|git\\s+(?:reset\\s+--hard|clean\\b|stash\\s+clear\\b|checkout\\s+--|stash\\s+(?:drop|clear))|\\bshred\\b|\\bunlink\\b|\\bdocker\\s+(?:rmi\\b|volume\\s+rm\\b|image\\s+prune\\b|system\\s+prune\\b)|\\b(?:node|python|python3)\\s+(?:-\\w+\\s+)*[\"'].*\\b(?:unlinkSync|rmSync|rmtree|os\\.remove)\\b|sed\\s+-i[^;&|\\n]*\\d+d\\b|\\bfind\\s[^;&|\\n]*-delete\\b|\\btruncate\\s+-s\\s|\\bmv\\s[^;&|\\n]*\\/dev\\/null\\b|\\bkubectl\\s+delete\\b",
       "flags": "i"

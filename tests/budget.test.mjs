@@ -40,8 +40,9 @@ function edit_ok() { return 'edit' }
 // ── extractDeclaredLevel ──
 t('level: 状态行键值形态', 'L1', extractDeclaredLevel('Context: state=读档 L=L1 confirm=无需'))
 t('level: 大写键值 L2-S', 'L2-S', extractDeclaredLevel('判级：L=L2-S 直接做'))
-t('level: 独立标记 L2-F', 'L2-F', extractDeclaredLevel('这是 L2-F 任务'))
-t('level: 独立标记 L3', 'L3', extractDeclaredLevel('命中 L3 停点'))
+t('level: 独立标记不再触发（审计 F-05 收窄）', null, extractDeclaredLevel('这是 L2-F 任务'))
+t('level: 独立 L3 提及不再触发（审计 F-05 收窄）', null, extractDeclaredLevel('命中 L3 停点'))
+t('level: 误触发样本消除（L1 交换机提及）', null, extractDeclaredLevel('L1 接入层交换机重启'))
 t('level: 无标记', null, extractDeclaredLevel('普通文本没有级别'))
 t('level: 干扰词不误报', null, extractDeclaredLevel('LGPL licensed library'))
 

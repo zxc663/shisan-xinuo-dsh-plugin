@@ -20,10 +20,10 @@ const FIELD_WHITELIST = {
   'pre-execute': ['tool', 'cmd', 'l3'],
   'l3-detected': ['tool', 'domain', 'cmd', 'decision'],
   'l3-intercept': ['tool', 'domain', 'cmd'],
-  behavior: ['turn', 'hasText', 'restated', 'levelDeclared', 'gate', 'gateQuality'],
-  'gate-ok': ['turn', 'tail'],
-  'gate-missing': ['turn', 'toolCalls', 'tail'],
-  'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error'],
+  behavior: ['turn', 'hasText', 'restated', 'levelDeclared', 'gate', 'gateQuality', 'textClaim'],
+  'gate-ok': ['turn', 'via', 'tail'],
+  'gate-missing': ['turn', 'toolCalls', 'gateVerdict', 'tail'],
+  'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error', 'assertions'],
   rules: ['source', 'valid', 'domains', 'reason'],
   discipline: ['source', 'valid', 'reason'],
   budget: ['source', 'valid', 'reason'],
@@ -31,7 +31,16 @@ const FIELD_WHITELIST = {
   'tools-inventory': ['count', 'names'],
   'tools-wire': ['count', 'chars'],
   'sandbox-mode': ['mode', 'enforcement'],
-  'gate-steer': ['turn', 'toolCalls'],
+  'gate-steer': ['turn', 'toolCalls', 'mode', 'assertions', 'assertionsOpen'],
+  // ── B2/B3 遥测（审计 F-04：补齐与引擎写入面的一致性；tests/tally-whitelist.test.mjs 机检防再脱节）──
+  'task-auto': ['count', 'sourceKind', 'raw', 'mark'],
+  'task-carryover': ['count', 'prior'],
+  'task-register': ['status', 'mark', 'count', 'goal', 'mode', 'replacedAuto', 'reason'],
+  'assertion-unresolved': ['turn', 'count', 'gate'],
+  'bypass-blocked': ['cmd', 'fingerprint'],
+  'upstream-block': ['tool', 'cmd', 'upstreamKind', 'l3'],
+  'gate-conclude': ['status', 'cmd', 'error', 'ctType'],
+  'auto-closeout': ['turn', 'count', 'result', 'table'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
@@ -64,7 +73,7 @@ function aggregate(lines) {
   for (const l of lines) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
   const arm = { A: 0, B: 0, C: 0 }
   const l3 = { detected: 0, intercepted: 0 }
-  const behavior = { turns: 0, hasText: 0, restated: 0, levelDeclared: 0, gateOk: 0, gateOkTool: 0, gateMissing: 0, gateSkip: 0, qualified: 0, hollow: 0 }
+  const behavior = { turns: 0, hasText: 0, restated: 0, levelDeclared: 0, gateOk: 0, gateOkTool: 0, gateOkAuto: 0, gateFail: 0, gateMissing: 0, gateSkip: 0, qualified: 0, hollow: 0 }
   const gateTool = { calls: 0, pass: 0, 'honest-fail': 0, mismatch: 0, refused: 0, error: 0 }
   for (const l of lines) {
     if (l.kind === 'arm' && (l.mode === 'A' || l.mode === 'B' || l.mode === 'C')) arm[l.mode]++
@@ -77,6 +86,8 @@ function aggregate(lines) {
       if (l.levelDeclared) behavior.levelDeclared++
       if (l.gate === 'ok') behavior.gateOk++
       else if (l.gate === 'ok-tool') behavior.gateOkTool++
+      else if (l.gate === 'ok-auto') behavior.gateOkAuto++
+      else if (l.gate === 'gate-fail') behavior.gateFail++
       else if (l.gate === 'missing') behavior.gateMissing++
       else behavior.gateSkip++
       if (l.gateQuality === 'qualified') behavior.qualified++
@@ -107,7 +118,7 @@ function checkWhitelist(lines) {
     for (const [f, cap] of Object.entries(CAPS)) {
       if (typeof l[f] === 'string' && l[f].length > cap) v.push(`line ${i + 1}: 字段 ${f} 超 ${cap} 字符截断帽（实际 ${l[f].length}）`)
     }
-    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
+    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'ok-auto', 'gate-fail', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
   })
   return v
 }
@@ -122,11 +133,11 @@ function checkInvariants(lines) {
   // 单调性不是该日志的不变量；篡改历史由快照对账（同行数聚合比对+行数倒退）负责。
   // gate-ok / gate-missing 行必须能与同 turn 的 behavior 判定对上（防伪造收口证据；ok-tool 回合同样落 gate-ok）
   for (const l of lines) {
-    if (l.kind === 'gate-ok' && !behaviorByTurn.has(`${l.turn}:ok`) && !behaviorByTurn.has(`${l.turn}:ok-tool`)) v.push(`gate-ok turn=${l.turn} 无对应 behavior(gate=ok/ok-tool) 行——疑似植入/伪造`)
-    if (l.kind === 'gate-missing' && !behaviorByTurn.has(`${l.turn}:missing`)) v.push(`gate-missing turn=${l.turn} 无对应 behavior(gate=missing) 行——疑似植入/伪造`)
+    if (l.kind === 'gate-ok' && !behaviorByTurn.has(`${l.turn}:ok`) && !behaviorByTurn.has(`${l.turn}:ok-tool`) && !behaviorByTurn.has(`${l.turn}:ok-auto`)) v.push(`gate-ok turn=${l.turn} 无对应 behavior(gate=ok/ok-tool/ok-auto) 行——疑似植入/伪造`)
+    if (l.kind === 'gate-missing' && !behaviorByTurn.has(`${l.turn}:missing`) && !behaviorByTurn.has(`${l.turn}:gate-fail`)) v.push(`gate-missing turn=${l.turn} 无对应 behavior(gate=missing/gate-fail) 行——疑似植入/伪造`)
   }
   const agg = aggregate(lines)
-  if (agg.behavior.gateOk + agg.behavior.gateOkTool + agg.behavior.gateMissing + agg.behavior.gateSkip !== agg.behavior.turns) v.push('behavior 四态计数之和 ≠ 总数')
+  if (agg.behavior.gateOk + agg.behavior.gateOkTool + agg.behavior.gateOkAuto + agg.behavior.gateFail + agg.behavior.gateMissing + agg.behavior.gateSkip !== agg.behavior.turns) v.push('behavior 六态计数之和 ≠ 总数')
   return v
 }
 
@@ -138,7 +149,7 @@ function fmtReport(a) {
     `arm: A=${a.arm.A} B=${a.arm.B} C=${a.arm.C}`,
     `L3: 命中记录=${a.l3.detected} 拦截=${a.l3.intercepted}`,
     `behavior: 回合=${b.turns} 有文本=${b.hasText}｜复述 ${b.restated}/${b.hasText}=${rate(b.restated, b.hasText)}｜判级 ${b.levelDeclared}/${b.hasText}=${rate(b.levelDeclared, b.hasText)}`,
-    `GATE 文本面: ok=${b.gateOk} ok-tool=${b.gateOkTool} missing=${b.gateMissing} skip=${b.gateSkip}｜qualified=${b.qualified} hollow=${b.hollow}`,
+    `GATE 面: ok(旧文本面)=${b.gateOk} ok-tool=${b.gateOkTool} ok-auto=${b.gateOkAuto} gate-fail=${b.gateFail} missing=${b.gateMissing} skip=${b.gateSkip}｜qualified=${b.qualified} hollow=${b.hollow}`,
     `gate-tool 真值面: 调用=${a.gateTool.calls} pass=${a.gateTool.pass} honest-fail=${a.gateTool['honest-fail']} mismatch=${a.gateTool.mismatch} refused=${a.gateTool.refused} error=${a.gateTool.error}`,
   ].join('\n')
 }

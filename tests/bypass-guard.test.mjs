@@ -48,6 +48,16 @@ t('norm: 折叠空白+小写', 'echo x y', normalizeCmdFingerprint('  Echo   X  
   t('ttl: 过期条目被清理', 0, store.size)
 }
 
+// ── 审计 F-08：词边界收敛——同前缀不同目标不误封；包装态仍命中 ──
+{
+  const store = new Map()
+  recordDeniedFingerprint(store, 'rm -rf /tmp/target', 1000)
+  t('f08: 原命令命中', true, matchDeniedFingerprint(store, 'rm -rf /tmp/target', 1001, 600000) !== null)
+  t('f08: target-2026-backup 不误封', null, matchDeniedFingerprint(store, 'rm -rf /tmp/target-2026-backup', 1002, 600000))
+  t('f08: target2 不误封', null, matchDeniedFingerprint(store, 'yes | rm -rf /tmp/target2', 1003, 600000))
+  t('f08: 包装态仍命中', true, matchDeniedFingerprint(store, 'powershell -Command "& { rm -rf /tmp/target }"', 1004, 600000) !== null)
+}
+
 // ── gate 集成：指纹域 → refused（旁路封堵的收口面）──
 {
   const logs = []

@@ -90,22 +90,17 @@ async function runExecute(args, runCmdImpl, verdicts = [], logs = []) {
   t('exec: 拒跑回调', ['refused'], verdicts)
 }
 
-// 4b) 完全权限：isFullAccess=true 时 L3 命中放行（宿主侧用户已全局授权）
+// 4b) 完全权限（审计 F-02 修复）：refuse 始终生效——全权只免"审批卡交互"，不免"插件主动发起的命令执行"
 {
-  const { r, logs } = await runExecute(
-    { level: 'L1', v: 'x', cmd: 'rm -rf /tmp/x', claimedExit: 0 },
-    async () => ({ code: 0, stdout: 'done', stderr: '', timedOut: false }),
-    [],
-    [],
-  )
-  // 重跑：注入 isFullAccess
+  const logs = []
   const def2 = buildGateToolDefinition({
-    runCmd: async () => ({ code: 0, stdout: 'done', stderr: '', timedOut: false }),
+    runCmd: async () => { throw new Error('MUST NOT RUN') },
     log: (e) => logs.push(e),
     isFullAccess: () => true,
   })
   const r2 = await def2.execute({ level: 'L1', v: 'x', cmd: 'rm -rf /tmp/x', claimedExit: 0 }, {})
-  t('exec: 完全权限下 L3 命中放行', 'pass', r2.status)
+  t('exec: 完全权限下 L3 仍拒跑（审计 F-02）', 'refused', r2.status)
+  t('exec: 全权拒跑日志仍含域', '数据删除', logs[0]?.domain)
 }
 
 // 5) timeout 路径

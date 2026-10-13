@@ -2,9 +2,11 @@
 // E1-v4 总分析：exec-log 按 arm 行切 9 个臂窗（3 轮×3 臂），每窗内 behavior 行按轮分组；
 // 真值来自 tmp/e1v4-truth.json（批量执行期间逐会话记录）；输出汇总表 JSON+可读文本。
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const REPO = 'D:/DeepSeek/dsh-plugin-dev'
+// 审计 F-09：去硬编码——默认取本仓根；他人复现可设 SHISANUO_REPO 覆盖
+const REPO = process.env.SHISANUO_REPO ?? join(dirname(fileURLToPath(import.meta.url)), '..')
 const lines = readFileSync(join(REPO, 'logs/exec-log.jsonl'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
 
 // 切臂窗：每遇 arm 行开新窗

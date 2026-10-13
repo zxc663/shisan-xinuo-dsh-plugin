@@ -8,8 +8,11 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "node --run-concurrent tests/*.test.mjs test/*.test.mjs || for f in tests/*.test.mjs test/*.test.mjs; do node \"$f\" || exit 1; done",
+    "test": "node scripts/run-all-tests.mjs",
     "tally:report": "node scripts/tally.mjs --report --freeze",
     "tally:check": "node scripts/tally.mjs --check"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1"
   }
 }
