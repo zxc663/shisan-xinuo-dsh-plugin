@@ -1161,7 +1161,7 @@ export function apply(ctx: Context) {
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean }>()
   let inventoryLogged = false
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
@@ -1292,7 +1292,7 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false }
+        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, declaredLevel: null, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
@@ -1315,6 +1315,7 @@ export function apply(ctx: Context) {
           if (!budgetApplied) {
             const lvl = extractDeclaredLevel(t)
             if (lvl) {
+              if (!b.declaredLevel) b.declaredLevel = lvl // C3 第二档：记录自报等级用于"低报度量"
               const sid = (session as { id?: unknown }).id
               applyBudget(lvl, 'declared', sid !== undefined ? agentsById.get(sid)?.ctx : undefined)
             }
@@ -1335,6 +1336,11 @@ export function apply(ctx: Context) {
           restated: judgeRestated(b.firstText), levelDeclared: judgeLevelDeclared(b.firstText),
           gate: verdict, gateQuality: b.gateTool ? 'qualified' : judgeGateQuality(b.lastText), textClaim,
         })
+        // C3 第二档：**只度量、不覆盖**——收口判据已移宿主侧（A1/C2），此处记录"自报低于宿主视角"用于观察。
+        // 不覆盖的理由：等级同时决定**工具预算**；任务实际更大却被按低档削工具，是更危险而非更安全。
+        if (b.declaredLevel && levelRank(b.declaredLevel) < b.hostLevel) {
+          void log({ kind: 'level-divergence', turn: ev.turn, declared: b.declaredLevel, host: b.hostLevel, toolCalls: b.toolCalls })
+        }
         if (verdict !== 'skip') {
           stats.checked++
           if (verdict === 'ok-tool' || verdict === 'ok-auto') {

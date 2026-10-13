@@ -60,6 +60,8 @@ const FIELD_WHITELIST = {
   'gate-pass-weak': ['status', 'evidence', 'cmd'],
   // C2 只读回合免收口
   'gate-skip-readonly': ['turn', 'toolCalls', 'hostLevel'],
+  // C3 第二档 低报度量
+  'level-divergence': ['turn', 'declared', 'host', 'toolCalls'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
