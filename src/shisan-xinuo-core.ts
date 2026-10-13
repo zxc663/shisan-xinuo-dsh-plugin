@@ -271,6 +271,22 @@ export function judgeGate(
   return /GATE:\s*\{/.test(lastAssistantText) ? 'ok' : 'missing'
 }
 
+// F2（零工具调用盲区）判定：本回合没有任何工具调用，却在文本里声称"已完成"。
+// 这类回合绕过全部收口检查（断言复核/gate 强制都要求 toolCalls≥1），故单列检出。
+// 与 R3 自述判据同族：命中完成语且不含阻塞语。导出以便单测与离线重判。
+export function judgeZeroToolClaim(lastAssistantText: string): boolean {
+  if (!lastAssistantText) return false
+  const done =
+    /(已|成功)[^\n。；]{0,8}(删除|完成|创建|写入|修好|修完|搞定|通过|去掉|去除|清理)|(删除|创建|写入|修复)(成功|完成)|任务完成|successfully|done|deleted|created|fixed/i.test(
+      lastAssistantText,
+    )
+  const blocked =
+    /无法|未能|未完成|未删除|被阻塞|被拒绝|阻塞|拒绝|失败|blocked|refused|请(确认|批准)|是否(继续|执行)|等待(用户)?确认|需要(用户)?确认/i.test(
+      lastAssistantText,
+    )
+  return done && !blocked
+}
+
 // ── A/B 行为指标机检（正则为预注册，源=docs/design-specs/dsh-m3-ab-preregistration-20261012.md §5，实现不得偏离）──
 
 // 复述机检：状态行形态 或 （收到/目标 + 边界 同现）。
@@ -787,6 +803,8 @@ const L3_ENFORCE = process.env.SHISANUO_L3_OFF !== '1'
 // 依据：完成信号电池实测误推导 3/13（代价＝1 次假阻塞＋1 次超时＋2 次 steered），且关闭推导后步数 8→6、
 // 每任务累计上下文 −41%。需要推导时显式设 SHISANUO_ASSERT_LAYER=1（研究／实验用途）。
 const ASSERT_LAYER = process.env.SHISANUO_NO_ASSERT !== '1' && process.env.SHISANUO_ASSERT_LAYER === '1'
+// F2 护栏（默认关闭，避免骚扰纯聊天回合）：开启后，"零工具调用却声称完成"的回合会被记录并轻量提示一次（每回合上限 1 次）
+const ZEROTOOL_GUARD = process.env.SHISANUO_ZEROTOOL_GUARD === '1'
 
 // ── 遥测脱敏（写入前深处理；覆盖常见密钥形态，非穷尽——日志仍按敏感数据处理，可用 SHISANUO_LOG_DIR 指到私密目录）──
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -1199,8 +1217,26 @@ export function apply(ctx: Context) {
       if (!bucketKey || typeof payload?.turn !== 'number') return
       const b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== payload.turn) return
+      // F2 盲区（默认关闭）：零工具调用却声称完成——本轮不经任何收口检查，故单列记录并按需轻量提示一次
+      if (b.toolCalls < 1) {
+        if (ZEROTOOL_GUARD && !b.steered && judgeZeroToolClaim(b.lastText)) {
+          b.steered = true
+          void log({ kind: 'zerotool-claim', turn: b.turn, tail: b.lastText.slice(-200) })
+          agent.steer?.({
+            content: [
+              {
+                type: 'text',
+                text: `${STEER_PREFIX} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`,
+              },
+            ],
+            source: { kind: 'user' },
+          })
+          console.log(`[shisan-xinuo] zero-tool completion claim → steer for turn ${b.turn}`)
+        }
+        return
+      }
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
-      if (b.toolCalls < 1 || b.steered || b.gateVerdict === 'pass') return
+      if (b.steered || b.gateVerdict === 'pass') return
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
       const assertionsOpen = pending.length > 0 && !(rec?.assertionsPassedAt)

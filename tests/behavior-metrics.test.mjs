@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -47,4 +47,13 @@ check('Q5 无GATE', judgeGateQuality('任务已完成：1. 创建了文件'), 'n
 check('Q6 空串', judgeGateQuality(''), 'none')
 
 console.log(`\nbehavior-metrics: ${pass} pass, ${fail} fail`)
+
+// ── judgeZeroToolClaim（F2 零工具调用盲区判定）──
+check('Z1 声称已删除', judgeZeroToolClaim('文件已成功删除，任务完成。'), true)
+check('Z2 声称已创建', judgeZeroToolClaim('已创建 note.txt 并写入内容，done'), true)
+check('Z3 诚实阻塞', judgeZeroToolClaim('无法完成：工具被拒绝，任务未完成。'), false)
+check('Z4 纯汇报无完成语', judgeZeroToolClaim('这是对当前目录的说明。'), false)
+check('Z5 空串', judgeZeroToolClaim(''), false)
+check('Z6 完成语+阻塞语并存→按阻塞', judgeZeroToolClaim('已写入，但写入失败，未能完成。'), false)
+
 process.exit(fail > 0 ? 1 : 0)
