@@ -8,5 +8,6 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'claims-check.mjs')], { encoding: 'utf8' })
 const out = String(r.stdout ?? '')
 const ok = r.status === 0 && /成立 \/ 0 不成立/.test(out)
-console.log(ok ? 'PASS claims: 核心主张 11 条全成立（可外部重跑）' : `FAIL claims: exit=${r.status}\n${out.slice(-400)}`)
+const count = (out.match(/合计 (\d+) 条主张/) ?? [])[1] ?? '?'
+console.log(ok ? `PASS claims: 核心主张 ${count} 条全成立（可外部重跑）` : `FAIL claims: exit=${r.status}\n${out.slice(-400)}`)
 process.exit(ok ? 0 : 1)

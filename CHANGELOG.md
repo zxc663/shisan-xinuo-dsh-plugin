@@ -1,5 +1,28 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 体验缺口修复（A 组，2026-10-14）：不可执行形态／目录报假面／环境故障误判
+
+- **P1（最高杠杆）`discipline_gate` 新增 `assert` 参数**：取值形如 `not_exists:<路径>`／`exists:<路径>`／`path_contains:<路径>::<子串>`，由插件**内联求值、永不过 shell**；`cmd` 与 `assert` 至少给一个。此前"失败打回"文案里给的算子（`not_exists/…`）会被原样当成命令喂给 `cmd.exe`（Windows 下不成立），模型在"一时拿不出可执行验证命令"时无路可走、只能挑一条必定返回 0 的无关命令凑通过。现在失败／阶梯文案统一**指向 `assert` 参数**。
+- **P2 `discipline_task` 默认可达**：不再受 `ASSERT_LAYER` 默认关闭的门控（`SHISANUO_NO_ASSERT=1` 仍为最高优先关闭位）。
+- **P4 目录改报线缆真值**：`discipline_tools` 的"可见工具"改取 `request/header`（宿主真正发出去的那份），并**删除恒为 0 的 `deny` 字段**——报假面比不报更坏。
+- **P7 环境故障单列**：沙箱／ACL 拒绝（如 `SetNamedSecurityInfoW` 失败）归为新状态 **`channel-unavailable`**，明示"这是环境故障、不是你的验证未通过"，不计入 `mismatch`／`honest-fail`，并给出 `assert` 作为绕开该通道的出路。
+- 证据：`tests/gate-assert.test.mjs`（14 条，含**反证**——给 `assert` 时 `runCmd` 调用次数恒为 0）；`scripts/claims-check.mjs` 新增可外部重跑主张 K12–K15 ＋ 判据自测 N1–N3。
+
+## 任务级作用域（B 组，2026-10-14）：一次性单向门 → 任务级可升
+
+- **任务键**：以**用户原文消息**开任务（客观锚，不依赖模型自觉），`discipline_task register` 可显式覆盖同一任务；`taskId` ＝ 自增序＋时间戳。
+- **失败阶梯与熔断计数按任务分桶**：`failCount`／`steerCounts`／`taskRecords` 换键到任务 ⇒ 新任务即重置。修掉"跨任务累计"——上一轮任务的失败会把下一轮的模型直接推到高阶梯（"停止试凑"），而它对这一轮任务一无所知。
+- **工具面版本化**：`budgetApplied` 布尔单向门改为**档位序**（`appliedRank`）——新任务档位**高于**当前生效档时重新应用（借宿主 `restrict` 返回的解除器先解除旧限制）；**降档不自动放宽**（延续"只许加强不许放宽"）。
+- **升档封顶**：升到"全量"（`*`）时按 L2-S 的显式白名单收窄，并追加只读研究类（`web_search`／`web_fetch`／`job_*`／`skill`）——避免一次升级即无限制放宽。
+- 新日志 kind：`task-open`／`budget-upgrade-ignored`／`budget-upgrade-capped`（已入 tally 白名单；白名单守护机检先红后绿）。
+- 证据：`tests/gate-assert.test.mjs` ⑤（换任务阶梯归零）；`scripts/claims-check.mjs` K14。
+
+## 掩码语义实测（Step 0，2026-10-14）：headless 零漏网，**桌面档 `subagent` 逃出掩码**
+
+- 探针 `SHISANUO_PROBE_MASK`（默认关）在首个 `request/header` 打印**声明面 vs 线缆真值**的双向差集。headless：`declared=27 wire=9`、`仅线缆面=—`（零漏网）。
+- **桌面档真机复算推翻了"零漏网"**：同一份源码挂进桌面档，`L=L1 → allow=9 / wire=10`，升到 `L2-F(封顶 L2-S) → allow=15 / wire=16`，**两次恒定多出 `subagent`**（截图＋`exec-log`＋工具返回原文三路取证）。⇒ 掩码不是封闭面。
+- 处置（不静默）：新增 `maskLeak(wire, allow)` 与常态化核对——每次请求用线缆真值对本档允许集求差，非空即落 `budget-leak` 账，并在 `discipline_tools` 里如实上报越出项与件数。**未验证项**：子代理继承的工具面是否受掩码约束。详见 `docs/extension-design-20261014.md` §五／五之补。
+
 ## 工具参数 schema 修复（2026-10-14）：宿主升级后整轮运行失败
 
 - **症状（真机）**：桌面档会话整轮失败——`Invalid schema for function 'discipline_gate': schema must be a JSON Schema of 'type: "object"', got 'type: null'`（连续两轮）。

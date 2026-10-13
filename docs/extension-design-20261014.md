@@ -98,3 +98,48 @@
 **处置：B3 不并入治理核心，另立一项后续工作**（与"耦合策略：呈现层独立、可降级"一致）。当前先把 **B1 落满**：证据已由工具结果承载（C10），强制消息只做"最短化＋标来源＋指向系统侧证据"（C11 已含禁重述，本轮补"以系统侧证据为准"）。
 5. ~~§三.3~~ ✅ 改判结案：证据由工具结果承载（模型与用户均可见）；宿主主动强制受 `UserMessage` 类型约束，**外观纯度让位于证据完整性**；
 6. 仍待验证：§三.4（skill provider 注册后宿主目录是否合并去重，决定 A 的实际成本影响）。
+
+## 五、掩码语义实测（2026-10-14，Step 0）——推翻了交接档的"未定论"
+
+**待解问题（交接档 §1 记）**：`content/budget.json` 的 L1 白名单是 7 件（`read/write/edit/glob/grep/pwsh/todo_write`）＋引擎强制并入纪律件，但真机上读到的工具面是 10 件，且**含 `subagent`**（不在白名单内）⇒ 怀疑 `restrict` 掩码对部分工具无效。
+
+**做法**：加一个环境变量门控探针 `SHISANUO_PROBE_MASK`（`src/shisan-xinuo-core.ts`，只在**首个** `request/header` 事件打印一次），输出**声明面**（`ctx.tools.schemas()`＝已注册全集）与**线缆真值**（`request/header.header.tools`＝宿主这次真正发给模型的那份）的**双向差集**。headless 跑一次即可判定。
+
+**可重跑命令**（仅需本机 DSH CLI ＋ 项目挂载的 permtest 档）：
+
+```
+$env:DSH_HOME='D:/ai本地模型/dsh/headless-home'
+$env:SHISANUO_PROBE_MASK='1'; $env:SHISANUO_BUDGET_LEVEL='L1'; $env:SHISANUO_L3_OFF='1'
+node "<dsh>/lib/bin.js" permtest "回复 ok"
+```
+
+**原始输出（2026-10-14 实测，逐字）**：
+
+```
+[shisan-xinuo] tool budget applied: level=L1 trigger=agent-created allow=9 deny=0
+[probe-mask] declared=27 wire=9
+[probe-mask] 仅声明面（被掩码裁掉）=discipline_task,job_output,job_list,job_kill,skill,web_search,web_fetch,exit_plan_mode,send_message,interrupt_agent,list_agents,get_goal,create_goal,update_goal,subagent,subagent_fork,read_image,workflow
+[probe-mask] 仅线缆面（掩码外仍可见）=—
+```
+
+**headless 结论**：宿主发出去的 9 件**全部**在允许集内（"仅线缆面"为 `—`）；19 件被裁项（含 `subagent`、`subagent_fork`、`workflow`、`read_image`）一件未漏。旧版 `discipline_tools` 报的"可见工具"取自**声明面**（已注册全集），与掩码作用的**线缆面**本就不可比——这解释了"白名单 7 件却读到 10 件"的第一层矛盾。
+
+### 五之补：桌面档真机复算**推翻了"零漏网"**（2026-10-14，GUI 实测）
+
+把同一份源码挂进桌面档，在同一会话里连续升档并读回目录（`discipline_tools`），三路证据（截图 / `logs/exec-log.jsonl` / 工具返回原文）如下：
+
+| 事件（本地时刻） | 允许集 | 线缆真值 | 差集 |
+|---|---|---|---|
+| 未声明档位（会话首请求） | 未裁剪 | `count=30` | — |
+| 声明 `L=L1` → `budget-applied level=L1 allow=9`（01:16:05） | 9 | `count=10`（01:16:32） | **`subagent`** |
+| 声明 `L=L2-F` → `budget-upgrade-capped allow=15`／`budget-applied level=L2-F(封顶 L2-S) allow=15`（01:16:35） | 15 | `count=16`（01:17:14） | **`subagent`** |
+
+目录工具原样返回（节选）：`本档位显式允许：read, write, edit, glob, grep, pwsh, todo_write, web_search, web_fetch, job_list, job_output, exit_plan_mode, skill` ／ `线缆真值（宿主这次实际发给模型的 16 件）：…, skill, **subagent**, todo_write, …`。
+
+**改判结论**：
+
+1. **掩码不是封闭面**：同一份实现，headless 档 `allow=9 → wire=9`（无漏网），**桌面档 `allow=9 → wire=10`、`allow=15 → wire=16`，恒定多出 `subagent`**。⇒ 交接档的"未定论"**不是纯显示口径问题**：桌面档确实有一件工具逃出掩码。
+2. **归属**：`subagent` 在桌面档由该档额外的插件面提供（headless 档同名为可裁项）。因此差异落在**宿主形态**（档位装载的工具来源不同），而非我们的掩码参数写错——但这个区别对使用者没有意义，**结果就是裁剪能被绕过**。
+3. **对 T1/T2 的表述按实测收窄**：任务级"只升不放宽＋升档封顶"仍然有效（三路证据已证升档与封顶在真机上生效），但**不得宣称工具面已被完全收住**——`subagent` 是已知逃生口。**未验证项**：子代理继承的工具面是否也受掩码约束（本次未测），以及桌面档其余漏网项是否随宿主版本变动。
+4. **处置（不静默）**：新增纯函数 `maskLeak(wire, allow)` 与常态化核对——每次 `request/header` 用线缆真值对本档允许集求差，非空即落 `budget-leak` 账并在目录工具里**如实上报越出项**（"报假面比不报更坏"的同一原则）。漏网从"看不见"变成"每次请求都能看见"。
+5. **未做的选项**：不用 `deny` 反向补刀把 `subagent` 硬拉黑——那只能治这一件，换个宿主版本又会冒新的；核对层对**任何**越出项都成立。

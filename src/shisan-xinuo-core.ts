@@ -256,6 +256,16 @@ export function completeAllowList(allow: string[] | undefined): string[] | undef
   return [...new Set([...allow, ...BUDGET_ALWAYS_ALLOW])]
 }
 
+// 掩码漏网核对（Step 0 实测的产物）：把**线缆真值**与本档**允许集**作差——
+// `ctx.tools.restrict` 并非在所有宿主形态下都收得住（实测：桌面档 L1 allow=9 → wire=10，
+// 多出的恒定是 `subagent`；同一份代码在 headless 档 allow=9 → wire=9，无多出）。
+// **不静默**：漏网即记录并报给模型与用户（报假面比不报更坏）。
+export function maskLeak(wire: string[], allow: string[] | undefined): string[] {
+  if (!allow || allow.length === 0) return []
+  const set = new Set(allow)
+  return [...new Set(wire.filter((n) => n && !set.has(n)))].sort()
+}
+
 // 判级信号提取（审计 F-05 收窄）：**仅认显式状态行"L=…"键值形态**——正文随口提及不再触发预算裁剪。
 export function extractDeclaredLevel(text: string): 'L1' | 'L2-S' | 'L2-F' | 'L3' | null {
   const kv = text.match(/\bL\s*=\s*(L1|L2-S|L2-F|L3)\b/i)
@@ -935,6 +945,7 @@ export function buildToolsCatalogDefinition(deps: {
   visible: () => string[]
   allow: () => string[]
   wire: () => string[]
+  leak?: () => string[]
   log: (entry: Record<string, unknown>) => void
 }) {
   return {
@@ -954,6 +965,7 @@ export function buildToolsCatalogDefinition(deps: {
       const allow = deps.allow()
       // P4：`deny` 恒 0 是"报假面"（L1 属 allow 型掩码，本就没有 deny 槽）——已删除该字段，改报**线缆真值**。
       const wire = deps.wire()
+      const leak = deps.leak?.() ?? []
       deps.log({ kind: 'tools-catalog', level, visible: visible.length, denied: 0 })
       return {
         status: 'ok',
@@ -962,6 +974,11 @@ export function buildToolsCatalogDefinition(deps: {
           `可见工具（${visible.length}）：${visible.join(', ') || '（未采集）'}`,
           `线缆真值（宿主这次实际发给模型的 ${wire.length} 件）：${wire.join(', ') || '（尚未产生请求，故未知）'}`,
           `本档位显式允许：${allow.join(', ') || '（未配置）'}`,
+          !level
+            ? '预算漏网核对：（本会话未裁剪，不适用）'
+            : leak.length > 0
+              ? `预算漏网核对：**⚠ ${leak.length} 件越出本档允许集 —— ${leak.join(', ')}**（宿主限制未收住；按实测如实上报，不静默）`
+              : '预算漏网核对：无（线缆真值全部落在本档允许集内）',
           '恢复路径：**会话外**——由人修改预算配置或另启会话；本工具无恢复能力，也不接受放宽请求。',
           '说明："可见工具"取自声明面；"线缆真值"取自最近一次 `request/header`（宿主真正发出去的那份）——两者不一致时**以线缆真值为准**。',
         ].join('\n'),
@@ -1129,7 +1146,7 @@ export function apply(ctx: Context) {
   const stats = {
     checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
     gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, last: '未调用' as string },
-    budget: '未裁剪' as string, wireTools: 0, fullAccess: false,
+    budget: '未裁剪' as string, wireTools: 0, wireLeak: 0, fullAccess: false,
     assertion: '未登记' as string,
   }
 
@@ -1339,6 +1356,9 @@ export function apply(ctx: Context) {
   // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
   let lastWireNames: string[] = []
   let maskProbePrinted = false
+  // 掩码漏网核对：最近一次实测的越出允许集的工具名（供目录工具与状态横幅如实上报）
+  let lastLeakNames: string[] = []
+  let lastLeakKey = ''
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
   interface TaskRec {
@@ -1458,6 +1478,18 @@ export function apply(ctx: Context) {
           stats.wireTools = wireTools.length
           lastWireNames = wireTools.map((t) => String((t as { name?: unknown })?.name ?? '')).filter(Boolean)
           void log({ kind: 'tools-wire', count: wireTools.length, chars: JSON.stringify(wireTools).length })
+          // 掩码漏网核对（Step 0 产物的常态化）：本档已生效时，核对线缆真值是否越出允许集。
+          // 实测依据：桌面档 L1（allow=9）线缆面 10 件，越出的恒定是 `subagent`；headless 档同档 9 件、无越出。
+          // 不静默——漏网即落账 + 上报（供模型与用户看见），避免"裁剪似乎生效"的假面。
+          const leakedNow = maskLeak(lastWireNames, pendingMask?.allow)
+          lastLeakNames = leakedNow
+          const leakKey = `${pendingLevel}|${leakedNow.join(',')}`
+          if (leakedNow.length > 0 && leakKey !== lastLeakKey) {
+            lastLeakKey = leakKey
+            stats.wireLeak = leakedNow.length
+            void log({ kind: 'budget-leak', level: pendingLevel, count: leakedNow.length, names: leakedNow.join(',').slice(0, 240) })
+            console.warn(`[shisan-xinuo] 预算漏网：线缆面上仍有 ${leakedNow.length} 件不在本档允许集内 —— ${leakedNow.join(',')}`)
+          }
           // Step 0 探针（默认关）：声明面 vs 线缆真值 的差集 → 判定"restrict 掩码对哪些工具无效"。
           // 用法：SHISANUO_PROBE_MASK=1 [SHISANUO_BUDGET_LEVEL=L1] dsh permtest "…"，看 stdout 的 [probe-mask] 行。
           if (process.env.SHISANUO_PROBE_MASK === '1' && !maskProbePrinted) {
@@ -1788,6 +1820,7 @@ export function apply(ctx: Context) {
             },
             allow: () => (pendingMask?.allow ?? []).map(String),
             wire: () => lastWireNames,
+            leak: () => lastLeakNames,
             log: (entry) => void log(entry),
           })
           const d3 = toolsAny.register(catalog as unknown)

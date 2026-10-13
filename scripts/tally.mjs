@@ -72,8 +72,10 @@ const FIELD_WHITELIST = {
   'task-open': ['id', 'level', 'trigger'],
   'budget-upgrade-ignored': ['level', 'trigger', 'appliedRank'],
   'budget-upgrade-capped': ['level', 'trigger', 'allow'],
+  // Step 0 实测产物：掩码漏网核对（线缆真值越出允许集）
+  'budget-leak': ['level', 'count', 'names'],
 }
-const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
+const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300, names: 240 }
 
 function parseArgs(argv) {
   const a = { mode: 'report', file: DEFAULT_LOG, json: false, freeze: false, noSnapshot: false }

@@ -13,6 +13,8 @@ import {
   isVAnchored,
   judgeZeroToolClaim,
   buildGateToolDefinition,
+  buildToolsCatalogDefinition,
+  maskLeak,
 } from '../src/shisan-xinuo-core.ts'
 
 const results = []
@@ -105,6 +107,114 @@ claim('K10', '等级序：L1 < L2-S ≈ L2-F < L3；未声明为最低', () => {
     text: '强证据 ⇒ 闭环（closed=true）',
     ok: r2.closed === true,
     detail: r2.closed === true ? '' : `closed=${String(r2.closed)}`,
+  })
+}
+
+// ── A 组新增主张（外部可重跑，仅需 Node） ──
+// 每个谓词先做**判据自测**（对坏样本必须为 false）——否则"检查通过"可能只是谓词永远为真。
+const assertChannelOk = (shellCalls, status, closed) => shellCalls === 0 && status === 'pass' && closed === true
+const catalogOk = (m) => !/\bdeny\b/i.test(m) && !m.includes('恒 0') && m.includes('线缆真值')
+claim('N1', '判据自测：assertChannelOk 对"过 shell 一次"的坏样本为 false', () => (assertChannelOk(1, 'pass', true) === false ? true : '谓词未检出 shell 调用'))
+claim('N2', '判据自测：catalogOk 对"含 deny 字段"的坏样本为 false', () => (catalogOk('可见工具（2）：read, write\n本档位 deny：0\n线缆真值（3 件）：a, b, c') === false ? true : '谓词未检出 deny 字段'))
+claim('N3', '判据自测：catalogOk 对"缺线缆真值行"的坏样本为 false', () => (catalogOk('可见工具（2）：read, write') === false ? true : '谓词未检出缺失行'))
+
+// K12：`assert` 由插件内联求值 ⇒ **不过 shell**（反证：注入的 runCmd 一次都没被调用）
+{
+  let shellCalls = 0
+  const gate = buildGateToolDefinition({
+    runCmd: async () => {
+      shellCalls++
+      return { code: 0, stdout: '', stderr: '', timedOut: false }
+    },
+    log: () => {},
+    onStats: () => {},
+    acceptance: { list: () => [], register: () => ({ count: 0 }), clear: () => {}, markPassed: () => {}, evaluate: () => ({ ok: true, detail: '' }) },
+  })
+  const r = await gate.execute({ level: 'L1', v: 'x', assert: 'not_exists:D:\\tmp\\nope.txt' }, {})
+  results.push({
+    id: 'K12',
+    text: 'assert 走插件内联求值：**shell 未被调用（0 次）**且 status=pass／closed=true',
+    ok: assertChannelOk(shellCalls, r.status, r.closed),
+    detail: assertChannelOk(shellCalls, r.status, r.closed) ? '' : `shellCalls=${shellCalls} status=${r.status} closed=${String(r.closed)}`,
+  })
+  // 反证方向：给了 cmd 就必须真的过 shell（否则 K12 的"0 次"可能是 runCmd 整体失效）
+  const r2 = await gate.execute({ level: 'L1', v: 'x', cmd: 'echo hi', claimedExit: 0 }, {})
+  results.push({
+    id: 'K13',
+    text: '反证：给 cmd 时 runCmd **确实被调用**（证明上条 0 次来自 assert 分流而非通道失效）',
+    ok: shellCalls === 1 && r2.status === 'pass',
+    detail: shellCalls === 1 && r2.status === 'pass' ? '' : `shellCalls=${shellCalls} status=${r2.status}`,
+  })
+}
+
+// K14：失败阶梯按**任务**分桶——同一任务内递增，换任务归零（B 组 T2）
+{
+  let task = 'task-A'
+  const gate = buildGateToolDefinition({
+    runCmd: async () => ({ code: 1, stdout: '', stderr: '', timedOut: false }),
+    log: () => {},
+    onStats: () => {},
+    taskId: () => task,
+    acceptance: { list: () => [], register: () => ({ count: 0 }), clear: () => {}, markPassed: () => {}, evaluate: () => ({ ok: true, detail: '' }) },
+  })
+  const args = { level: 'L1', v: 'x', cmd: 'do-something', claimedExit: 0 }
+  const a1 = await gate.execute(args, {})
+  const a2 = await gate.execute(args, {})
+  task = 'task-B'
+  const b1 = await gate.execute(args, {})
+  const ok = !a1.message.includes('阶梯') && a2.message.includes('阶梯 2') && !b1.message.includes('阶梯')
+  results.push({
+    id: 'K14',
+    text: '失败阶梯按任务分桶：同任务首失败无前缀 → 第 2 次=阶梯 2 → **换任务即归零**',
+    ok,
+    detail: ok ? '' : `a1=${a1.message.includes('阶梯')} a2=${a2.message.includes('阶梯 2')} b1=${b1.message.includes('阶梯')}`,
+  })
+}
+
+// K15：工具目录报**线缆真值**、不再报恒零的 `deny`（报假面比不报更坏；P4）
+{
+  const catalog = buildToolsCatalogDefinition({
+    level: () => 'L1',
+    visible: () => ['read', 'write'],
+    allow: () => ['read', 'write', 'edit'],
+    wire: () => ['read', 'write', 'discipline_gate'],
+    log: () => {},
+  })
+  const r = await catalog.execute({}, {})
+  const m = String(r.message ?? '')
+  results.push({
+    id: 'K15',
+    text: '工具目录：输出**线缆真值行**（3 件）且**不含恒零 deny 字段**',
+    ok: catalogOk(m) && m.includes('3 件'),
+    detail: catalogOk(m) && m.includes('3 件') ? '' : `catalogOk=${catalogOk(m)} hasCount=${m.includes('3 件')}`,
+  })
+}
+
+// K16：掩码漏网核对（Step 0 实测产物）——线缆面上越出允许集的工具必须被报出，而不是静默
+{
+  const desktop = maskLeak(['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools', 'subagent'], ['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools'])
+  const headless = maskLeak(['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools'], ['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools'])
+  const catalog = buildToolsCatalogDefinition({
+    level: () => 'L1',
+    visible: () => ['read'],
+    allow: () => ['read'],
+    wire: () => ['read', 'subagent'],
+    leak: () => ['subagent'],
+    log: () => {},
+  })
+  const msg = String((await catalog.execute({}, {})).message ?? '')
+  const ok = desktop.join(',') === 'subagent' && headless.length === 0 && msg.includes('预算漏网核对') && msg.includes('subagent')
+  results.push({
+    id: 'K16',
+    text: '掩码漏网核对：桌面实测样本（allow=9/wire=10）报出 `subagent`；headless 样本无漏网；目录工具如实上报该行',
+    ok,
+    detail: ok ? '' : `desktop=${desktop.join(',')} headless=${headless.length} msgHasLine=${msg.includes('预算漏网核对')}`,
+  })
+  results.push({
+    id: 'N4',
+    text: '判据自测：maskLeak 对"线缆面全在允许集内"的样本为 []（不误报）',
+    ok: maskLeak(['read'], ['read', 'write']).length === 0,
+    detail: 'maskLeak 对干净样本误报',
   })
 }
 

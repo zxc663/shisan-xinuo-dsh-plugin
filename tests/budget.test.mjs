@@ -1,6 +1,6 @@
 // v0.4 T2 预算器单测——装载 fail-open/白名单补全/判级信号提取/随仓策略校验。
 // 运行：node tests/budget.test.mjs
-import { loadBudgetFile, completeAllowList, extractDeclaredLevel, BUDGET_ALWAYS_ALLOW } from '../src/shisan-xinuo-core.ts'
+import { loadBudgetFile, completeAllowList, extractDeclaredLevel, maskLeak, BUDGET_ALWAYS_ALLOW } from '../src/shisan-xinuo-core.ts'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -56,6 +56,15 @@ t('level: 干扰词不误报', null, extractDeclaredLevel('LGPL licensed library
   const completed = completeAllowList(r.budget.levels.L1.allow)
   t('repo: L1 补全后含纪律五件', true, BUDGET_ALWAYS_ALLOW.every((x) => completed.includes(x)))
 }
+
+// ── maskLeak：掩码漏网核对（Step 0 实测产物的常态化口径）──
+// 实测样本：桌面档 L1 allow=9 → wire=10（多出 subagent）；headless 同档 allow=9 → wire=9（无多出）。
+t('leak: 线缆面多出一件 ⇒ 报出该件', ['subagent'], maskLeak(['read', 'write', 'subagent'], ['read', 'write']))
+t('leak: 线缆面落在允许集内 ⇒ 无漏网', [], maskLeak(['read', 'write'], ['read', 'write']))
+t('leak: 允许集为空/未裁剪 ⇒ 不适用（空）', [], maskLeak(['read', 'write'], undefined))
+t('leak: 多件去重并排序', ['a', 'z'], maskLeak(['z', 'a', 'read', 'z'], ['read']))
+t('leak: 允许集为空 ⇒ 视为未裁剪（不适用）', [], maskLeak(['read'], []))
+t('leak: 空名不计入', ['read'], maskLeak(['', 'read'], ['pwsh']))
 
 console.log(cases.join('\n'))
 console.log(`\n${pass} pass, ${fail} fail`)
