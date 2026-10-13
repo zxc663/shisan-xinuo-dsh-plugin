@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -95,5 +95,13 @@ check('C6b 含算子=锚定', isVAnchored('not_exists: D:\\tmp\\a.txt'), true)
 check('C6c 真实轨迹的泛描述=未锚定', isVAnchored('验证仓库类型分析结果'), false)
 check('C6d 空=未锚定', isVAnchored(''), false)
 check('C6e 检查动词=锚定', isVAnchored('用 Test-Path 确认目标已消失'), true)
+
+// ── C3 判级：宿主视角推导＋序比较（第一档只记录）──
+check('C3a 只读命令=L1', hostLevelFromCmd('Test-Path "D:\\a"'), 'L1')
+check('C3b 写类命令=L2', hostLevelFromCmd('Set-Content a.txt x'), 'L2')
+check('C3c judge 命中=L3', hostLevelFromCmd('rm -rf D:\\x', () => '数据删除'), 'L3')
+check('C3d 空命令=L1', hostLevelFromCmd(''), 'L1')
+check('C3e 序：L1<L2<L3', levelRank('L1') < levelRank('L2-S') && levelRank('L2-F') < levelRank('L3'), true)
+check('C3f 未声明=最低', levelRank('') === 0, true)
 
 process.exit(fail > 0 ? 1 : 0)

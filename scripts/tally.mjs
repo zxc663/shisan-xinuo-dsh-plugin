@@ -54,6 +54,8 @@ const FIELD_WHITELIST = {
   'gate-disputed': ['status', 'reason', 'goal'],
   // C8 争议→补交配对
   'task-amend-after-dispute': ['count', 'goal'],
+  // C3 判级低报（第一档：只记录）
+  'gate-level-understated': ['declared', 'host', 'cmd'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

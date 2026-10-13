@@ -609,6 +609,26 @@ export function isVAnchored(v: string | null | undefined): boolean {
   )
 }
 
+// C3（第一档：只记录不改判定）：判级当前由**模型自填**（args.level），而它同时决定工具预算掩码与强制强度——
+// 等于把安全开关交给被验方。本档先从**命令本身**推一个"宿主视角"的等级用于**比对与落账**，暂不覆盖模型声明。
+// 依据（真实轨迹）：模型把"删除整棵目录树"填成 L1，把"只读仓库识别"也填成 L1。
+export function hostLevelFromCmd(cmd: string | null, judge?: (c: string) => string | null): 'L1' | 'L2' | 'L3' {
+  const s = String(cmd ?? '')
+  if (!s) return 'L1'
+  if (judge && judge(s)) return 'L3'
+  const mutating = /\b(Remove-Item|Copy-Item|Move-Item|Rename-Item|Set-Content|Add-Content|Clear-Content|Out-File|New-Item|del|erase|rd|rmdir|mv|copy|mkdir|Set-Item|npm\s+(install|i|publish)|git\s+(commit|push|reset|clean))\b|>>?/i.test(s)
+  return mutating ? 'L2' : 'L1'
+}
+
+// 等级序：L1 < L2-S ≈ L2-F < L3（用于比对"声明是否低于宿主视角"）
+export function levelRank(level: string): number {
+  const l = String(level).toUpperCase()
+  if (l.startsWith('L3')) return 3
+  if (l.startsWith('L2')) return 2
+  if (l.startsWith('L1')) return 1
+  return 0 // 未知/未声明视为最低，便于被检出
+}
+
 // F8：跨回合熔断判定（纯函数，便于单测）。cap 为整会话允许的强制收口次数上限。
 export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
   if (!Number.isFinite(cap) || cap <= 0) return true // 非法/未配置 ⇒ 不熔断（保守：不因配置错误而放行）
@@ -718,6 +738,11 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
 
       const r = await runCmd(cmd, { signal: execCtx.signal })
       const base = { level, v, cmd: cmd.slice(0, 200), claimedExit, files, exempt, stdoutTail: r.stdout, stderrTail: r.stderr }
+      // C3 第一档：比对"模型自报等级"与"宿主按命令推出的等级"，低报即落账（**不覆盖、不改判定**）
+      const hostLevel = hostLevelFromCmd(cmd, deps.judge)
+      if (levelRank(level) < levelRank(hostLevel)) {
+        void deps.log({ kind: 'gate-level-understated', declared: String(level), host: hostLevel, cmd: String(cmd).slice(0, 120) })
+      }
 
       if (r.timedOut || r.code === null) {
         deps.onStats?.('error', execCtx)
