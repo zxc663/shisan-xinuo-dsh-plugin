@@ -75,7 +75,7 @@ const READONLY_EXEMPTS: Array<{ re: RegExp; afterDanger?: boolean }> = [
 
 // 收口强制注入文本前缀（单一来源：发送与排除共用，避免两处字面量漂移）
 export const STEER_PREFIX = '[十三希诺收口强制]'
-// F7/C11：强制收口时**必须显式禁止重述**——实测中模型接到强制后会把自己那份完整答案再说一遍（164K tok 的一大部分在此）。
+// F7/C11：强制收口时**必须显式禁止重述**——实测中模型接到强制后会把自己那份完整答案再说一遍（164K tok 的一大部分在此）。 #决策 2026-10-13 23:55
 // 统一常量：三处 steer（断言未过／无断言未收口／零工具调用声称完成）共用同一措辞，避免逐处漂移。
 export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出的答案或分析。'
 
@@ -215,7 +215,7 @@ export interface BudgetMask { allow?: string[]; deny?: string[] }
 export interface BudgetConfig { version: 1; levels: Record<string, BudgetMask | '*'> }
 
 // 纪律必需工具：任何 allow 白名单强制并入——预算裁剪永不裁掉收口验证与基本读写（引擎固定，不开放 Config）。
-// C9：`discipline_tools`（只读工具目录）必须恒在可见面内——否则"查询被裁掉了什么"的工具自己会被裁掉
+// C9：`discipline_tools`（只读工具目录）必须恒在可见面内——否则"查询被裁掉了什么"的工具自己会被裁掉 #决策 2026-10-13 23:55
 export const BUDGET_ALWAYS_ALLOW = ['discipline_gate', 'discipline_tools', 'read', 'pwsh', 'write', 'edit']
 
 // fail-open：任何无效（文件缺失/坏 JSON/结构错/无有效级）→ null=不裁剪。
@@ -575,7 +575,7 @@ export function gateToolMessage(verdict: string, claimedExit: number, realExit: 
   return `PASS：宿主实测 exit=${realExit}，与声称一致，验证通过。收口成立。`
 }
 
-// G2：失败返回必须带"要求结构"——否则模型只能靠现编命令硬凑（实测：连试 4 次才凑到一条无关的 exit 0）。
+// G2：失败返回必须带"要求结构"——否则模型只能靠现编命令硬凑（实测：连试 4 次才凑到一条无关的 exit 0）。 #决策 2026-10-13 23:55
 // 本块只陈述"合格判据长什么样"，不替代模型判断相关性（相关性自动判定已被论证为不可行）。
 export function gateRequirementBlock(registered: string[], cmd: string | null, verdict: string): string {
   const lines = [
@@ -589,10 +589,10 @@ export function gateRequirementBlock(registered: string[], cmd: string | null, v
   return '\n' + lines.join('\n')
 }
 
-// G6：pass 必须标"证据强度"——无关命令的 pass 与真验证的 pass 记录同形（实测：`cd D:\` 也拿到 pass）。
+// G6：pass 必须标"证据强度"——无关命令的 pass 与真验证的 pass 记录同形（实测：`cd D:\` 也拿到 pass）。 #决策 2026-10-13 23:55
 // 只按"形态"分类（能否自动判定相关性已被论证为不可行）：用检查类算子/动词=strong，其余=weak。
 // weak 不是失败，只是**如实标注**：该通过不携带"与目标相关"的信息。
-// C10：收口证据必须**写在结果里**（工具卡可见、模型可转述）——用户点名的诉求："验证通过了也要写出来给我看"。
+// C10：收口证据必须**写在结果里**（工具卡可见、模型可转述）——用户点名的诉求："验证通过了也要写出来给我看"。 #决策 2026-10-13 23:55
 // 形态选择：**不动注入通道**——`inject()` 亦按 `UserMessage` 投递（会显示为"用户发言"，同 F6 问题），故证据走工具返回。
 export function evidenceLine(
   cmd: string | null,
@@ -623,7 +623,7 @@ export function isVAnchored(v: string | null | undefined): boolean {
   )
 }
 
-// C3（第一档：只记录不改判定）：判级当前由**模型自填**（args.level），而它同时决定工具预算掩码与强制强度——
+// C3（第一档：只记录不改判定）：判级当前由**模型自填**（args.level），而它同时决定工具预算掩码与强制强度—— #决策 2026-10-13 23:55
 // 等于把安全开关交给被验方。本档先从**命令本身**推一个"宿主视角"的等级用于**比对与落账**，暂不覆盖模型声明。
 // 依据（真实轨迹）：模型把"删除整棵目录树"填成 L1，把"只读仓库识别"也填成 L1。
 export function hostLevelFromCmd(cmd: string | null, judge?: (c: string) => string | null): 'L1' | 'L2' | 'L3' {
@@ -634,7 +634,7 @@ export function hostLevelFromCmd(cmd: string | null, judge?: (c: string) => stri
   return mutating ? 'L2' : 'L1'
 }
 
-// C2/C3 修正：`extractCommand` 只取 shell 命令，**写类工具（write/edit/patch…）拿不到 cmd**——
+// C2/C3 修正：`extractCommand` 只取 shell 命令，**写类工具（write/edit/patch…）拿不到 cmd**—— #决策 2026-10-13 23:55
 // 若只看 cmd，写文件调用会被误判为只读 ⇒ C2 会**少强制**（安全方向的错）。故按**工具名＋命令**双通道推等级。
 export const MUTATING_TOOLS = /\b(write|edit|patch|apply_patch|create|delete|remove|move|rename|mkdir|touch)\b/i
 export function hostLevelFromCall(name: string | null | undefined, cmd: string | null, judge?: (c: string) => string | null): 'L1' | 'L2' | 'L3' {
@@ -657,7 +657,7 @@ export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
   return usedSoFar < cap
 }
 
-// G5/C5 失败阶梯：同一个会话内 gate 连续失败时逐级收紧要求，避免"连试数次才凑到一条无关命令"。
+// G5/C5 失败阶梯：同一个会话内 gate 连续失败时逐级收紧要求，避免"连试数次才凑到一条无关命令"。 #决策 2026-10-13 23:55
 // 依据：真实轨迹里三次失败（ls／dir /b／dir /m）后第四次用 `cd D:\` 通过——试凑本身就是成本与风险。
 // n=1：给要求结构（C1 已实现）；n=2：只收算子形态；n>=3：停止试凑，交回人在会话外裁决。
 export function failLadderPrefix(n: number): string {
@@ -836,7 +836,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         }
       }
       void deps.log({ kind: 'gate-tool', status: verdict, ...base, realExit: r.code, match })
-      // A1：无登记断言时的"通过"走这里——按证据强度决定是否**闭环**（弱证据且无断言 ⇒ 通过但不闭环）
+      // A1：无登记断言时的"通过"走这里——按证据强度决定是否**闭环**（弱证据且无断言 ⇒ 通过但不闭环） #决策 2026-10-13 23:55
       if (verdict === 'pass') {
         const evWeak = classifyEvidence(cmd)
         const closedWeak = evWeak === 'strong'
@@ -874,7 +874,7 @@ export interface TaskToolDeps {
   acceptance: AcceptanceBridge
 }
 
-// C9：只读工具目录——回答"我被裁掉了什么、怎么申请恢复"。**本身不含恢复能力**（恢复权在会话外）。
+// C9：只读工具目录——回答"我被裁掉了什么、怎么申请恢复"。**本身不含恢复能力**（恢复权在会话外）。 #决策 2026-10-13 23:55
 export function buildToolsCatalogDefinition(deps: {
   level: () => string
   visible: () => string[]
@@ -1283,7 +1283,7 @@ export function apply(ctx: Context) {
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
   let fullAccess = false
 
-  // F8 跨回合熔断：每回合上限 1 次（b.steered）之外，再加**整会话**上限——
+  // F8 跨回合熔断：每回合上限 1 次（b.steered）之外，再加**整会话**上限—— #决策 2026-10-13 23:55
   // 依据：本电池出现 29 步离群会话，单次失控成本高于十次正常任务。触顶后放行（改为只记录），
   // 由"如实未收口"承担后果（宿主记 unverified/assertion-unresolved），而不是无限打断。
   const steerCounts = new Map<string, number>()
@@ -1394,7 +1394,7 @@ export function apply(ctx: Context) {
           restated: judgeRestated(b.firstText), levelDeclared: judgeLevelDeclared(b.firstText),
           gate: verdict, gateQuality: b.gateTool ? 'qualified' : judgeGateQuality(b.lastText), textClaim,
         })
-        // C3 第二档：**只度量、不覆盖**——收口判据已移宿主侧（A1/C2），此处记录"自报低于宿主视角"用于观察。
+        // C3 第二档：**只度量、不覆盖**——收口判据已移宿主侧（A1/C2），此处记录"自报低于宿主视角"用于观察。 #决策 2026-10-13 23:55
         // 不覆盖的理由：等级同时决定**工具预算**；任务实际更大却被按低档削工具，是更危险而非更安全。
         if (b.declaredLevel && levelRank(b.declaredLevel) < b.hostLevel) {
           void log({ kind: 'level-divergence', turn: ev.turn, declared: b.declaredLevel, host: b.hostLevel, toolCalls: b.toolCalls })
@@ -1459,7 +1459,7 @@ export function apply(ctx: Context) {
         }
         return
       }
-      // C2：**按客观副作用免 gate**——本轮没有任何写/执行类工具调用（宿主视角 ≤L1）且 gate 未通过 ⇒ 不强制收口。
+      // C2：**按客观副作用免 gate**——本轮没有任何写/执行类工具调用（宿主视角 ≤L1）且 gate 未通过 ⇒ 不强制收口。 #决策 2026-10-13 23:55
       // 注意：判据放在宿主侧（b.hostLevel），不用模型自报的等级——否则等于把开关交回被验方。
       if (b.hostLevel <= 1 && b.gateVerdict !== 'pass') {
         void log({ kind: 'gate-skip-readonly', turn: payload.turn, toolCalls: b.toolCalls, hostLevel: b.hostLevel })
@@ -1467,7 +1467,7 @@ export function apply(ctx: Context) {
         return
       }
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
-      // A1：只有"闭环的 pass"才放行；弱证据 pass（gateClosed=false）继续走收口强制
+      // A1：只有"闭环的 pass"才放行；弱证据 pass（gateClosed=false）继续走收口强制 #决策 2026-10-13 23:55
       if (b.steered || (b.gateVerdict === 'pass' && b.gateClosed)) return
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
@@ -1583,7 +1583,7 @@ export function apply(ctx: Context) {
             const bkt = bk ? turnBuckets.get(bk) : undefined
             if (bkt) bkt.gateVerdict = verdict
           },
-          // A1：闭环与否由 gate 结果决定（弱证据且无断言 ⇒ 通过但不闭环，不得据此结束回合）
+          // A1：闭环与否由 gate 结果决定（弱证据且无断言 ⇒ 通过但不闭环，不得据此结束回合） #决策 2026-10-13 23:55
           onClosed: (closed, execCtx2) => {
             const bk = sidKeyOf(execCtx2 as never, '')
             const bkt = bk ? turnBuckets.get(bk) : undefined
@@ -1593,7 +1593,7 @@ export function apply(ctx: Context) {
         const d = toolsAny.register(def)
         if (typeof d === 'function') gateToolDispose = d
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
-        // C9：只读工具目录（恒可见；不含恢复能力）
+        // C9：只读工具目录（恒可见；不含恢复能力） #决策 2026-10-13 23:55
         try {
           const catalog = buildToolsCatalogDefinition({
             level: () => pendingLevel || (budgetApplied ? '已裁剪' : ''),
