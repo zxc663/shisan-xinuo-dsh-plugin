@@ -88,5 +88,13 @@
 2. ~~§三.1~~ ✅ 结案：同名变体可行 ⇒ "改宿主工具"路径成立（红线：只许加强）；
 3. ~~§三.2~~ ✅ 结案：显示层渲染点可行 ⇒ **B3 纳入**（独立 UI 插件，渲染"系统注入卡"与"证据卡"）；**内容投影可用但禁用**；
 4. 落地序（建议）：**B1（工具卡承载证据与要求，语义不再伪装）→ 再 B3（UI 渲染，好看）**；B3 必须**可降级**（UI 缺失时退回 B1 形态）。
+
+### 附：B3 可行性面（2026-10-14 实查，成本判断）
+
+宿主暴露了完整的**会话节点注册族**：`registerMessageConversationNode`／`registerToolConversationNode`／`registerAssistantConversationNode`／`registerCommandConversationNode`／`registerInboxConversationNodes`／`registerRetryConversationNode`／`registerCompactionConversationNode`／`registerConversationNodes`，以及 **`ConversationNodeAssembler`** 与 `ctx.uiConversation` 服务（`views`／`groups`／`bindings`／`events`）。
+
+⇒ **B3 结构上确认可行**（可把宿主注入渲染成独立节点类型），但**成本显著高于 B1**：需要新写一个 UI 模块（自带渲染约定，须先读现有 UI 插件源码摸清装配方式），且每次迭代都要挂载+重启桌面应用。
+
+**处置：B3 不并入治理核心，另立一项后续工作**（与"耦合策略：呈现层独立、可降级"一致）。当前先把 **B1 落满**：证据已由工具结果承载（C10），强制消息只做"最短化＋标来源＋指向系统侧证据"（C11 已含禁重述，本轮补"以系统侧证据为准"）。
 5. ~~§三.3~~ ✅ 改判结案：证据由工具结果承载（模型与用户均可见）；宿主主动强制受 `UserMessage` 类型约束，**外观纯度让位于证据完整性**；
 6. 仍待验证：§三.4（skill provider 注册后宿主目录是否合并去重，决定 A 的实际成本影响）。

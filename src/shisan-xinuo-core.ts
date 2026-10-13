@@ -77,7 +77,7 @@ const READONLY_EXEMPTS: Array<{ re: RegExp; afterDanger?: boolean }> = [
 export const STEER_PREFIX = '[十三希诺收口强制]'
 // F7/C11：强制收口时**必须显式禁止重述**——实测中模型接到强制后会把自己那份完整答案再说一遍（164K tok 的一大部分在此）。 #决策 2026-10-13 23:55
 // 统一常量：三处 steer（断言未过／无断言未收口／零工具调用声称完成）共用同一措辞，避免逐处漂移。
-export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出的答案或分析。'
+export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出的答案或分析；判断依据以系统侧的收口证据为准。'
 
 export function judgeL3(cmd: string): string | null {
   for (const p of L3_PATTERNS) {
