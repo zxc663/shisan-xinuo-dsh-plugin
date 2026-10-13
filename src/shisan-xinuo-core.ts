@@ -596,6 +596,12 @@ export function classifyEvidence(cmd: string | null): 'strong' | 'weak' {
   return strong ? 'strong' : 'weak'
 }
 
+// F8：跨回合熔断判定（纯函数，便于单测）。cap 为整会话允许的强制收口次数上限。
+export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
+  if (!Number.isFinite(cap) || cap <= 0) return true // 非法/未配置 ⇒ 不熔断（保守：不因配置错误而放行）
+  return usedSoFar < cap
+}
+
 const GATE_CMD_TIMEOUT_MS = 30_000
 const GATE_TAIL_CAP = 300
 
@@ -1111,6 +1117,12 @@ export function apply(ctx: Context) {
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
   let fullAccess = false
 
+  // F8 跨回合熔断：每回合上限 1 次（b.steered）之外，再加**整会话**上限——
+  // 依据：本电池出现 29 步离群会话，单次失控成本高于十次正常任务。触顶后放行（改为只记录），
+  // 由"如实未收口"承担后果（宿主记 unverified/assertion-unresolved），而不是无限打断。
+  const steerCounts = new Map<string, number>()
+  const STEER_CAP = Number(process.env.SHISANUO_STEER_CAP ?? 3)
+
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
       // B2 自动推导：用户原文（跳过我方 steer 注入）→ 断言登记；新任务替换旧记录并记录遗留
@@ -1288,6 +1300,13 @@ export function apply(ctx: Context) {
           return
         }
         b.steered = true
+        const usedA = steerCounts.get(bucketKey) ?? 0
+        if (!shouldSteerNow(usedA, STEER_CAP)) {
+          void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedA, cap: STEER_CAP, mode: 'auto-fail' })
+          console.log(`[shisan-xinuo] steer capped for session (used=${usedA}, cap=${STEER_CAP}) → 放行并记为未收口`)
+          return
+        }
+        steerCounts.set(bucketKey, usedA + 1)
         void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'auto-fail', assertions: pending.length })
         const failLine = failed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
         agent.steer?.({
@@ -1302,6 +1321,13 @@ export function apply(ctx: Context) {
       }
       // 无断言：必须真调 gate（文本 GATE 不再计入合规）
       b.steered = true
+      const usedB = steerCounts.get(bucketKey) ?? 0
+      if (!shouldSteerNow(usedB, STEER_CAP)) {
+        void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedB, cap: STEER_CAP, mode: 'no-assertions' })
+        console.log(`[shisan-xinuo] steer capped for session (used=${usedB}, cap=${STEER_CAP}) → 放行并记为未收口`)
+        return
+      }
+      steerCounts.set(bucketKey, usedB + 1)
       void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'no-assertions', assertions: 0 })
       agent.steer?.({
         content: [{

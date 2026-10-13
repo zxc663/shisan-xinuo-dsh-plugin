@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -71,5 +71,12 @@ check('G6a cd 型=弱', classifyEvidence('cd D:\\'), 'weak')
 check('G6b Test-Path 型=强', classifyEvidence('if (Test-Path "D:\\a") { exit 1 } else { exit 0 }'), 'strong')
 check('G6c 算子形态=强', classifyEvidence('cmd_exit0:node -e "1"'), 'strong')
 check('G6d 空=弱', classifyEvidence(null), 'weak')
+
+// ── shouldSteerNow（F8 跨回合熔断）──
+check('F8a 未触顶', shouldSteerNow(0, 3), true)
+check('F8b 最后一次', shouldSteerNow(2, 3), true)
+check('F8c 触顶', shouldSteerNow(3, 3), false)
+check('F8d 超顶', shouldSteerNow(5, 3), false)
+check('F8e 非法 cap 不熔断（保守）', shouldSteerNow(9, 0), true)
 
 process.exit(fail > 0 ? 1 : 0)

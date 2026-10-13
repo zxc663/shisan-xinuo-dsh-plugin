@@ -44,6 +44,8 @@ const FIELD_WHITELIST = {
   'auto-closeout': ['turn', 'count', 'result', 'table'],
   // F2 零工具调用盲区（SHISANUO_ZEROTOOL_GUARD=1 时落账）
   'zerotool-claim': ['turn', 'tail'],
+  // F8 跨回合熔断
+  'gate-steer-capped': ['turn', 'used', 'cap', 'mode'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
