@@ -1,3 +1,5 @@
+# 本仓开发态装载示例（复制到你的 DSH profile patch 层使用）。
+# Windows 绝对路径必须用 file:// URL（ESM loader 把裸 D:/ 判成 d: 协议）；按你的仓库位置替换。
 - insert:
     - id: shisanxinuo-core
-      name: 'D:/DeepSeek/dsh-plugin-dev/src/shisan-xinuo-core.ts'
+      name: 'file:///D:/DeepSeek/dsh-plugin-dev/src/shisan-xinuo-core.ts'

@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { exec } from 'node:child_process'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'shisan-xinuo-core'
@@ -463,13 +464,18 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
   }
 }
 
-const LOG_DIR = 'D:/DeepSeek/dsh-plugin-dev/logs'
-const LOG_FILE = LOG_DIR + '/exec-log.jsonl'
-// E1 三臂旗标（预注册 v3）：A=惰性观测（无注入无拦截无工具，仅测量）/ B=纯纪律文本（Skill 形态：注入+文本面机检，无拦截无工具无预算）/ C=运行时控制全量（默认）
-const ARM_A_FLAG = 'D:/DeepSeek/dsh-plugin-dev/tmp/arm-A-observe.flag'
-const ARM_B_FLAG = 'D:/DeepSeek/dsh-plugin-dev/tmp/arm-B-text.flag'
+// 仓库根相对基准（可移植：换机/换 OS 不失效；SHISANUO_LOG_DIR 可覆盖日志目录）
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+const LOG_DIR = process.env.SHISANUO_LOG_DIR ?? join(REPO_ROOT, 'logs')
+const LOG_FILE = join(LOG_DIR, 'exec-log.jsonl')
+// E1 三臂（预注册 v3）：A=惰性观测（无注入无拦截无工具，仅测量）/ B=纯纪律文本（Skill 形态：注入+文本面机检，无拦截无工具无预算）/ C=运行时控制全量（默认）。
+// 切臂：SHISANUO_ARM=A|B|C 环境变量优先；旗标文件（tmp/arm-*.flag）兼容保留。
+const ARM_A_FLAG = join(REPO_ROOT, 'tmp', 'arm-A-observe.flag')
+const ARM_B_FLAG = join(REPO_ROOT, 'tmp', 'arm-B-text.flag')
 
 export function applyArmMode(): 'A' | 'B' | 'C' {
+  const env = (process.env.SHISANUO_ARM ?? '').trim().toUpperCase()
+  if (env === 'A' || env === 'B' || env === 'C') return env
   if (existsSync(ARM_A_FLAG)) return 'A'
   if (existsSync(ARM_B_FLAG)) return 'B'
   return 'C'

@@ -8,12 +8,13 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, utimesSync 
 import { join } from 'node:path'
 
 const REPO = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
-const DSH_BIN = 'D:/ai本地模型/dsh-cli-0.2.0-rc.2/node_modules/@deepseek-ai/dsh/lib/bin.js'
-const DSH_HOME = 'D:/ai本地模型/dsh/headless-home'
+// 本机实验环境，全部可经环境变量覆盖（第三方复现按自己的 DSH 安装位置设置）
+const DSH_BIN = process.env.SHISANUO_DSH_BIN ?? 'D:/ai本地模型/dsh-cli-0.2.0-rc.2/node_modules/@deepseek-ai/dsh/lib/bin.js'
+const DSH_HOME = process.env.SHISANUO_DSH_HOME ?? 'D:/ai本地模型/dsh/headless-home'
 const EXEC_LOG = join(REPO, 'logs', 'exec-log.jsonl')
 const FLAG_A = join(REPO, 'tmp', 'arm-A-observe.flag')
 const FLAG_B = join(REPO, 'tmp', 'arm-B-text.flag')
-const TMP = 'D:/tmp'
+const TMP = process.env.SHISANUO_E1_TMP ?? 'D:/tmp'
 
 const TASKS = {
   T1: {

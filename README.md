@@ -6,13 +6,13 @@
 
 ## 能力矩阵（主张=状态标签制，证据可复查）
 
-| # | 主张 | 状态 | 证据 |
-|---|---|---|---|
-| 1 | L3 危险操作在工具执行管线内被程序性拦截（命中→审批询问，宿主侧不可绕过该检查） | **已实现有测试**（正则覆盖 6 域+9 豁免+嵌套 shell 形态） | 单测 8正10负+23例+58误拦样本；真实宿主拦截实录 |
-| 2 | 收口验证依据真实退出码而非模型自述（discipline_gate 工具：宿主真跑 cmd，声明与实测不符=打回） | **已实现有测试**（含 E1 中两次打回无效验证的实录） | tests/gate-tool 44 例；E1-v1 报告 §1 |
-| 3 | 规则包可替换：改 `content/rules.json` 即改红线，不动引擎代码；无效配置 fail-closed 回退内置默认 | **已实现有测试**（真实宿主自定义域拦截实证） | tests/config-rules 24 例；CHANGELOG v0.3 |
-| 4 | 工具预算器：按任务判级裁剪工具面（restrict 掩码），测量以每请求线缆真值为准 | **已实现有测试**（L1 面 -58.6%；同 agent 会话中途收窄实证） | tests/budget 21 例；CHANGELOG v0.4 |
-| 5 | 行为遥测与对账：exec-log 全落账，tally `--report/--check` 出数+对账（白名单/不变量/快照，抓植入差错） | **已实现有测试** | tests/tally 16 例（5 类攻击样本全被抓） |
+| # | 主张 | 状态 | 宿主面 vs 插件增量 | 证据 |
+|---|---|---|---|---|
+| 1 | L3 危险操作在工具执行管线内被程序性拦截（命中→审批询问，宿主侧不可绕过该检查） | **已实现有测试**（正则覆盖 6 域+9 豁免+嵌套 shell 形态） | 审批卡 UI 与 pre-execute 管线为宿主原生；插件供红线规则、误拦豁免、形态封堵 | 单测 8正10负+23例+58误拦样本；真实宿主拦截实录 |
+| 2 | 收口验证依据真实退出码而非模型自述（discipline_gate 工具：宿主真跑 cmd，声明与实测不符=打回） | **已实现有测试**（含 E1 中两次打回无效验证的实录） | 命令执行/退出码采集走宿主；判定语义（三态+拒跑）为插件自有 | tests/gate-tool 44 例；E1-v1 报告 §1 |
+| 3 | 规则包可替换：改 `content/rules.json` 即改红线，不动引擎代码；无效配置 fail-closed 回退内置默认 | **已实现有测试**（真实宿主自定义域拦截实证） | 插件自有 | tests/config-rules 24 例；CHANGELOG v0.3 |
+| 4 | 工具预算器：按任务判级裁剪工具面（restrict 掩码），测量以每请求线缆真值为准 | **已实现有测试**（L1 面 -58.6%；同 agent 会话中途收窄实证） | restrict/request 事件为宿主扩展面；策略与 always-allow 为插件自有 | tests/budget 21 例；CHANGELOG v0.4 |
+| 5 | 行为遥测与对账：exec-log 全落账，tally `--report/--check` 出数+对账（白名单/不变量/快照，抓植入差错） | **已实现有测试** | 插件自有（日志为插件所写，非宿主审计面） | tests/tally 16 例（5 类攻击样本全被抓） |
 | 6 | 有效性（改善任务结果） | **未证**——E1-v1 机制验证轮 n=1 区分力不足，按预注册矩阵不判有效/无效 | docs/e1-v1-report §4 |
 | 7 | 拦截覆盖完备性 | **已知边界**——枚举型正则有天花板：命令形态替换已闭合一例；「目标替代」（用 write 清空代替删除+对偷换目标做真验证）不可在正则层修，指向 v1.x T3 受控执行器/状态机 | docs/e1-v1-report §3 |
 | 8 | T3 受控执行器/教训库/跨平台映射 | **规划**（v1.x） | docs/design-specs/dsh-toolification-roadmap |
@@ -43,7 +43,7 @@ DSH profile 的 `cordis.patch.yml` 追加：
 ## 测试与测量
 
 ```bash
-for f in tests/*.test.mjs test/*.test.mjs; do node "$f"; done   # 9 套单测（无需构建，Node ≥23 直跑 .ts）
+for f in tests/*.test.mjs test/*.test.mjs; do node "$f"; done   # 9 套单测（无需构建；Node ≥22.18 默认 type stripping 即可，≥23 亦验证过）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # E1 三臂实验（免费模型）

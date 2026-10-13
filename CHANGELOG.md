@@ -1,5 +1,16 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 外部独立验证修复批（2026-10-13，审查基线 25b8775 → 本批）
+
+第三方 Linux/Node 22.23.2 沙箱独立复现：9 套单测全绿+口径逐项一致+**零夸大**。四处反馈全部裁决采纳/撤销如下：
+
+- **问题1 采纳**：引擎与实验脚本硬编码路径可移植化——LOG_DIR/臂旗标改「仓库根相对推导（import.meta.url）」+`SHISANUO_LOG_DIR` 覆盖；e1-run.mjs 的 DSH_BIN/DSH_HOME/TMP 全部 env 化（`SHISANUO_DSH_BIN`/`SHISANUO_DSH_HOME`/`SHISANUO_E1_TMP`）；cordis.yml 统一 file:// 形态+替换说明（消除与 README 的口径分歧）。
+- **问题2 采纳**：三臂切换 `SHISANUO_ARM=A|B|C` 环境变量优先，旗标文件兼容保留（五例优先级冒烟：env 大小写归一/env 压旗标/无 env 走旗标）。
+- **问题3 撤销（审查方自撤）**：--check exit 语义经其复测正确；「管道吞码=假绿」教训反向印证。
+- **问题4 采纳**：README 能力矩阵新增「宿主面 vs 插件增量」列（审批卡/pre-execute/restrict 为宿主扩展面，插件供规则/判定语义/策略）；Node 口径改「≥22.18 type stripping 即可」（审查方 22.23.2 实测，原 ≥23 偏保守一档）。
+- **验证**：9 套回归全绿+SHISANUO_ARM 五例冒烟+真实宿主冒烟（headless 全链：arm/rules 落账、gate pass 真 stdout 回显——REPO_ROOT 相对推导生产行为不变）。
+
+
 ## E1-v4 四臂桌面对照（2026-10-13，3 轮×4 臂×3 任务=36 会话）
 
 - **新增 D 臂=干净 DSH**（desktop-clean home：无插件无注入独立 sessions；A≈D 纯度验证通过——裸行为空间一致）；预注册修订透明记录落 v4 设计档。
