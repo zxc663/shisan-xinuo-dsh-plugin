@@ -1156,6 +1156,31 @@ export function apply(ctx: Context) {
     if (!agent) return
     agentsById.set(agent.id, agent)
     if (pendingMask) restrictAgentTools(agent.ctx, pendingMask, pendingLevel, 'agent-created', agent)
+    // 探针（默认关闭）：宿主拒绝**全局**同名注册，但错误信息指向"per-agent variant"——验证 agent.ctx 上可否注册同名工具。
+    // 这是"改宿主工具"能否成立的关键分支；仅在探测会话使用（SHISANUO_PROBE_TOOLS=1）。
+    if (process.env.SHISANUO_PROBE_TOOLS === '1') {
+      try {
+        const actx = agent.ctx as { tools?: { schemas?: () => Array<{ name?: string }>; register?: (x: unknown) => unknown } } | undefined
+        const names = (actx?.tools?.schemas?.() ?? []).map((s) => String(s.name ?? ''))
+        const tgt = names.find((n) => n && !n.startsWith('discipline_')) ?? ''
+        if (tgt) {
+          const d = actx?.tools?.register?.({
+            name: tgt,
+            description: 'probe: per-agent same-name variant',
+            parameters: {},
+            output: { schema: { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] }, render: () => [] },
+            async execute() {
+              return { status: 'probe-agent' }
+            },
+          } as unknown)
+          console.log(`[probe-agent-register] target=${tgt} result=ACCEPTED disposer=${typeof d}`)
+        } else {
+          console.log('[probe-agent-register] target=(none)')
+        }
+      } catch (e) {
+        console.log(`[probe-agent-register] result=THROW error=${String(e).slice(0, 180)}`)
+      }
+    }
   })
   const agentDisposedDispose = ctx.on('agent/disposed', (payload: { agent?: { id?: unknown } }) => {
     const id = payload?.agent?.id
@@ -1297,7 +1322,13 @@ export function apply(ctx: Context) {
         const srcKind = rawUser.data?.source?.kind
         const txt = assistantText(rawUser.data?.content)
         // 只认真正的用户消息：runtime-context / skill-catalog 等注入文本同样走 user/message 信封（B2 实测），一律剔除。
-        if (typeof srcKind === 'string' && srcKind !== 'user') return
+        if (typeof srcKind === 'string' && srcKind !== 'user') {
+          // C14（改判·度量）：宿主只向插件开放 `ctx.skills.registerProvider`（只能提供、不能裁剪可见面），
+          // 故"skill 纳入预算"的裁剪形态在当前插件面**不可行**；可做的是**度量**——把 skill 类注入的体积落账，
+          // 让成本可见（基线实测：skill 类注入 88.4KB/8 会话 ≈ 系统段 19.4KB 的 4.5 倍）。裁剪建议归宿主配置层。
+          if (/skill/i.test(srcKind)) void log({ kind: 'skill-catalog-cost', sourceKind: srcKind, chars: txt.length })
+          return
+        }
         if (!txt || txt.startsWith(STEER_PREFIX)) return
         const derived = ASSERT_LAYER ? deriveAssertionsFromUserText(txt) : []
         const key = sidKeyOf(session)
@@ -1344,6 +1375,29 @@ export function apply(ctx: Context) {
           const schemas = (ctx.tools as { schemas?: () => Array<{ name: string }> }).schemas?.()
           if (Array.isArray(schemas)) {
             void log({ kind: 'tools-inventory', count: schemas.length, names: schemas.map((s) => s.name).join(',').slice(0, 300) })
+            // 探针（默认关闭）：同名 register 是拒绝还是覆盖？——决定"改宿主工具／工具卡替代伪装话术"是否可行。
+            // 仅在探测会话使用：SHISANUO_PROBE_TOOLS=1 dsh permtest "…"，看 stdout 的 [probe-register] 行。
+            if (process.env.SHISANUO_PROBE_TOOLS === '1') {
+              const target = schemas.map((s) => String(s.name ?? '')).find((n) => n && !n.startsWith('discipline_')) ?? ''
+              if (target) {
+                try {
+                  const d = (ctx.tools as { register?: (x: unknown) => unknown }).register?.({
+                    name: target,
+                    description: 'probe: same-name registration semantics',
+                    parameters: {},
+                    output: { schema: { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] }, render: () => [] },
+                    async execute() {
+                      return { status: 'probe' }
+                    },
+                  } as unknown)
+                  console.log(`[probe-register] target=${target} result=ACCEPTED disposer=${typeof d}`)
+                } catch (e) {
+                  console.log(`[probe-register] target=${target} result=THROW error=${String(e).slice(0, 180)}`)
+                }
+              } else {
+                console.log('[probe-register] target=(none) — schemas 为空')
+              }
+            }
           }
         } catch { /* 只读观测，非致命 */ }
       }
