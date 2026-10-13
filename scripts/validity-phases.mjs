@@ -7,9 +7,14 @@ import { fileURLToPath } from 'node:url'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PHASES = [
-  { name: 'h3-anchored', args: ['--arms=W,WE,S,SE', '--kinds=anchored'] },
-  { name: 'h3-hard', args: ['--arms=W,WE,S,SE', '--kinds=hard'] },
-  { name: 'h5f-hard', args: ['--arms=M,ME1,ME2', '--kinds=hard'] },
+  // 2026-10-13 重排（R10）：魔搭配额耗尽 ⇒ 多档矩阵暂停（避免继续产出废行）。
+  // 本链只跑免费档可完成的部分；多档矩阵待配额恢复后手动续跑（已完成行会被跳过）：
+  //   node scripts/validity-run.mjs --arms=W,WE,S,SE --kinds=anchored
+  //   node scripts/validity-run.mjs --arms=W,WE,S,SE --kinds=hard
+  //   node scripts/validity-run.mjs --arms=M,ME1,ME2 --kinds=hard
+  // M 的锚定段与既有 P 臂同构（同为 NO_ASSERT+pinned+flash），跳过以免重复占额度
+  { name: 'h5-flash-hard', args: ['--arms=M,ME3', '--kinds=hard'] },
+  { name: 'h5-flash-anchored-me3', args: ['--arms=ME3', '--kinds=anchored'] },
 ]
 
 for (const p of PHASES) {

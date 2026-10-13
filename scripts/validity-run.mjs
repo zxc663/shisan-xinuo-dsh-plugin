@@ -19,6 +19,21 @@ const OVERLAY = join(OUTDIR, 'overlays')
 const MODEL_READER = join(OUTDIR, 'session_model.py')
 const ARM_TIMEOUT_MS = 300000
 
+// 免费档限流（429／RATE_LIMIT／QUOTA）退避重试：harness 级健壮性，不改判据
+const RATE_RE = /RATE_LIMIT|429|QUOTA|insufficient balance|1302|1113/i
+const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+function retryOnRate(run) {
+  const waits = [30000, 60000]
+  let out = run()
+  for (const w of waits) {
+    if (!out.retry) return out
+    console.log(`[rate] 限流命中，等待 ${w / 1000}s 后重试`)
+    sleepMs(w)
+    out = run()
+  }
+  return out
+}
+
 const P = (dir, name) => `${dir}\\${name}`
 const SL = (dir, name) => `${dir}\\${name}`.replace(/\\/g, '/')
 
@@ -73,6 +88,7 @@ const ARMS = {
   M: (t, dir) => PINNED(t, dir),   // 执行中（glm-4.5-flash），无对抗
   ME1: (t, dir) => PINNED(t, dir), // 执行中 × 对抗弱（V4-Flash）
   ME2: (t, dir) => PINNED(t, dir), // 执行中 × 对抗强·异族（Qwen3.5）
+  ME3: (t, dir) => PINNED(t, dir), // 执行免费档 × 对抗同族同档（glm-4.5-flash）——资源受限时的可用格
 }
 
 // D′ 语义的环境变量（外部锚＋关闭启发式推导＋拦截退位）
@@ -85,6 +101,7 @@ const ARM_PATCH = {
   W: ['exec-v4flash.yml'], WE: ['exec-v4flash.yml'],
   S: ['exec-v4pro.yml'], SE: ['exec-v4pro.yml'],
   M: [], ME1: [], ME2: [],
+  ME3: [],
 }
 
 // 对抗档 overlay（切模型＋关闭纪律插件）；键存在即启用出题人步骤
@@ -93,6 +110,7 @@ const ADV = {
   SE: 'adv-v4pro.yml',
   ME1: 'adv-v4flash.yml',
   ME2: 'adv-qwen35.yml',
+  ME3: 'adv-flash.yml',
 }
 
 // 出题人：独立会话只产出一条验证命令；求值＝在任务目录执行该命令取真实退出码
@@ -109,8 +127,12 @@ function runAdversary(arm, t, dir, producerOut) {
   ].join('\n')
   const t0 = Date.now()
   const beforeFiles = sessionFiles()
-  const r = spawnSync(process.execPath, [DSH_BIN, 'permtest', '--patch', overlay, prompt], {
-    cwd: dir, env: { ...process.env, DSH_HOME }, timeout: 240000, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+  const { rr: r } = retryOnRate(() => {
+    const rr = spawnSync(process.execPath, [DSH_BIN, 'permtest', '--patch', overlay, prompt], {
+      cwd: dir, env: { ...process.env, DSH_HOME }, timeout: 240000, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+    })
+    const failed = rr.status !== 0 || !/CMD:/.test(String(rr.stdout ?? ''))
+    return { retry: failed && RATE_RE.test(String(rr.stderr ?? '') + String(rr.stdout ?? '')), rr }
   })
   // 留存证明：该出题会话实际使用的 provider/model（从会话记录读，不依赖自述）
   let attested = null
@@ -251,7 +273,10 @@ function runOne(arm, t) {
   const env = { ...process.env, DSH_HOME, ...(ARMS[arm](t, dir) ?? {}) }
   const t0 = Date.now()
   const patchArgs = (ARM_PATCH[arm] ?? []).flatMap((f) => ['--patch', join(OVERLAY, f)])
-  const r = spawnSync(process.execPath, [DSH_BIN, 'permtest', ...patchArgs, t.prompt(dir)], { cwd: dir, env, timeout: ARM_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+  const { rr: r } = retryOnRate(() => {
+    const rr = spawnSync(process.execPath, [DSH_BIN, 'permtest', ...patchArgs, t.prompt(dir)], { cwd: dir, env, timeout: ARM_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+    return { retry: RATE_RE.test(String(rr.stderr ?? '')), rr }
+  })
   const durMs = Date.now() - t0
   const outPath = join(OUTDIR, `${arm}-${t.id}.out.txt`)
   const stdout = String(r.stdout ?? '')
