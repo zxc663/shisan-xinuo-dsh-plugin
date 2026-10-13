@@ -581,7 +581,7 @@ export function gateRequirementBlock(registered: string[], cmd: string | null, v
   const lines = [
     '—— 合格判据的要求（照此重写，不要再试凑命令）——',
     `① 本任务已登记的判据：${registered.length > 0 ? registered.slice(0, 6).join('；') : '（无；可用 discipline_task 登记，或由会话外 pinned 锚提供）'}`,
-    '② 可接受形态：not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串> / cmd_exit0:<命令>',
+    '② 形态：只需检查路径/内容 ⇒ 用 **`assert`** 传算子（not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>），**插件内联求值、不过 shell**；需要命令 ⇒ 用 cmd + claimedExit。',
     '③ 两条自检：a) 这条判据的成败**是否取决于本任务目标**——换成另一个任务它是否照样通过？若是，它不构成证据；b) 判据是否**只读**、不改变被验对象？会改则改用检查类算子。',
     `④ 本次失败归类：${verdict === 'mismatch' ? '退出码不符（声称与实测不一致）' : verdict === 'honest-fail' ? '验证未通过（非零退出码）' : verdict}`,
   ]
@@ -668,7 +668,7 @@ export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
 // n=1：给要求结构（C1 已实现）；n=2：只收算子形态；n>=3：停止试凑，交回人在会话外裁决。
 export function failLadderPrefix(n: number): string {
   if (n <= 1) return ''
-  if (n === 2) return '【阶梯 2／3】本轮**不再接受自由命令形态**：只接受算子——not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串> / cmd_exit0:<命令>。给不出就如实声明「未验证」，不要再试凑命令。\n'
+  if (n === 2) return '【阶梯 2／3】本轮**不再接受自由命令试凑**：需要检查路径/内容时，请用 **`assert` 参数**传算子（not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>）——它由插件内联求值、不经 shell。给不出就如实声明「未验证」。\n'
   return '【阶梯 3／3】**停止试凑**：宿主已不再期待你本轮完成收口。请如实声明「未验证」并说明原因，由人在会话外裁决——继续换命令不会改变判定。\n'
 }
 
@@ -721,18 +721,19 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       properties: {
         level: { type: 'string', description: '任务判级：L1 | L2-S | L2-F' },
         v: { type: 'string', description: '改动范围一句话' },
-        cmd: { type: 'string', description: '可重跑的验证命令（宿主将真实执行）' },
-        claimedExit: { type: 'number', description: '你声称该命令将返回的退出码（通常是 0）' },
+        cmd: { type: 'string', description: '可重跑的验证命令（宿主将真实执行）；与 assert 至少给一个' },
+        claimedExit: { type: 'number', description: '你声称该命令将返回的退出码（通常是 0）；给了 cmd 才需要' },
+        assert: { type: 'string', description: '算子判据（**插件内联求值、永不过 shell**，故不受沙箱/引号影响）：not_exists:<路径> | exists:<路径> | path_contains:<路径>::<子串>' },
         files: { type: 'string', description: '变更文件清单（逗号分隔）' },
         exempt: { type: 'string', description: '未验证事项声明（无则省略）' },
       },
-      required: ['level', 'v', 'cmd', 'claimedExit'],
+      required: ['level', 'v'],
     },
     output: {
       schema: {
         type: 'object',
         properties: {
-          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error', 'assertion-fail'] },
+          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error', 'assertion-fail', 'channel-unavailable'] },
           claimedExit: { type: 'number' },
           realExit: { type: 'number' },
           match: { type: 'boolean' },
@@ -751,10 +752,36 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       const level = String(args.level ?? '')
       const v = String(args.v ?? '').slice(0, 200)
       const cmd = String(args.cmd ?? '')
+      const assertSpec = String(args.assert ?? '').trim()
       const claimedExit = Number(args.claimedExit)
       const files = args.files === undefined ? undefined : String(args.files).slice(0, 300)
       const exempt = args.exempt === undefined ? undefined : String(args.exempt).slice(0, 300)
 
+      // P1：算子判据走**插件内联求值**，永不过 shell——从根上消除"把算子喂给 cmd.exe"的不可执行形态
+      if (assertSpec) {
+        let ok = false
+        let detail = ''
+        try {
+          const res = (deps.acceptance as { evaluate?: (a: string) => { ok?: boolean; detail?: string } } | undefined)?.evaluate?.(assertSpec)
+          ok = !!res?.ok
+          detail = String(res?.detail ?? '')
+        } catch (e) {
+          detail = '求值器异常：' + String(e).slice(0, 80)
+        }
+        const status = ok ? ('pass' as const) : ('assertion-fail' as const)
+        void deps.log({
+          kind: 'gate-tool', status, level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit: 0,
+          realExit: ok ? 0 : 1, evidence: 'strong', ...(ok ? {} : { error: detail.slice(0, 120) }),
+        })
+        deps.onStats?.(ok ? 'pass' : 'mismatch', execCtx)
+        return {
+          status, verdict: status, claimedExit: 0, realExit: ok ? 0 : 1, closed: ok, evidence: 'strong' as const,
+          message: ok
+            ? `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=通过 ｜ 证据强度=强 ｜ 闭环=是 —— 该判据由插件**内联求值**，未经 shell，故不受沙箱/引号影响。`
+            : `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=未通过${detail ? `（${detail.slice(0, 80)}）` : ''} ｜ 闭环=否\n` +
+              gateRequirementBlock([], null, 'honest-fail'),
+        }
+      }
       const plan = planGate(cmd, judge)
       // 审计 F-02 修复：refuse 始终生效——全局授权只免"审批卡交互"，不免"插件主动发起的命令执行"
       if (plan.action === 'refuse') {
@@ -766,7 +793,11 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       if (!cmd.trim()) {
         deps.onStats?.('error', execCtx)
         void deps.log({ kind: 'gate-tool', status: 'error', level, v, cmd: '', claimedExit, error: 'empty-cmd' })
-        return { status: 'error' as const, verdict: 'error', message: gateToolMessage('error', claimedExit, null, '验证命令为空') }
+        return {
+          status: 'error' as const, verdict: 'error',
+          message: gateToolMessage('error', claimedExit, null, '既未给 cmd 也未给 assert') +
+            '\n提示：只需检查"某个路径/内容是否成立"时，用 **`assert`** 传算子即可（not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>）——它由插件内联求值，不需可执行命令。',
+        }
       }
 
       const r = await runCmd(cmd, { signal: execCtx.signal })
@@ -778,11 +809,20 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       }
 
       if (r.timedOut || r.code === null) {
-        deps.onStats?.('error', execCtx)
-        void deps.log({ kind: 'gate-tool', status: 'error', ...base, realExit: null, error: r.timedOut ? 'timeout' : (r.spawnError ?? 'spawn-error') })
+        // P7：沙箱/ACL 拒绝 ⇒ **通道不可用**（环境故障），不得与"验证不符"混为一谈
+        const blob = String(r.stderr ?? '') + String(r.stdout ?? '')
+        const channelBlocked = /SetNamedSecurityInfoW|Access is denied|拒绝访问|EPERM|EACCES|sandbox|沙箱/i.test(blob)
+        const st = channelBlocked ? ('channel-unavailable' as const) : ('error' as const)
+        deps.onStats?.(st, execCtx)
+        void deps.log({
+          kind: 'gate-tool', status: st, ...base, realExit: null,
+          error: channelBlocked ? 'channel-unavailable' : (r.timedOut ? 'timeout' : (r.spawnError ?? 'spawn-error')),
+        })
         return {
-          status: 'error' as const, verdict: 'error', realExit: null, stdoutTail: r.stdout, stderrTail: r.stderr,
-          message: gateToolMessage('error', claimedExit, null, r.timedOut ? '执行超时（>30s）' : (r.spawnError ?? '无法启动命令')),
+          status: st, verdict: st, realExit: null, stdoutTail: r.stdout, stderrTail: r.stderr,
+          message: channelBlocked
+            ? 'CHANNEL-UNAVAILABLE：执行通道被沙箱/权限拒绝——这是**环境故障，不是你的验证未通过**（不计入 mismatch/honest-fail）。两条出路：① 用 **`assert`** 传算子（插件内联求值、不经 shell，可绕开该通道）；② 如实声明「未验证」与原因。'
+            : gateToolMessage('error', claimedExit, null, r.timedOut ? '执行超时（>30s）' : (r.spawnError ?? '无法启动命令')),
         }
       }
 
@@ -840,7 +880,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
               gateToolMessage('pass', claimedExit, r.code) +
               ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。` +
               (evidence === 'weak'
-                ? ' 证据强度=**弱**：该命令未使用检查类算子，宿主无法据此判断它与任务目标相关——请补一条针对目标的判据（not_exists/exists/path_contains/cmd_exit0），或如实说明未验证事项。'
+                ? ' 证据强度=**弱**：该命令未使用检查类算子，宿主无法据此判断它与任务目标相关——请改用 **`assert` 参数**传针对目标的算子（not_exists/exists/path_contains），或如实说明未验证事项。'
                 : ' 证据强度=强（使用了检查类算子）。') +
               (vAnchored ? '' : ' 另：`v`（验证描述）未锚定目标（无路径/算子/检查动词）——描述与目标脱钩时，即便通过也不携带"验的是这件事"的信息。'),
           }
@@ -861,7 +901,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             gateToolMessage('pass', claimedExit, r.code) +
             (closedWeak
               ? ' 证据强度=强（使用了检查类算子）。'
-              : ' 证据强度=**弱**且无登记断言 ⇒ **本次通过不闭环**：宿主不据此认定任务完成。请补一条针对目标的判据（not_exists/exists/path_contains/cmd_exit0）后重跑，或如实声明未验证。'),
+              : ' 证据强度=**弱**且无登记断言 ⇒ **本次通过不闭环**：宿主不据此认定任务完成。请改用 **`assert` 参数**传针对目标的算子（not_exists/exists/path_contains），或如实声明未验证。'),
         }
       }
       // C5 失败阶梯：同一实例内连续失败逐级收紧（n=2 只收算子；n>=3 停止试凑、交回用户）
@@ -890,7 +930,7 @@ export function buildToolsCatalogDefinition(deps: {
   level: () => string
   visible: () => string[]
   allow: () => string[]
-  deny: () => string[]
+  wire: () => string[]
   log: (entry: Record<string, unknown>) => void
 }) {
   return {
@@ -908,17 +948,18 @@ export function buildToolsCatalogDefinition(deps: {
       const level = deps.level()
       const visible = deps.visible()
       const allow = deps.allow()
-      const deny = deps.deny()
-      deps.log({ kind: 'tools-catalog', level, visible: visible.length, denied: deny.length })
+      // P4：`deny` 恒 0 是"报假面"（L1 属 allow 型掩码，本就没有 deny 槽）——已删除该字段，改报**线缆真值**。
+      const wire = deps.wire()
+      deps.log({ kind: 'tools-catalog', level, visible: visible.length, denied: 0 })
       return {
         status: 'ok',
         message: [
           `当前预算档位：${level || '未裁剪'}`,
           `可见工具（${visible.length}）：${visible.join(', ') || '（未采集）'}`,
-          `本档位被裁剪（${deny.length}）：${deny.join(', ') || '（无）'}`,
+          `线缆真值（宿主这次实际发给模型的 ${wire.length} 件）：${wire.join(', ') || '（尚未产生请求，故未知）'}`,
           `本档位显式允许：${allow.join(', ') || '（未配置）'}`,
           '恢复路径：**会话外**——由人修改预算配置或另启会话；本工具无恢复能力，也不接受放宽请求。',
-          '说明：本目录反映"当前可见面 ＋ 本档位 deny 名单"；完整清单以宿主轨迹中的 tools-inventory 为准。',
+          '说明："可见工具"取自声明面；"线缆真值"取自最近一次 `request/header`（宿主真正发出去的那份）——两者不一致时**以线缆真值为准**。',
         ].join('\n'),
       }
     },
@@ -1261,6 +1302,9 @@ export function apply(ctx: Context) {
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
   const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean; costHinted?: boolean }>()
   let inventoryLogged = false
+  // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
+  let lastWireNames: string[] = []
+  let maskProbePrinted = false
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
   interface TaskRec {
@@ -1376,7 +1420,25 @@ export function apply(ctx: Context) {
         const wireTools = rawHeader.data?.header?.tools
         if (Array.isArray(wireTools)) {
           stats.wireTools = wireTools.length
+          lastWireNames = wireTools.map((t) => String((t as { name?: unknown })?.name ?? '')).filter(Boolean)
           void log({ kind: 'tools-wire', count: wireTools.length, chars: JSON.stringify(wireTools).length })
+          // Step 0 探针（默认关）：声明面 vs 线缆真值 的差集 → 判定"restrict 掩码对哪些工具无效"。
+          // 用法：SHISANUO_PROBE_MASK=1 [SHISANUO_BUDGET_LEVEL=L1] dsh permtest "…"，看 stdout 的 [probe-mask] 行。
+          if (process.env.SHISANUO_PROBE_MASK === '1' && !maskProbePrinted) {
+            maskProbePrinted = true
+            try {
+              const declared = ((ctx.tools as { schemas?: () => Array<{ name?: string }> }).schemas?.() ?? [])
+                .map((s) => String(s.name ?? ''))
+                .filter(Boolean)
+              const onlyDeclared = declared.filter((n) => !lastWireNames.includes(n))
+              const onlyWire = lastWireNames.filter((n) => !declared.includes(n))
+              console.log(`[probe-mask] declared=${declared.length} wire=${lastWireNames.length}`)
+              console.log(`[probe-mask] 仅声明面（被掩码裁掉）=${onlyDeclared.join(',') || '—'}`)
+              console.log(`[probe-mask] 仅线缆面（掩码外仍可见）=${onlyWire.join(',') || '—'}`)
+            } catch (e) {
+              console.log('[probe-mask] error ' + String(e).slice(0, 120))
+            }
+          }
         }
         return
       }
@@ -1677,13 +1739,15 @@ export function apply(ctx: Context) {
             level: () => pendingLevel || (budgetApplied ? '已裁剪' : ''),
             visible: () => {
               try {
+                // P4：优先报**线缆真值**（宿主实际发出去的那份）；未产生请求时退回声明面
+                if (lastWireNames.length > 0) return lastWireNames
                 return ((ctx.tools as { schemas?: () => Array<{ name?: string }> }).schemas?.() ?? []).map((s) => String(s.name ?? '')).filter(Boolean)
               } catch {
                 return []
               }
             },
             allow: () => (pendingMask?.allow ?? []).map(String),
-            deny: () => (pendingMask?.deny ?? []).map(String),
+            wire: () => lastWireNames,
             log: (entry) => void log(entry),
           })
           const d3 = toolsAny.register(catalog as unknown)
@@ -1693,13 +1757,14 @@ export function apply(ctx: Context) {
           console.error('[shisan-xinuo] tools catalog registration FAILED:', String(e).slice(0, 120))
         }
         console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS === '1' ? 'ON (experimental)' : 'off (default)'}`)
-        if (ASSERT_LAYER) {
+        // P2：断言登记工具**默认可达**（不再受推导层的默认关牵连）；研究旗标 NO_ASSERT=1 仍可整体关闭
+        if (process.env.SHISANUO_NO_ASSERT !== '1') {
           const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
           const d2 = toolsAny.register(taskDef)
           if (typeof d2 === 'function') statusDisposes.push(() => d2())
           console.log('[shisan-xinuo] discipline_task tool registered (acceptance-assertion registry)')
         } else {
-          console.log('[shisan-xinuo] discipline_task skipped (derived layer off by default; SHISANUO_ASSERT_LAYER=1 enables it)')
+          console.log('[shisan-xinuo] discipline_task skipped (SHISANUO_NO_ASSERT=1 research mode)')
         }
       } catch (e) {
         // 注册失败=降级为纯文本 GATE 模式；拦截与机检不受影响（错误处理不拖垮宿主面）

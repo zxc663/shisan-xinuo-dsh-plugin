@@ -81,7 +81,7 @@ check('F8e 非法 cap 不熔断（保守）', shouldSteerNow(9, 0), true)
 
 // ── failLadderPrefix（C5 失败阶梯）──
 check('C5a 第1次无阶梯前缀', failLadderPrefix(1), '')
-check('C5b 第2次只收算子', failLadderPrefix(2).includes('不再接受自由命令形态'), true)
+check('C5b 第2次转向 assert 算子', failLadderPrefix(2).includes('assert') && failLadderPrefix(2).includes('不再接受自由命令试凑'), true)
 check('C5c 第3次停止试凑', failLadderPrefix(3).includes('停止试凑'), true)
 check('C5d 阶梯含算子白名单', failLadderPrefix(2).includes('path_contains'), true)
 
@@ -117,11 +117,11 @@ check('C2e 写类工具名亦被识别', hostLevelFromCall('apply_patch', ''), '
     level: () => 'L1',
     visible: () => ['read', 'write', 'discipline_gate'],
     allow: () => ['read', 'write', 'discipline_gate'],
-    deny: () => ['subagent', 'task'],
+    wire: () => ['read', 'write', 'discipline_gate', 'discipline_tools'],
     log: (e) => logs.push(e),
   })
   const r = await def.execute({}, {})
-  check('C9a 列出被裁项', r.message.includes('subagent'), true)
+  check('C9a 列线缆真值（P4 改判：不再报恒零 deny）', r.message.includes('线缆真值') && r.message.includes('discipline_tools'), true)
   check('C9b 声明恢复在会话外', r.message.includes('会话外'), true)
   check('C9c 声明本工具无恢复能力', r.message.includes('无恢复能力'), true)
   check('C9d 落 tools-catalog', logs.some((e) => e.kind === 'tools-catalog'), true)

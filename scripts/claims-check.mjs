@@ -60,8 +60,8 @@ claim('K4', '失败返回带"要求结构"：含算子白名单与目标锚提�
   return s.includes('not_exists') && s.includes('discipline_task') ? true : '要求结构缺字段'
 })
 
-claim('K5', '失败阶梯：n=1 无前缀／n=2 只收算子／n≥3 停止试凑', () => {
-  return failLadderPrefix(1) === '' && failLadderPrefix(2).includes('不再接受自由命令形态') && failLadderPrefix(3).includes('停止试凑')
+claim('K5', '失败阶梯：n=1 无前缀／n=2 转向 assert 算子／n≥3 停止试凑', () => {
+  return failLadderPrefix(1) === '' && failLadderPrefix(2).includes('assert') && failLadderPrefix(3).includes('停止试凑')
     ? true
     : '阶梯形态不符'
 })

@@ -101,7 +101,7 @@ function aggregate(lines) {
   const arm = { A: 0, B: 0, C: 0 }
   const l3 = { detected: 0, intercepted: 0 }
   const behavior = { turns: 0, hasText: 0, restated: 0, levelDeclared: 0, gateOk: 0, gateOkTool: 0, gateOkAuto: 0, gateFail: 0, gateMissing: 0, gateSkip: 0, qualified: 0, hollow: 0 }
-  const gateTool = { calls: 0, pass: 0, 'honest-fail': 0, mismatch: 0, refused: 0, error: 0 }
+  const gateTool = { calls: 0, pass: 0, 'honest-fail': 0, mismatch: 0, refused: 0, error: 0, 'assertion-fail': 0, 'channel-unavailable': 0 }
   for (const l of lines) {
     if (l.kind === 'arm' && (l.mode === 'A' || l.mode === 'B' || l.mode === 'C')) arm[l.mode]++
     else if (l.kind === 'l3-detected') l3.detected++
@@ -177,7 +177,7 @@ function fmtReport(a) {
     `L3: 命中记录=${a.l3.detected} 拦截=${a.l3.intercepted}`,
     `behavior: 回合=${b.turns} 有文本=${b.hasText}｜复述 ${b.restated}/${b.hasText}=${rate(b.restated, b.hasText)}｜判级 ${b.levelDeclared}/${b.hasText}=${rate(b.levelDeclared, b.hasText)}`,
     `GATE 面: ok(旧文本面)=${b.gateOk} ok-tool=${b.gateOkTool} ok-auto=${b.gateOkAuto} gate-fail=${b.gateFail} missing=${b.gateMissing} skip=${b.gateSkip}｜qualified=${b.qualified} hollow=${b.hollow}`,
-    `gate-tool 真值面: 调用=${a.gateTool.calls} pass=${a.gateTool.pass} honest-fail=${a.gateTool['honest-fail']} mismatch=${a.gateTool.mismatch} refused=${a.gateTool.refused} error=${a.gateTool.error}`,
+    `gate-tool 真值面: 调用=${a.gateTool.calls} pass=${a.gateTool.pass} honest-fail=${a.gateTool['honest-fail']} mismatch=${a.gateTool.mismatch} refused=${a.gateTool.refused} error=${a.gateTool.error} assertion-fail=${a.gateTool['assertion-fail']} channel-unavailable=${a.gateTool['channel-unavailable']}`,
   ].join('\n')
 }
 
