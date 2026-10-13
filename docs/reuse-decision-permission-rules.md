@@ -44,3 +44,14 @@
 
 - `permtest` 为隔离实验档：回退＝`dsh plugin --profile permtest remove dsh-permission-rules` 或直接删档；原 `headless`/`ab`/`desktop` 未动。
 - 实验现场：`D:\tmp\b1a`（`rules.yaml` 与 `run2–run7-out.txt` 为证据；junk*/protected/ 为测试产物）。
+
+## B3a 实施记录（2026-10-13 · 必改项 #1/#2 落地并实机验证）
+
+- **形状实测（实施依据）**：下游裁决回执＝`deny/ask→{kind,reason}`；`allow/无匹配→{kind:'allow'}`（probe-deny/ask 两轮实跑）。
+- **#1 旁路封堵（gate/断言直跑通道）**：新增「上游拒绝指纹」——下游拒绝即按归一化命令（小写+折叠空白，≥12 字符，10 分钟 TTL）记录；`gateJudge` 在 L3 判定外复核指纹，命中→`refused`（域=上游拒绝指纹(旁路封堵)）并落账 `bypass-blocked`；断言 `cmd_exit0` 同查。包含匹配覆盖包装态（`powershell -Command "…(echo MARKER…)…"`）。
+- **#2 优先级翻转**：L3 命中路径改为**先 `await next()`**——下游拦截→原样返回并记指纹（`upstream-block`）；下游放行→再抛我方 ask（用户手写规则优先，我方兜底）。
+- **实机验证**：
+  - V1：deny 命中 → 模型按旧习惯拿 gate 重试同命令 → **`bypass-blocked`＋gate `refused`**（对照 B1 run1：当时 gate 真跑成功——**旁路已关闭**）；模型如实报告"收口验证被拒"。
+  - V2：栈场景（Remove-Item 同命中双方）→ **上游 deny 先手**（模型看到上游 reason；`upstream-block` l3=数据删除）——对照 B1 run2 我方先手，**翻转生效**；文件保留、诚实收口。
+- **测试**：新增 `tests/bypass-guard.test.mjs`（20 例：判定/归一/记录/包装态匹配/TTL/gate 集成）；全量 12 套全绿。
+- **遗留**：必改项 #3 生成器（`rules.json→.dsh/rules.yaml`＋`patternMode: regex` 配置行＋抽检）＝下一批 **B3b**；全量语义回归随 B3b 收口。

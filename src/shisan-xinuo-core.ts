@@ -485,6 +485,29 @@ export function formatAssertionResults(results: AssertionResult[]): string {
   return results.map((r) => `${r.ok ? '✔' : '✘'} ${explainAssertion(r.assertion)} — ${r.detail}`).join('；')
 }
 
+// ── B3 旁路封堵（上游拒绝指纹）：下游裁决形状实测（2026-10-13）= deny/ask→{kind,reason}；allow/无匹配→{kind:'allow'} ──
+export function isBlockedDecision(r: unknown): boolean {
+  const kind = (r as { kind?: unknown } | null)?.kind
+  return kind === 'deny' || kind === 'ask' || kind === 'reject' || kind === 'block'
+}
+export function normalizeCmdFingerprint(cmd: string): string {
+  return cmd.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+const FINGERPRINT_MIN_LEN = 12
+export function recordDeniedFingerprint(store: Map<string, number>, cmd: string, now: number): void {
+  const f = normalizeCmdFingerprint(cmd)
+  if (f.length >= FINGERPRINT_MIN_LEN) store.set(f, now)
+}
+// 候选命令"包含"任一未过期指纹即命中（覆盖包装态：powershell -Command "…(echo MARKER…)…"）
+export function matchDeniedFingerprint(store: Map<string, number>, candidate: string, now: number, ttlMs: number): string | null {
+  const c = normalizeCmdFingerprint(candidate)
+  for (const [f, ts] of [...store]) {
+    if (now - ts > ttlMs) { store.delete(f); continue }
+    if (f.length >= FINGERPRINT_MIN_LEN && c.includes(f)) return f
+  }
+  return null
+}
+
 // 任务记录验收桥（apply() 注入实现；工具与测试只依赖此接口）
 export interface AssertionRecord { assertion: AcceptanceAssertion; source: 'auto' | 'tool' }
 export interface AcceptanceBridge {
@@ -785,6 +808,19 @@ export function apply(ctx: Context) {
   const disciplineLoad = loadTextWithFallback(process.env.SHISANUO_DISCIPLINE ?? contentDir + 'discipline.md', CORE_DISCIPLINE)
   void log({ kind: 'discipline', source: disciplineLoad.source, valid: disciplineLoad.valid, ...(disciplineLoad.reason ? { reason: disciplineLoad.reason } : {}) })
   const activeJudge = (c: string): string | null => judgeL3With(rulesLoad.rules, c)
+  // B3 旁路封堵：被下游（如 dsh-permission-rules）拒绝的命令指纹（10 分钟 TTL；收口直跑通道前置检查）
+  const deniedFingerprints = new Map<string, number>()
+  const FINGERPRINT_TTL_MS = 10 * 60_000
+  const gateJudge = (c: string): string | null => {
+    const hit = activeJudge(c)
+    if (hit) return hit
+    const fp = matchDeniedFingerprint(deniedFingerprints, c, Date.now(), FINGERPRINT_TTL_MS)
+    if (fp) {
+      void log({ kind: 'bypass-blocked', cmd: c.slice(0, 200), fingerprint: fp.slice(0, 120) })
+      return '上游拒绝指纹(旁路封堵)'
+    }
+    return null
+  }
 
   // ── v0.4 T2 预算器（A 臂观测=不裁剪保持对照纯净；fail-open：无效配置/宿主拒绝都不裁剪）──
   // 对接真相（asar 官方文档+实跑）：ctx.tools.restrict 需要 agent 作用域 ctx（根 ctx 全局掩码被宿主拒绝）——
@@ -869,6 +905,13 @@ export function apply(ctx: Context) {
         return next()
       }
       void log({ kind: 'l3-intercept', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200) })
+      // B3 优先级翻转：先让下游裁决（用户手写规则优先）；下游拦截→原样返回并记指纹
+      const down = await next()
+      if (isBlockedDecision(down)) {
+        recordDeniedFingerprint(deniedFingerprints, String(cmd), Date.now())
+        void log({ kind: 'upstream-block', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit, upstreamKind: String((down as { kind?: unknown }).kind) })
+        return down
+      }
       return {
         kind: 'ask',
         reason: `[十三希诺纪律] L3 危险操作命中（${hit}）：需要用户明确确认后才能继续。`,
@@ -878,7 +921,13 @@ export function apply(ctx: Context) {
         },
       }
     }
-    return next()
+    // pass-through：形状已实测（deny/ask→{kind,reason}；allow→{kind:'allow'}）；被拒即记指纹（收口直跑通道封堵）
+    const r = await next()
+    if (isBlockedDecision(r)) {
+      recordDeniedFingerprint(deniedFingerprints, String(cmd), Date.now())
+      void log({ kind: 'upstream-block', tool: exec?.name, cmd: String(cmd).slice(0, 200), upstreamKind: String((r as { kind?: unknown }).kind) })
+    }
+    return r
   })
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
@@ -951,7 +1000,7 @@ export function apply(ctx: Context) {
           void log({ kind: 'execctx-probe', keys, agentKeys, sample })
         } catch { /* 探针非致命 */ }
       }
-      return evaluateAssertion(a, { judge: activeJudge })
+      return evaluateAssertion(a, { judge: gateJudge })
     },
     markPassed: (ctx) => {
       const rec = taskRecords.get(resolveKey(ctx))
@@ -1156,7 +1205,7 @@ export function apply(ctx: Context) {
         }
         const def = buildGateToolDefinition({
           log: (entry) => void log(entry),
-          judge: activeJudge,
+          judge: gateJudge,
           isFullAccess: () => fullAccess,
           acceptance: acceptanceBridge,
           concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
