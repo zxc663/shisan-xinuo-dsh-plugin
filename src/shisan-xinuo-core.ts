@@ -715,13 +715,18 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
     name: 'discipline_gate',
     description:
       '任务收口验证（每任务块结束必调）：宿主真实执行你声明的验证命令并取真实退出码，与你声称的 claimedExit 比对。不符/未通过会打回。命令在 Windows cmd.exe 下运行；危险命令会被拒绝。这是「完成」的唯一可信通道。',
+    // 宿主要求**标准 JSON Schema**（`type:"object"`）；此前的扁平 DSL 会让 `{}` 被读成 `type:null` 而整轮失败（真机故障 2026-10-14）
     parameters: {
-      level: { type: 'string', required: true, description: '任务判级：L1 | L2-S | L2-F' },
-      v: { type: 'string', required: true, description: '改动范围一句话' },
-      cmd: { type: 'string', required: true, description: '可重跑的验证命令（宿主将真实执行）' },
-      claimedExit: { type: 'number', required: true, description: '你声称该命令将返回的退出码（通常是 0）' },
-      files: { type: 'string', required: false, description: '变更文件清单（逗号分隔）' },
-      exempt: { type: 'string', required: false, description: '未验证事项声明（无则省略）' },
+      type: 'object',
+      properties: {
+        level: { type: 'string', description: '任务判级：L1 | L2-S | L2-F' },
+        v: { type: 'string', description: '改动范围一句话' },
+        cmd: { type: 'string', description: '可重跑的验证命令（宿主将真实执行）' },
+        claimedExit: { type: 'number', description: '你声称该命令将返回的退出码（通常是 0）' },
+        files: { type: 'string', description: '变更文件清单（逗号分隔）' },
+        exempt: { type: 'string', description: '未验证事项声明（无则省略）' },
+      },
+      required: ['level', 'v', 'cmd', 'claimedExit'],
     },
     output: {
       schema: {
@@ -892,7 +897,7 @@ export function buildToolsCatalogDefinition(deps: {
     name: 'discipline_tools',
     description:
       '工具面目录（只读）：列出当前可见工具、本档位被裁剪掉的工具名与恢复路径。本工具**不接受**任何"恢复／放开"请求——恢复只由人在会话外操作。',
-    parameters: {},
+    parameters: { type: 'object', properties: {} },
     output: {
       schema: { type: 'object', properties: { status: { type: 'string' }, message: { type: 'string' } }, required: ['status', 'message'] },
       render(_a: unknown, v: unknown) {
@@ -926,11 +931,15 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
     description:
       '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可追加或替换工具自登记断言改正——用户原文推导的断言恒保留（如需改写，请用户重新下达指令）；会话外钉死的断言（pinned）不受本工具影响。',
     parameters: {
-      action: { type: 'string', required: true, description: 'register | clear | dispute | status（dispute＝自认先前收口无效，仅记录不改判定）' },
-      goal: { type: 'string', required: false, description: '任务目标原文摘录（随断言记录）' },
-      assertions: { type: 'string', required: false, description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
-      mode: { type: 'string', required: false, description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（仅替换工具自登记断言；用户原文推导断言恒保留）' },
-      reason: { type: 'string', required: false, description: '可选：说明本次改动的理由（落审计）' },
+      type: 'object',
+      properties: {
+        action: { type: 'string', description: 'register | clear | dispute | status（dispute＝自认先前收口无效，仅记录不改判定）' },
+        goal: { type: 'string', description: '任务目标原文摘录（随断言记录）' },
+        assertions: { type: 'string', description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
+        mode: { type: 'string', description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（仅替换工具自登记断言；用户原文推导断言恒保留）' },
+        reason: { type: 'string', description: '可选：说明本次改动的理由（落审计）' },
+      },
+      required: ['action'],
     },
     output: {
       schema: {

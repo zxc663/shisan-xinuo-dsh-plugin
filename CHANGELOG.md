@@ -1,5 +1,13 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 工具参数 schema 修复（2026-10-14）：宿主升级后整轮运行失败
+
+- **症状（真机）**：桌面档会话整轮失败——`Invalid schema for function 'discipline_gate': schema must be a JSON Schema of 'type: "object"', got 'type: null'`（连续两轮）。
+- **根因**：三个工具的 `parameters` 用的是自有**扁平 DSL**（`level: {type:'string', required:true, …}`），`discipline_tools` 更是 `parameters: {}`。宿主新版本要求**标准 JSON Schema**（`type:"object"` + `properties` + `required` 数组），空对象被读成 `type:null` ⇒ **工具注册校验失败、整轮中断**。
+- **修复**：`discipline_gate`／`discipline_task`／`discipline_tools` 的参数全部改为标准 JSON Schema（`required` 由逐字段布尔改为数组）。`execute()` 读参方式不变。
+- **护栏（新增套件）**：`tests/tool-schema.test.mjs` —— 逐个构建工具定义并断言 `parameters.type === 'object'`；该类故障此后会**在套件里直接红**，而不是到真机上才炸（18/18 套件）。
+- **教训**：宿主为 alpha，**工具契约会变**；凡"宿主读我们给的结构"的地方，都应有形态护栏（本条即补上）。
+
 ## F2 盲区护栏（2026-10-13）：零工具调用却声称完成
 
 - 背景：完成信号电池的 F2 发现——回合若没有任何工具调用，收口链（断言自动复核／gate 强制）整体跳过，此类回合的"已完成"声明无任何核验；电池中 4 例零工具回合均为诚实停点，但**盲区本身成立**。
