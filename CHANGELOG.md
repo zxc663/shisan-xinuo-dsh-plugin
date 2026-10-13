@@ -1,5 +1,13 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## B3b 生成器与全量语义回归（2026-10-13，拦截换芯收口 · B3 全清）
+
+- **生成器**（`scripts/gen-permission-rules.mjs`）：`content/rules.json → .dsh/rules.yaml`——19 条规则（不可豁免域 ask→豁免 allow→其余域 ask）；ASCII 大小写折叠（上游 regex 模式无 `i` 标志）；镜像上游 ReDoS 护栏做生成期预检（fail loud）；确定性输出＋provenance 头＋`--check`。内容面两条旧形态等价简改（rm 子句／node-python 选项组有界化），豁免 flags `im→i`；单测 33 断言（第 14 套）。
+- **全量语义回归**（`scripts/regression-permission-rules.mjs`）：离线导入上游 v0.7.15 导出面（parseRulesDocument/compileRules/matchRules）对生成文件求首命中，与我方判定逐条对照——**170 例 / 10 套件，阻断·域·注解三面 0 不一致**；语料单源化 `tests/rule-corpus.mjs`（四套既有测试改引用，重构后全量复跑绿）。
+- **真机抽检**（permtest 隔离档）：A 臂（我方退观测）Remove-Item 被上游 ask→审批不可用 fail-closed 拦截（会话日志 `approval/asked` reason=生成规则文案）；C 臂 `l3-intercept→upstream-block(upstreamKind=ask)`（B3a 翻转闭环）；豁免 `git clean -n` 真实放行。
+- **集成发现**：`patternMode: regex` 连坐上游内置基线——v0.7.15 builtin 为 glob 写法（`+s`/`4???` 等），regex 模式编译失败致**整个条目静默失活**（首轮三跑零拦截实证）；处置＝配置行 `builtin.enabled: false`，转换版基线（`builtin.path`）记后续候选。
+- 报告：`docs/b3b-generator-and-semantic-regression-20261013.md`；决策表回执：`docs/reuse-decision-permission-rules.md` B3b 节。
+
 ## 完全权限感知批（2026-10-13，用户裁决：全放开模式下不应弹审批卡）
 
 - **机制**：监听 session/event 流中的 `sandbox/mode` 事件（宿主 SandboxMode 枚举=`read-only`/`workspace-write`/`danger-full-access`，asar 实证）——`danger-full-access` 时 L3 拦截退位为仅记录（`l3-detected decision=allow-full-access`），不再弹审批卡；discipline_gate 的 L3 拒跑同样放行（`isFullAccess` 注入）；恢复受限模式后拦截自动恢复。模式变更落 `sandbox-mode` 日志行（可审计）+横幅提示。

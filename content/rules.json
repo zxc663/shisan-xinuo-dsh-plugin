@@ -21,7 +21,7 @@
     },
     {
       "domain": "数据删除",
-      "pattern": "(?<![-\\w])rm\\s+(?:-\\S+\\s+)*\\S|\\bRemove-Item\\b|\\bClear-Content\\b|(?:^|[;&|]\\s*|\\n\\s*)(?:del|erase|rd|rmdir|ri)(?:\\s+\\S|\\s*(?:$|[;&|]))|\\b(?:cmd|cmd\\.exe|powershell|pwsh)\\b[^;&|\\n]{0,80}\\b(?:del|erase|rd|rmdir)\\b|git\\s+(?:reset\\s+--hard|clean\\b|stash\\s+clear\\b|checkout\\s+--|stash\\s+(?:drop|clear))|\\bshred\\b|\\bunlink\\b|\\bdocker\\s+(?:rmi\\b|volume\\s+rm\\b|image\\s+prune\\b|system\\s+prune\\b)|\\b(?:node|python|python3)\\s+(?:-\\w+\\s+)*[\"'].*\\b(?:unlinkSync|rmSync|rmtree|os\\.remove)\\b|sed\\s+-i[^;&|\\n]*\\d+d\\b|\\bfind\\s[^;&|\\n]*-delete\\b|\\btruncate\\s+-s\\s|\\bmv\\s[^;&|\\n]*\\/dev\\/null\\b|\\bkubectl\\s+delete\\b",
+      "pattern": "(?<![-\\w])rm\\s+\\S|\\bRemove-Item\\b|\\bClear-Content\\b|(?:^|[;&|]\\s*|\\n\\s*)(?:del|erase|rd|rmdir|ri)(?:\\s+\\S|\\s*(?:$|[;&|]))|\\b(?:cmd|cmd\\.exe|powershell|pwsh)\\b[^;&|\\n]{0,80}\\b(?:del|erase|rd|rmdir)\\b|git\\s+(?:reset\\s+--hard|clean\\b|stash\\s+clear\\b|checkout\\s+--|stash\\s+(?:drop|clear))|\\bshred\\b|\\bunlink\\b|\\bdocker\\s+(?:rmi\\b|volume\\s+rm\\b|image\\s+prune\\b|system\\s+prune\\b)|\\b(?:node|python|python3)\\s+(?:-\\S+\\s+){0,3}[\"'].*\\b(?:unlinkSync|rmSync|rmtree|os\\.remove)\\b|sed\\s+-i[^;&|\\n]*\\d+d\\b|\\bfind\\s[^;&|\\n]*-delete\\b|\\btruncate\\s+-s\\s|\\bmv\\s[^;&|\\n]*\\/dev\\/null\\b|\\bkubectl\\s+delete\\b",
       "flags": "i"
     },
     {
@@ -87,7 +87,7 @@
     },
     {
       "pattern": "git\\s+clean\\b[^\\n;&|]*?(?:^|\\s)-n(?:\\s|$)",
-      "flags": "im"
+      "flags": "i"
     },
     {
       "pattern": "^\\s*(?:echo|Write-Output|Write-Host|printf)\\s(?![^;&|]*>>?)[^;&|]*$",

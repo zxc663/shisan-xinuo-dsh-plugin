@@ -54,4 +54,12 @@
   - V1：deny 命中 → 模型按旧习惯拿 gate 重试同命令 → **`bypass-blocked`＋gate `refused`**（对照 B1 run1：当时 gate 真跑成功——**旁路已关闭**）；模型如实报告"收口验证被拒"。
   - V2：栈场景（Remove-Item 同命中双方）→ **上游 deny 先手**（模型看到上游 reason；`upstream-block` l3=数据删除）——对照 B1 run2 我方先手，**翻转生效**；文件保留、诚实收口。
 - **测试**：新增 `tests/bypass-guard.test.mjs`（20 例：判定/归一/记录/包装态匹配/TTL/gate 集成）；全量 12 套全绿。
-- **遗留**：必改项 #3 生成器（`rules.json→.dsh/rules.yaml`＋`patternMode: regex` 配置行＋抽检）＝下一批 **B3b**；全量语义回归随 B3b 收口。
+- **遗留（已由 B3b 收口，见下节）**：必改项 #3 生成器（`rules.json→.dsh/rules.yaml`＋`patternMode: regex` 配置行＋抽检）＋全量语义回归。
+
+## B3b 实施记录（2026-10-13 · 必改项 #3 生成器＋全量语义回归收口 → B3 全清）
+
+- **生成器**：`scripts/gen-permission-rules.mjs`——`content/rules.json → .dsh/rules.yaml`；输出 19 条=不可豁免域 ask(2)→豁免 allow(8)→其余域 ask(9)；ASCII 大小写折叠补足上游 regex 模式无 `i` 标志；镜像上游 ReDoS 结构护栏做生成期预检（fail loud）。内容面两条旧形态等价简改（rm 子句／node-python 选项组）＋豁免 flags `im→i`。单测 33 断言（`tests/gen-permission-rules.test.mjs`）。
+- **配置行**：profile 覆盖 `patternMode: regex` ＋ **`builtin.enabled: false`**——实测发现 v0.7.15 内置基线为 glob 写法，regex 模式下编译失败致**整个条目静默失活**（首轮三跑零拦截实证）；转换版基线记后续候选。
+- **全量语义回归**：`scripts/regression-permission-rules.mjs`（离线导入上游 `parseRulesDocument/compileRules/matchRules`）与我方判定逐条对照——**170 例 / 10 套件 / 阻断·域·注解三面 0 不一致**；语料单源=`tests/rule-corpus.mjs`（四套既有测试改引用）。
+- **真机抽检**（permtest 隔离档）：A 臂（我方退观测）Remove-Item 仍被上游 ask→审批不可用 fail-closed 拦截（`approval/asked` reason=生成规则文案）；C 臂 `l3-intercept→upstream-block(upstreamKind=ask)`（B3a 翻转闭环）；豁免 `git clean -n` 真实放行。
+- **结论**：M1（直用＋映射）落地；拦截层外置可用；core 正则层退役 diff 与内置基线转换=收尾候选。详见 `docs/b3b-generator-and-semantic-regression-20261013.md`。

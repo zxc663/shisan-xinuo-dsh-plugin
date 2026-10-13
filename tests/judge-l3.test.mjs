@@ -1,28 +1,7 @@
 import { judgeL3 } from '../src/shisan-xinuo-core.ts'
+// 预注册判据：正样例必须命中指定域，负样例必须放行（语料单源=tests/rule-corpus.mjs，与跨引擎回归共用）
+import { JUDGE_L3_POS as POS, JUDGE_L3_NEG as NEG } from './rule-corpus.mjs'
 
-// 预注册判据：正样例必须命中指定域，负样例必须放行
-const POS = [
-  ['rm -rf /tmp/build', '数据删除'],
-  ['git reset --hard origin/main', '数据删除'],
-  ['git push --force origin main', '远端写/发布'],
-  ['git push -f origin main', '远端写/发布'],
-  ['npm publish', '远端写/发布'],
-  ['reg add HKLM\\Software\\X /v a', '生产配置写'],
-  ['chmod 777 app', '权限变更'],
-  ['dd if=img of=/dev/sda', '系统迁移/覆盖'],
-]
-const NEG = [
-  'npm test',
-  'git status',
-  'git push origin main',
-  'ls -la',
-  'mkdir -p src/components',
-  'npm install',
-  'git commit -m "msg"',
-  'echo hello',
-  'node --version',
-  'cat package.json',
-]
 let fail = 0
 for (const [cmd, want] of POS) {
   const got = judgeL3(cmd)

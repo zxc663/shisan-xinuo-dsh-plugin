@@ -53,13 +53,30 @@ DSH profile 的 `cordis.patch.yml` 追加：
 ## 测试与测量
 
 ```bash
-npm test   # 13 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
+npm test   # 14 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # headless 三臂实验（环境经上表变量注入）
 ```
 
 轨迹层取证方法（会话注入面/工具线缆面/审批事件解析）见 `tmp/trace_*.py`（实验辅助脚本，不入库分发）。
+
+## 拦截换芯：外置拦截引擎（可选 · B3 落地）
+
+拦截层可外置给社区成熟引擎 [dsh-permission-rules](https://github.com/PerryLink/dsh-permission-rules)（Apache-2.0；本项目实测 v0.7.15）：危险域拦截由其规则引擎承载，本插件保留「判级→规则」「收口真值」「steer 强制」「工具预算」「遥测对账」全部净增量。
+
+- 生成规则文件（唯一规则源=`content/rules.json`）：`node scripts/gen-permission-rules.mjs --out <工作区>/.dsh/rules.yaml`
+- profile 配置行（regex 模式为生成文件前提；v0.7.15 内置基线为 glob 写法、regex 模式下会致条目失活，故须关闭）：
+
+```yaml
+- id: permission-rules
+  config:
+    patternMode: regex
+    builtin: { enabled: false }
+```
+
+- 语义回归（与我方引擎全量语料逐条对照；引擎缺席时 SKIP）：`node scripts/regression-permission-rules.mjs` —— 2026-10-13 实测 170 例 0 不一致。
+- 真机抽检与映射表：`docs/b3b-generator-and-semantic-regression-20261013.md`。
 
 ## 实验与证据
 
