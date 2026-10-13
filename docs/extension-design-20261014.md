@@ -64,7 +64,10 @@
    - **全局同名注册 → 拒绝**：`THROW error=tool "job_output" is already registered (for a per-agent variant, register through that agent's agent.ctx instead)`
    - **per-agent 同名注册 → 接受**：`[probe-agent-register] target=job_output result=ACCEPTED disposer=function`
    ⇒ **"改宿主工具"这条路成立**：不是全局覆盖，而是**在某个会话（agent）级注册同名变体**，从而改写该工具在该会话内的行为。
-2. UI 插件族是否有**消息渲染注册点**？（决定 B3 是否可做）
+2. ~~UI 插件族是否有**消息渲染注册点**？~~ **✅ 已结案（2026-10-14 接口面实查）｜可行，两条通道**：
+   - **显示层**：`registerMessageConversationNode(ctx)`（会话视图的消息节点渲染注册）＋ `ctx.slots`／`ctx.uiRenderer`／`ctx.uiConversation`（槽位与渲染服务）⇒ 可把宿主注入渲染成"系统注入卡"，而非用户气泡。
+   - **内容层**：`ctx.sessions.registerMessageProjection(def)`——宿主文档原文："Plugins declare content-changing events with `@messageProjection` and register a pure definition … Session calls the definition **before accepting an event** and caches its immutable message updates." ⇒ 它能在**消息被接受前改写内容**。
+   - **本项目只采用显示层，明确不用内容投影**。理由：内容投影改的是**会话记录本身**，而会话日志是本项目的**证据底座**（判据、退出码、审批链全部以它为准）；改它等于改证据，与本项目"证据不可被改写"的第一原则直接冲突（同 §三之补 红线）。⇒ 记录为**可用但禁用**的能力，并在 README 的风险节标注。
 3. `steer` 与工具卡组合时，**工具卡是否随下一次请求进入模型可见面**？（决定 B1 的唤醒+证据是否自洽）
 4. `skills` 提供者注册后，宿主目录是否**去重/合并**？（决定 A 的实际成本影响 —— 若合并，则"自供给 + 指向"确实能改变实际可见内容）
 
@@ -77,5 +80,7 @@
 ## 四、下一步（按推荐序）
 
 1. 验 §三.1：写一个最小插件对同名工具做 register，看宿主行为（**只读探测，不动现有工具**）；
-2. 若可覆盖 → 评估"用工具卡替换伪装话术"（B1）并实现；
-3. 再做 §三.2 的 UI 面探测，决定 B3 是否纳入；否则以文本形态交付并写明边界。
+2. ~~§三.1~~ ✅ 结案：同名变体可行 ⇒ "改宿主工具"路径成立（红线：只许加强）；
+3. ~~§三.2~~ ✅ 结案：显示层渲染点可行 ⇒ **B3 纳入**（独立 UI 插件，渲染"系统注入卡"与"证据卡"）；**内容投影可用但禁用**；
+4. 落地序（建议）：**B1（工具卡承载证据与要求，语义不再伪装）→ 再 B3（UI 渲染，好看）**；B3 必须**可降级**（UI 缺失时退回 B1 形态）。
+5. 仍待验证：§三.3（工具卡是否进入模型可见面）、§三.4（skill provider 注册后宿主目录是否合并去重，决定 A 的实际成本影响）。
