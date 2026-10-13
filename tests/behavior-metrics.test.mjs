@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -103,5 +103,11 @@ check('C3c judge 命中=L3', hostLevelFromCmd('rm -rf D:\\x', () => '数据删�
 check('C3d 空命令=L1', hostLevelFromCmd(''), 'L1')
 check('C3e 序：L1<L2<L3', levelRank('L1') < levelRank('L2-S') && levelRank('L2-F') < levelRank('L3'), true)
 check('C3f 未声明=最低', levelRank('') === 0, true)
+// C2 前置链：工具调用 → extractCommand → hostLevelFromCmd（真实参数形状）
+check('C2a 只读读文件调用→L1', hostLevelFromCall('read', extractCommand({ name: 'read', arguments: { file_path: 'D:\\x\\a.txt' } })), 'L1')
+check('C2b 写文件调用→L2（按工具名兜住）', hostLevelFromCall('write', extractCommand({ name: 'write', arguments: { file_path: 'D:\\x\\a.txt', content: 'x' } })), 'L2')
+check('C2c pwsh 删除命令→L2', hostLevelFromCall('pwsh', extractCommand({ name: 'pwsh', arguments: { command: 'Remove-Item D:\\x' } })), 'L2')
+check('C2d judge 命中→L3', hostLevelFromCall('pwsh', 'rm -rf D:\\x', () => '数据删除'), 'L3')
+check('C2e 写类工具名亦被识别', hostLevelFromCall('apply_patch', ''), 'L2')
 
 process.exit(fail > 0 ? 1 : 0)

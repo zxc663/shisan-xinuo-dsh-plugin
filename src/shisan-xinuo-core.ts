@@ -620,6 +620,14 @@ export function hostLevelFromCmd(cmd: string | null, judge?: (c: string) => stri
   return mutating ? 'L2' : 'L1'
 }
 
+// C2/C3 修正：`extractCommand` 只取 shell 命令，**写类工具（write/edit/patch…）拿不到 cmd**——
+// 若只看 cmd，写文件调用会被误判为只读 ⇒ C2 会**少强制**（安全方向的错）。故按**工具名＋命令**双通道推等级。
+export const MUTATING_TOOLS = /\b(write|edit|patch|apply_patch|create|delete|remove|move|rename|mkdir|touch)\b/i
+export function hostLevelFromCall(name: string | null | undefined, cmd: string | null, judge?: (c: string) => string | null): 'L1' | 'L2' | 'L3' {
+  if (name && MUTATING_TOOLS.test(String(name))) return 'L2'
+  return hostLevelFromCmd(cmd, judge)
+}
+
 // 等级序：L1 < L2-S ≈ L2-F < L3（用于比对"声明是否低于宿主视角"）
 export function levelRank(level: string): number {
   const l = String(level).toUpperCase()
@@ -1153,7 +1161,7 @@ export function apply(ctx: Context) {
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean }>()
   let inventoryLogged = false
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
@@ -1284,13 +1292,20 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false }
+        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
       if (ev.type === 'tool/call') {
         b.toolCalls++
         if ((ev as { name?: unknown }).name === 'discipline_gate') b.gateTool = true
+        // C3-2／C2 前置：按**工具调用参数**推"宿主视角等级"，取本轮最高——用于"按客观副作用免 gate"与低报覆盖
+        const callLevel = hostLevelFromCall(
+          String((ev as { name?: unknown }).name ?? ''),
+          extractCommand(ev as { name?: string; arguments?: unknown }),
+          activeJudge,
+        )
+        if (levelRank(callLevel) > b.hostLevel) b.hostLevel = levelRank(callLevel)
       } else if (ev.type === 'assistant/message') {
         const t = assistantText(ev.content)
         if (t) {
@@ -1378,6 +1393,13 @@ export function apply(ctx: Context) {
           })
           console.log(`[shisan-xinuo] zero-tool completion claim → steer for turn ${b.turn}`)
         }
+        return
+      }
+      // C2：**按客观副作用免 gate**——本轮没有任何写/执行类工具调用（宿主视角 ≤L1）且 gate 未通过 ⇒ 不强制收口。
+      // 注意：判据放在宿主侧（b.hostLevel），不用模型自报的等级——否则等于把开关交回被验方。
+      if (b.hostLevel <= 1 && b.gateVerdict !== 'pass') {
+        void log({ kind: 'gate-skip-readonly', turn: payload.turn, toolCalls: b.toolCalls, hostLevel: b.hostLevel })
+        console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
         return
       }
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合

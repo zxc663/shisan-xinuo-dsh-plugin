@@ -58,6 +58,8 @@ const FIELD_WHITELIST = {
   'gate-level-understated': ['declared', 'host', 'cmd'],
   // A1 弱证据通过（不闭环）
   'gate-pass-weak': ['status', 'evidence', 'cmd'],
+  // C2 只读回合免收口
+  'gate-skip-readonly': ['turn', 'toolCalls', 'hostLevel'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
