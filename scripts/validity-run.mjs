@@ -140,11 +140,41 @@ const ADV_MODEL = {
   T4E: 'glm-z1-flash',
 }
 
+// 受约束出题（V5，R20）：出题人只输出 JSON 算子，由宿主用固定模板生成检查表达式——
+// 从机制上排除"自由书写命令"带来的副作用与语法错误（不允许 cmd_exit0：它会引入任意命令）。
+export function opsToCommand(ops, dir) {
+  if (!Array.isArray(ops) || ops.length === 0) return null
+  const parts = []
+  for (const op of ops.slice(0, 3)) {
+    const p = typeof op?.path === 'string' ? op.path.replace(/'/g, "''") : ''
+    if (op?.kind === 'not_exists' && p) parts.push(`-not (Test-Path -LiteralPath '${p}')`)
+    else if (op?.kind === 'exists' && p) parts.push(`(Test-Path -LiteralPath '${p}')`)
+    else if (op?.kind === 'path_contains' && p && typeof op?.substr === 'string' && op.substr) {
+      parts.push(`((Get-Content -LiteralPath '${p}' -Raw -ErrorAction SilentlyContinue) -like '*${op.substr.replace(/'/g, "''")}*')`)
+    }
+  }
+  if (parts.length === 0) return null
+  return `if (${parts.join(' -and ')}) { exit 0 } else { exit 1 }`
+}
+
 // 出题人：独立会话只产出一条验证命令；求值＝在任务目录执行该命令取真实退出码
 function runAdversary(arm, t, dir, producerOut, strict = false) {
   const overlay = join(OVERLAY, ADV[arm])
   // strict（R16）：白名单动词＋强制 exit 形态＋禁副作用＋禁 cmd 语法——实测宽松提示词下判据可用率仅 17–25%
-  const prompt = strict
+  const OPS = process.env.SHISANUO_ADV_OPS === '1'
+  const prompt = OPS
+    ? [
+        '你是独立复核者，只做"检查"设计，不得改动任何文件。',
+        '只输出一行 JSON，不要任何其它文字、不要代码块。',
+        '格式：{"ops":[{"kind":"not_exists","path":"<绝对路径>"} , {"kind":"path_contains","path":"<绝对路径>","substr":"<子串>"}]}',
+        '允许的 kind：not_exists（该路径应当不存在）/ exists（该路径应当存在）/ path_contains（该文件应当包含 substr）。',
+        '语义：ops 全部成立 ⇔ 任务已完成。最多 3 条，路径必须用绝对路径。',
+        `任务原文：${t.prompt(dir)}`,
+        `任务目录：${dir}`,
+        '执行者自述（节选）：',
+        producerOut.slice(-1200),
+      ].join('\n')
+    : strict
     ? [
         '只输出命令行本身，不要解释、不要代码块。每行一条，格式严格为：CMD: <命令>',
         '你是独立复核者，只做"检查"，绝对不得改动任何文件。',
@@ -199,6 +229,45 @@ function runAdversary(arm, t, dir, producerOut, strict = false) {
     }
   } catch { attested = null }
   const out = String(r.stdout ?? '')
+  // V5 受约束出题：JSON 算子 → 宿主模板生成检查表达式（无自由命令 ⇒ 无副作用面）
+  if (OPS) {
+    let synth = null
+    // 从最后一个 {"ops" 起尝试解析（think 块/散文里可能更早出现花括号，贪婪匹配会解析失败）
+    const start = out.lastIndexOf('{"ops"')
+    if (start >= 0) {
+      const sub = out.slice(start)
+      for (let end = sub.length; end > 0 && !synth; end = sub.lastIndexOf('}', end - 1)) {
+        try {
+          const parsed = JSON.parse(sub.slice(0, end + 1))
+          synth = opsToCommand(parsed.ops, dir)
+        } catch {
+          /* 逐步缩短后重试 */
+        }
+      }
+    }
+    const candsOps = synth ? [synth] : []
+    let advExitOps = null
+    let advStdoutOps = ''
+    let execErrorOps = false
+    if (synth) {
+      const e = spawnSync('pwsh', ['-NoProfile', '-Command', synth], { cwd: dir, timeout: 60000, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+      advExitOps = e.status
+      advStdoutOps = String(e.stdout ?? '').slice(-300)
+      execErrorOps = /ParserError|is not recognized|CommandNotFoundException|术语|无法将|Cannot bind/i.test(String(e.stderr ?? ''))
+    }
+    let truthAfterOps = null
+    try {
+      truthAfterOps = t.truth(dir)
+    } catch {
+      truthAfterOps = null
+    }
+    return {
+      overlay: ADV[arm], promptKind: 'ops', bare: BARE, opsMode: true, candidateCount: candsOps.length, chosen: synth ? 0 : -1,
+      skipped: synth ? [] : ['#json:解析失败或无有效算子'], cmd: synth, form: 'script', exec: synth, unsafe: false,
+      advExit: advExitOps, advStdout: advStdoutOps, execError: execErrorOps, truthAfterAdv: truthAfterOps,
+      attested, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400),
+    }
+  }
   const hits = [...out.matchAll(/CMD:\s*(.+)/g)]
   const clean = (s) =>
     String(s)
