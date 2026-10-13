@@ -57,6 +57,7 @@ DSH profile 的 `cordis.patch.yml` 追加：
 | `SHISANUO_RULES` / `SHISANUO_DISCIPLINE` / `SHISANUO_BUDGET` | 覆盖规则包/纪律文本/预算策略文件路径 |
 | `SHISANUO_LOG_DIR` | 覆盖遥测日志目录（默认 `<仓库>/logs`）；`SHISANUO_LOG_DISABLE=1` 关闭落盘 |
 | `SHISANUO_ASSERTIONS` | 会话外钉死验收断言（pinned；格式同 `discipline_task`：`kind:payload; …`）——模型不可移除/改写，clear/replace 均无效 |
+| `SHISANUO_L3_OFF` / `SHISANUO_NO_ASSERT` | 研究旗标（实验用，默认关）：拦截退位为仅记录／关闭断言面（不推导、不注册登记工具）——用于对照实验 |
 | `SHISANUO_ARM=A\|B\|C` | 实验臂切换（优先于旗标文件；A=惰性观测，B=纯纪律文本，C=全量，默认 C） |
 | `SHISANUO_BUDGET_LEVEL` | 启动即按该判级裁剪工具面（测试钩子） |
 | `SHISANUO_DSH_BIN` / `SHISANUO_DSH_HOME` / `SHISANUO_E1_TMP` | E1 批量实验的本机环境（DSH 入口/home/临时目录） |

@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 完成信号有效性验证轮（2026-10-13，85 会话）
+
+- 执行预注册电池（`docs/design-specs/completion-signal-validity-plan-20261013.md`，含 R1–R5）：五臂（A 裸/B 仅 gate/C 全量/D 全量＋锚/P 锚替启发式）× 锚定 12＋无锚 6＋陷阱 1；模型固定免费档，headless 批量。
+- 结果：`docs/validity-report-20261013.md`——H1 不可分辨（0/12 vs 0/12）、H4 成立（误推导 3/13，外部锚 0）、F1/F2/F3/F4 四条附加发现；建议修订=推导降级为辅助、锚优先（待批）。
+- 工具：新增 `scripts/validity-run.mjs`（含 `--reclassify` 离线重判与断点续跑）；核心新增研究旗标 `SHISANUO_L3_OFF`／`SHISANUO_NO_ASSERT`（默认关）。
+
 ## 判据锚点批（2026-10-13，审计续审之三）
 
 - 新增 **pinned 断言（判据锚点）**：`SHISANUO_ASSERTIONS` 在会话外钉死验收断言——不进入任务记录、`clear`/`replace` 物理不可触；收口链（turn-stopping 自动复核/收口遗留落账/gate 断言复核）统一按「pinned>auto>tool」求值。

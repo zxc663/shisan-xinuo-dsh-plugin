@@ -781,6 +781,9 @@ const LOG_DIR = process.env.SHISANUO_LOG_DIR ?? join(REPO_ROOT, 'logs')
 const LOG_FILE = join(LOG_DIR, 'exec-log.jsonl')
 // 不留痕环境开关：SHISANUO_LOG_DISABLE=1 时不落盘（代价=放弃审计底座；启动时以 stdout 一行声明）
 const LOG_ENABLED = process.env.SHISANUO_LOG_DISABLE !== '1'
+// 研究旗标（仅实验用，默认关闭）：L3_OFF=拦截层退位为仅记录（剔除 headless 审批 fail-closed 混杂）；NO_ASSERT=关闭断言面
+const L3_ENFORCE = process.env.SHISANUO_L3_OFF !== '1'
+const ASSERT_LAYER = process.env.SHISANUO_NO_ASSERT !== '1'
 
 // ── 遥测脱敏（写入前深处理；覆盖常见密钥形态，非穷尽——日志仍按敏感数据处理，可用 SHISANUO_LOG_DIR 指到私密目录）──
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -857,6 +860,9 @@ export function apply(ctx: Context) {
   if (pinnedRecords.length > 0) {
     void log({ kind: 'pinned', count: pinnedRecords.length, marks: pinnedRecords.map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240) })
     console.log(`[shisan-xinuo] pinned assertions: ${pinnedRecords.length}`)
+  }
+  if (!L3_ENFORCE || !ASSERT_LAYER) {
+    console.log(`[shisan-xinuo] research flags: L3_ENFORCE=${L3_ENFORCE} ASSERT_LAYER=${ASSERT_LAYER}`)
   }
   // B3 旁路封堵：被下游（如 dsh-permission-rules）拒绝的命令指纹（10 分钟 TTL；收口直跑通道前置检查）
   const deniedFingerprints = new Map<string, number>()
@@ -944,6 +950,11 @@ export function apply(ctx: Context) {
     void log({ kind: 'pre-execute', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit })
     if (hit) {
       stats.intercepted++
+      if (!L3_ENFORCE) {
+        // 研究旗标（SHISANUO_L3_OFF=1）：拦截层退位为仅记录——用于完成信号对照实验，剔除审批 fail-closed 混杂
+        void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'allow-research' })
+        return next()
+      }
       if (armMode !== 'C') {
         // A/B 臂：命中只记录不处置（A=裸基线「无拦截时模型真做了」；B=纯文本对照「文本纪律是否自发停」）
         void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'allow' })
@@ -1056,7 +1067,7 @@ export function apply(ctx: Context) {
         // 只认真正的用户消息：runtime-context / skill-catalog 等注入文本同样走 user/message 信封（B2 实测），一律剔除。
         if (typeof srcKind === 'string' && srcKind !== 'user') return
         if (!txt || txt.startsWith(STEER_PREFIX)) return
-        const derived = deriveAssertionsFromUserText(txt)
+        const derived = ASSERT_LAYER ? deriveAssertionsFromUserText(txt) : []
         const key = sidKeyOf(session)
         if (derived.length > 0 && lastDerivedText.get(key) !== txt) {
           lastDerivedText.set(key, txt)
@@ -1292,10 +1303,14 @@ export function apply(ctx: Context) {
         if (typeof d === 'function') gateToolDispose = d
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
         console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS === '1' ? 'ON (experimental)' : 'off (default)'}`)
-        const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
-        const d2 = toolsAny.register(taskDef)
-        if (typeof d2 === 'function') statusDisposes.push(() => d2())
-        console.log('[shisan-xinuo] discipline_task tool registered (acceptance-assertion registry)')
+        if (ASSERT_LAYER) {
+          const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
+          const d2 = toolsAny.register(taskDef)
+          if (typeof d2 === 'function') statusDisposes.push(() => d2())
+          console.log('[shisan-xinuo] discipline_task tool registered (acceptance-assertion registry)')
+        } else {
+          console.log('[shisan-xinuo] discipline_task skipped (SHISANUO_NO_ASSERT=1 research mode)')
+        }
       } catch (e) {
         // 注册失败=降级为纯文本 GATE 模式；拦截与机检不受影响（错误处理不拖垮宿主面）
         console.error('[shisan-xinuo] gate tool registration FAILED (fallback to text GATE):', String(e).slice(0, 200))
