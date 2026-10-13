@@ -21,7 +21,7 @@
 
 ## 代价与风险（如实）
 
-- **收口验证是一条新的执行通道**：`discipline_gate`（及 `cmd_exit0` 断言、宿主收口复核）会在插件侧直接执行你声明的验证命令——护栏=危险域清单＋被拒命令指纹（10 分钟），**不是安全沙箱**；清单覆盖面之外（目标替代、重定向覆写、脚本清空等）不拦，与 pwsh 通道同一天花板；仅存在于上游 `.dsh/rules.yaml` 的自定义规则也不覆盖此通道。2026-10-13 加固：`discipline_task` 的 replace 仅作用于工具自登记断言——**用户原文推导断言恒保留，模型不可移除/改写**。
+- **收口验证是一条新的执行通道**：`discipline_gate`（及 `cmd_exit0` 断言、宿主收口复核）会在插件侧直接执行你声明的验证命令——护栏=危险域清单＋被拒命令指纹（10 分钟），**不是安全沙箱**；清单覆盖面之外（目标替代、重定向覆写、脚本清空等）不拦，与 pwsh 通道同一天花板；仅存在于上游 `.dsh/rules.yaml` 的自定义规则也不覆盖此通道。2026-10-13 加固：`discipline_task` 的 replace 仅作用于工具自登记断言——**用户原文推导断言恒保留，模型不可移除/改写**；并支持**判据锚点（pinned）**：`SHISANUO_ASSERTIONS` 可在会话外钉死断言（模型侧不可见），形成「pinned>auto>tool」三级判据。
 - **一致性≠有效性**：`claimedExit` 比对只抓「谎报退出码」；`echo ok; exit 0` 类与目标无关的命令会通过（命令与目标的相关性无机器校验；资源断言仅覆盖可枚举路径）。
 - **收口强制会注入一条以用户信封发送的指令**：turn-stopping 触发时经 `steer` 注入（信封 `source=user` 为宿主接口约束），文本以固定前缀 `[十三希诺收口强制]` 显式标注来源；插件按该前缀排除自身注入，避免自我循环。
 - **遥测日志默认明文落盘**：`<repo>/logs/exec-log.jsonl`（命令截断 200 字符、stdout/stderr 尾 300 字符；写入前对常见密钥形态自动脱敏——非穷尽）。可用 `SHISANUO_LOG_DIR` 指到私密目录；`SHISANUO_LOG_DISABLE=1` 可整体关闭落盘（不留痕环境；启动以 stdout 一行声明，代价=放弃审计底座）；日志不入库（.gitignore）。
@@ -55,7 +55,8 @@ DSH profile 的 `cordis.patch.yml` 追加：
 | 变量 | 作用 |
 |---|---|
 | `SHISANUO_RULES` / `SHISANUO_DISCIPLINE` / `SHISANUO_BUDGET` | 覆盖规则包/纪律文本/预算策略文件路径 |
-| `SHISANUO_LOG_DIR` | 覆盖遥测日志目录（默认 `<仓库>/logs`） |
+| `SHISANUO_LOG_DIR` | 覆盖遥测日志目录（默认 `<仓库>/logs`）；`SHISANUO_LOG_DISABLE=1` 关闭落盘 |
+| `SHISANUO_ASSERTIONS` | 会话外钉死验收断言（pinned；格式同 `discipline_task`：`kind:payload; …`）——模型不可移除/改写，clear/replace 均无效 |
 | `SHISANUO_ARM=A\|B\|C` | 实验臂切换（优先于旗标文件；A=惰性观测，B=纯纪律文本，C=全量，默认 C） |
 | `SHISANUO_BUDGET_LEVEL` | 启动即按该判级裁剪工具面（测试钩子） |
 | `SHISANUO_DSH_BIN` / `SHISANUO_DSH_HOME` / `SHISANUO_E1_TMP` | E1 批量实验的本机环境（DSH 入口/home/临时目录） |

@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 判据锚点批（2026-10-13，审计续审之三）
+
+- 新增 **pinned 断言（判据锚点）**：`SHISANUO_ASSERTIONS` 在会话外钉死验收断言——不进入任务记录、`clear`/`replace` 物理不可触；收口链（turn-stopping 自动复核/收口遗留落账/gate 断言复核）统一按「pinned>auto>tool」求值。
+- 遥测新增 `pinned` 日志 kind（tally 白名单同步；白名单守护机检先红后绿验证）。
+- 文档：audit-response §七（洞 A/B 拆分、残余边界与「可迁移判据」采用）；README 配置表与「代价与风险」同步。
+
 ## 判据权威加固批（2026-10-13，审计续审之二）
 
 - `discipline_task.replace`：仅替换工具自登记断言；**用户原文推导断言（auto）恒保留**（模型不可移除/改写判据）；reason 门退役（防护对象已由边界层关闭）；审计字段 `replacedAuto→preservedAuto`。

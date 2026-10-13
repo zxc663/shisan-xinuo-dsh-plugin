@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import {
   deriveAssertionsFromUserText,
   parseAssertionSpec,
+  pinnedAssertionRecords,
   explainAssertion,
   evaluateAssertion,
   formatAssertionResults,
@@ -85,6 +86,13 @@ t('eval: cmd_exit0 注入 1=不过', false, (await evaluateAssertion({ kind: 'cm
 t('format: ✔/✘ 标记', true, formatAssertionResults([{ assertion: { kind: 'exists', path: 'a' }, ok: true, detail: '' }, { assertion: { kind: 'exists', path: 'b' }, ok: false, detail: '' }]).includes('✔') && formatAssertionResults([{ assertion: { kind: 'exists', path: 'b' }, ok: false, detail: '' }]).includes('✘'))
 
 // ── 任务工具（Mock 桥）──
+{
+  const recs = pinnedAssertionRecords('not_exists:D:\\x\\p.txt; cmd_exit0:git status')
+  t('pinned: 解析两条', 2, recs.length)
+  t('pinned: 来源标记 pinned', 'pinned', recs[0].source)
+  t('pinned: 空规格=空', 0, pinnedAssertionRecords('').length)
+  t('pinned: undefined=空', 0, pinnedAssertionRecords(undefined).length)
+}
 function mkBridge(init = []) {
   let recs = init
   const calls = { register: 0, clear: 0 }

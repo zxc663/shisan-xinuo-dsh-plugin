@@ -36,6 +36,7 @@ const FIELD_WHITELIST = {
   'task-auto': ['count', 'sourceKind', 'raw', 'mark'],
   'task-carryover': ['count', 'prior'],
   'task-register': ['status', 'mark', 'count', 'goal', 'mode', 'preservedAuto', 'reason'],
+  pinned: ['count', 'marks'],
   'assertion-unresolved': ['turn', 'count', 'gate'],
   'bypass-blocked': ['cmd', 'fingerprint'],
   'upstream-block': ['tool', 'cmd', 'upstreamKind', 'l3'],

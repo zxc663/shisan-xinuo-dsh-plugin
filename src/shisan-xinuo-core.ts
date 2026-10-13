@@ -522,7 +522,13 @@ export function matchDeniedFingerprint(store: Map<string, number>, candidate: st
 }
 
 // 任务记录验收桥（apply() 注入实现；工具与测试只依赖此接口）
-export interface AssertionRecord { assertion: AcceptanceAssertion; source: 'auto' | 'tool' }
+export interface AssertionRecord { assertion: AcceptanceAssertion; source: 'auto' | 'tool' | 'pinned' }
+
+// 判据锚点：会话外钉死的验收断言（SHISANUO_ASSERTIONS 注入）——不进入任务记录，模型侧不可移除/改写
+export function pinnedAssertionRecords(spec: string | undefined): AssertionRecord[] {
+  if (!spec || spec.trim() === '') return []
+  return parseAssertionSpec(spec).map((a) => ({ assertion: a, source: 'pinned' as const }))
+}
 export interface AcceptanceBridge {
   register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown, mode?: 'merge' | 'replace') => { count: number; mark: string; preservedAuto?: number }
   clear: (ctx?: unknown) => void
@@ -718,7 +724,7 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
   return {
     name: 'discipline_task',
     description:
-      '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可追加或替换工具自登记断言改正——用户原文推导的断言恒保留（如需改写，请用户重新下达指令）。',
+      '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可追加或替换工具自登记断言改正——用户原文推导的断言恒保留（如需改写，请用户重新下达指令）；会话外钉死的断言（pinned）不受本工具影响。',
     parameters: {
       action: { type: 'string', required: true, description: 'register | clear | status' },
       goal: { type: 'string', required: false, description: '任务目标原文摘录（随断言记录）' },
@@ -754,10 +760,10 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
       }
       if (action === 'clear') {
         const cur = deps.acceptance.list(execCtx)
-        const hasAuto = cur.some((x) => x.source === 'auto')
-        if (hasAuto) {
+        const hasLocked = cur.some((x) => x.source === 'auto' || x.source === 'pinned')
+        if (hasLocked) {
           void deps.log({ kind: 'task-register', status: 'clear-refused', count: cur.length })
-          return { status: 'refused', count: cur.length, message: 'REFUSED：当前含自动推导断言（源自用户原文），模型不得直接清空。请用 register 覆盖为正确断言（整组替换、留审计）；确需清空请由用户操作。' }
+          return { status: 'refused', count: cur.length, message: 'REFUSED：当前含自动推导或钉死断言（pinned：会话外注入），模型不得清空。请用 register 覆盖工具自登记断言（留审计）；确需清空请由用户操作。' }
         }
         deps.acceptance.clear(execCtx)
         void deps.log({ kind: 'task-register', status: 'cleared' })
@@ -846,6 +852,12 @@ export function apply(ctx: Context) {
   const disciplineLoad = loadTextWithFallback(process.env.SHISANUO_DISCIPLINE ?? contentDir + 'discipline.md', CORE_DISCIPLINE)
   void log({ kind: 'discipline', source: disciplineLoad.source, valid: disciplineLoad.valid, ...(disciplineLoad.reason ? { reason: disciplineLoad.reason } : {}) })
   const activeJudge = (c: string): string | null => judgeL3With(rulesLoad.rules, c)
+  // 判据锚点（pinned）：环境变量在会话外钉死验收断言（格式同 discipline_task）；模型不可见/不可改
+  const pinnedRecords = pinnedAssertionRecords(process.env.SHISANUO_ASSERTIONS)
+  if (pinnedRecords.length > 0) {
+    void log({ kind: 'pinned', count: pinnedRecords.length, marks: pinnedRecords.map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240) })
+    console.log(`[shisan-xinuo] pinned assertions: ${pinnedRecords.length}`)
+  }
   // B3 旁路封堵：被下游（如 dsh-permission-rules）拒绝的命令指纹（10 分钟 TTL；收口直跑通道前置检查）
   const deniedFingerprints = new Map<string, number>()
   const FINGERPRINT_TTL_MS = 10 * 60_000
@@ -1010,20 +1022,24 @@ export function apply(ctx: Context) {
       const add = assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' as const }))
       const merged = [...base, ...add]
       taskRecords.set(key, { raw: goal || prev?.raw || '', goal: goal || prev?.goal || '', assertions: merged, assertionsPassedAt: null, unresolvedLogged: false })
-      stats.assertion = `${merged.length} 条待复(${mode === 'replace' ? '替换工具断言' : '登记'})`
-      const mark = merged.map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240)
-      return { count: merged.length, mark, preservedAuto: autoKept }
+      const total = merged.length + pinnedRecords.length
+      stats.assertion = `${total} 条待复(${mode === 'replace' ? '替换工具断言' : '登记'})`
+      const mark = [...pinnedRecords, ...merged].map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240)
+      return { count: total, mark, preservedAuto: autoKept }
     },
     clear: (ctx) => {
       taskRecords.delete(resolveKey(ctx))
       stats.assertion = '未登记'
     },
-    list: (ctx) => taskRecords.get(resolveKey(ctx))?.assertions ?? [],
+    list: (ctx) => [...pinnedRecords, ...(taskRecords.get(resolveKey(ctx))?.assertions ?? [])],
     // 审计 F-04：调试探针（execctx-probe）已移除——生产遥测不再落宿主上下文样本
     evaluate: (a) => evaluateAssertion(a, { judge: gateJudge }),
     markPassed: (ctx) => {
-      const rec = taskRecords.get(resolveKey(ctx))
-      if (rec) { rec.assertionsPassedAt = Date.now(); stats.assertion = '已通过' }
+      const key = resolveKey(ctx)
+      const rec = taskRecords.get(key) ?? { raw: '', goal: '', assertions: [], assertionsPassedAt: null, unresolvedLogged: false }
+      rec.assertionsPassedAt = Date.now()
+      taskRecords.set(key, rec)
+      stats.assertion = '已通过'
     },
   }
   // 完全权限感知：宿主 sandbox/mode=danger-full-access 时视为用户已全局授权（会话级），
@@ -1049,7 +1065,7 @@ export function apply(ctx: Context) {
             void log({ kind: 'task-carryover', count: prev.assertions.length, prior: prev.raw.slice(0, 120) })
           }
           taskRecords.set(key, { raw: txt.slice(0, 300), goal: txt.slice(0, 300), assertions: derived.map((a) => ({ assertion: a, source: 'auto' as const })), assertionsPassedAt: null, unresolvedLogged: false })
-          stats.assertion = `${derived.length} 条待复(自动)`
+          stats.assertion = `${derived.length + pinnedRecords.length} 条待复(自动)`
           void log({ kind: 'task-auto', count: derived.length, sourceKind: String(srcKind), raw: txt.slice(0, 160), mark: derived.map(explainAssertion).join('；').slice(0, 240) })
         }
         return
@@ -1141,10 +1157,13 @@ export function apply(ctx: Context) {
         }
         {
           // B2 遗留可见：本回合收尾时断言仍未通过 → 落账（供追账/统计；不阻塞，会话继续）
-          const rec = taskRecords.get(sidKeyOf(session))
-          if (verdict !== 'skip' && rec && rec.assertions.length > 0 && rec.assertionsPassedAt === null && !rec.unresolvedLogged) {
-            rec.unresolvedLogged = true
-            void log({ kind: 'assertion-unresolved', turn: ev.turn, count: rec.assertions.length, gate: verdict })
+          const uKey = sidKeyOf(session)
+          const uRec = taskRecords.get(uKey)
+          const uPending = [...pinnedRecords, ...(uRec?.assertions ?? [])]
+          if (verdict !== 'skip' && uPending.length > 0 && uRec?.assertionsPassedAt == null && !uRec?.unresolvedLogged) {
+            if (uRec) uRec.unresolvedLogged = true
+            else taskRecords.set(uKey, { raw: '', goal: '', assertions: [], assertionsPassedAt: null, unresolvedLogged: true })
+            void log({ kind: 'assertion-unresolved', turn: ev.turn, count: uPending.length, gate: verdict })
           }
         }
         turnBuckets.delete(bucketKey)
@@ -1169,14 +1188,16 @@ export function apply(ctx: Context) {
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
       if (b.toolCalls < 1 || b.steered || b.gateVerdict === 'pass') return
       const rec = taskRecords.get(bucketKey)
-      const assertionsOpen = Boolean(rec && rec.assertions.length > 0 && rec.assertionsPassedAt === null)
+      const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
+      const assertionsOpen = pending.length > 0 && !(rec?.assertionsPassedAt)
       // ── 审计 F-01 修复：宿主自动收口——断言开启时宿主直接复核（不等模型记得调 gate）──
       if (assertionsOpen) {
         const results: AssertionResult[] = []
-        for (const x of rec!.assertions) results.push(await evaluateAssertion(x.assertion, { judge: gateJudge }))
+        for (const x of pending) results.push(await evaluateAssertion(x.assertion, { judge: gateJudge }))
         const failed = results.filter((r) => !r.ok)
         if (failed.length === 0) {
-          rec!.assertionsPassedAt = Date.now()
+          if (rec) rec.assertionsPassedAt = Date.now()
+          else taskRecords.set(bucketKey, { raw: '', goal: '', assertions: [], assertionsPassedAt: Date.now(), unresolvedLogged: false })
           stats.assertion = '已通过'
           b.closedAuto = true
           void log({ kind: 'auto-closeout', turn: payload.turn, count: results.length, result: 'pass', table: formatAssertionResults(results) })
@@ -1184,7 +1205,7 @@ export function apply(ctx: Context) {
           return
         }
         b.steered = true
-        void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'auto-fail', assertions: rec!.assertions.length })
+        void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'auto-fail', assertions: pending.length })
         const failLine = failed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
         agent.steer?.({
           content: [{
