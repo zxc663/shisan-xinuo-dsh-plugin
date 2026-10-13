@@ -811,7 +811,7 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
     description:
       '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可追加或替换工具自登记断言改正——用户原文推导的断言恒保留（如需改写，请用户重新下达指令）；会话外钉死的断言（pinned）不受本工具影响。',
     parameters: {
-      action: { type: 'string', required: true, description: 'register | clear | status' },
+      action: { type: 'string', required: true, description: 'register | clear | dispute | status（dispute＝自认先前收口无效，仅记录不改判定）' },
       goal: { type: 'string', required: false, description: '任务目标原文摘录（随断言记录）' },
       assertions: { type: 'string', required: false, description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
       mode: { type: 'string', required: false, description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（仅替换工具自登记断言；用户原文推导断言恒保留）' },
@@ -842,6 +842,21 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
         void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, preservedAuto: r.preservedAuto ?? 0, reason, goal })
         const how = mode === 'replace' ? '替换工具自登记断言（用户原文推导断言保留）' : '合并登记（保留既有断言）'
         return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map((a) => explainAssertion(a)).join('；')}。收口时 discipline_gate 将自动复核。` }
+      }
+      // C7：争议标记——模型可自认先前那次收口无效（只记录、**不改判定**；撤销/改判保留给人在会话外）
+      if (action === 'dispute') {
+        const reason = args.reason === undefined ? '' : String(args.reason).slice(0, 200)
+        if (!reason.trim()) {
+          void deps.log({ kind: 'gate-disputed', status: 'refused-no-reason' })
+          return { status: 'refused', count: 0, message: 'REFUSED：dispute 必须给出 reason——说明为什么认为先前那次收口不成立（例如"当时用的是与目标无关的命令"）。' }
+        }
+        void deps.log({ kind: 'gate-disputed', status: 'recorded', reason, goal })
+        const cur = deps.acceptance.list(execCtx)
+        return {
+          status: 'recorded',
+          count: cur.length,
+          message: `已记录争议（**不改判定**）：${reason}。宿主保留原 pass 记录并标注其为争议态——撤销或改判只由人在会话外执行；请把该争议如实告知用户，不要据此声称任务已完成。`,
+        }
       }
       if (action === 'clear') {
         const cur = deps.acceptance.list(execCtx)

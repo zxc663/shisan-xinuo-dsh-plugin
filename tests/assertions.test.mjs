@@ -138,6 +138,17 @@ function mkBridge(init = []) {
   t('task: status 列表', true, (await def.execute({ action: 'status' }, {})).message.includes('auto'))
 }
 {
+  // C7：dispute＝只记录、不改判定
+  const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'p' }, source: 'auto' }])
+  const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
+  const rNo = await def.execute({ action: 'dispute' }, {})
+  t('C7: dispute 无 reason 被拒', 'refused', rNo.status)
+  const rOk = await def.execute({ action: 'dispute', reason: '先前那次验证用的是与目标无关的命令' }, {})
+  t('C7: dispute 记录成功', 'recorded', rOk.status)
+  t('C7: 消息声明不改判定', true, rOk.message.includes('不改判定'))
+  t('C7: 不改动断言记录', 1, bridge.recs.length)
+}
+{
   const bridge = mkBridge([{ assertion: { kind: 'exists', path: 'p' }, source: 'tool' }])
   const def = buildTaskToolDefinition({ log: () => {}, acceptance: bridge })
   t('task: tool 断言 clear 放行', 'cleared', (await def.execute({ action: 'clear' }, {})).status)
