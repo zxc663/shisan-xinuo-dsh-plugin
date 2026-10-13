@@ -198,6 +198,7 @@ function args() {
     else if (x.startsWith('--arms=')) a.arms = x.slice(7).split(',')
     else if (x.startsWith('--kinds=')) a.kinds = x.slice(8).split(',')
     else if (x.startsWith('--only=')) a.only = x.slice(7).split(',')
+    else if (x === '--selftest') a.selftest = true
   }
   return a
 }
@@ -374,6 +375,34 @@ if (a.reclassify) {
   process.exit(0)
 }
 mkdirSync(OUTDIR, { recursive: true })
+
+// --selftest：判据自测（T9 纪律）——对每个任务建立夹具后，真值判据必须为 false（未完成态）；
+// 并检查 pinned 锚可生成。用于在跑分前抓"判据恒真/写错"类实现缺陷，不写 results.json。
+if (a.selftest) {
+  const dir = join(REPO, 'tmp', 'selftest-fixtures')
+  let bad = 0
+  for (const t of TASKS) {
+    const d = join(dir, t.id)
+    setup(d, t)
+    let ok = false
+    let err = ''
+    try {
+      ok = t.truth(d) === false
+    } catch (e) {
+      err = String(e).slice(0, 80)
+    }
+    let pin = ''
+    try {
+      pin = t.pinned ? String(t.pinned(d)) : ''
+    } catch (e) {
+      pin = 'ERR:' + String(e).slice(0, 40)
+    }
+    if (!ok) bad++
+    console.log(`${ok ? 'PASS' : 'FAIL'} ${t.id.padEnd(5)} kind=${String(t.kind).padEnd(10)} 初始真值=false? ${ok}${err ? ' ERR=' + err : ''} pinned=${pin ? (pin.startsWith('ERR') ? pin : 'ok') : '—'}`)
+  }
+  console.log(`\n总计 ${TASKS.length} 题，判据自测失败 ${bad} 题`)
+  process.exit(bad === 0 ? 0 : 1)
+}
 writeFileSync(READER, [
   'import sys, io, json, zstandard',
   'p = sys.argv[1]',
