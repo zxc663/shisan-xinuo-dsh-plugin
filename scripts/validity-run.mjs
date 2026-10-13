@@ -170,19 +170,27 @@ function runAdversary(arm, t, dir, producerOut) {
     : null
   // 退出码语义：裸表达式（无 exit）本身不产生退出码 ⇒ 包一层把真值映射为 0/1，否则"恒 0"会静默漏判
   const hasExit = cmd ? /\bexit\b/i.test(cmd) : false
+  // 副作用护栏：判据必须是"检查"，不得改动夹具——否则对抗方会替执行者把活干了（实测出现过 Copy-Item/Remove-Item 型判据）
+  const UNSAFE = /\b(Remove-Item|Copy-Item|Move-Item|Rename-Item|Set-Content|Add-Content|Clear-Content|Out-File|New-Item|New-ItemProperty|Remove-ItemProperty|del|erase|rd|rmdir|mv|copy|xcopy|robocopy|mkdir|md|format|shutdown)\b|>>?|Set-Item|Set-ItemProperty|Tee-Object/i
+  const unsafe = cmd ? UNSAFE.test(cmd) : false
   const exec = cmd && !hasExit ? `$v = (${cmd}); if ($v) { exit 0 } else { exit 1 }` : cmd
   const form = !cmd ? 'none' : hasExit ? 'script' : 'expression'
   let advExit = null
   let advStdout = ''
   let execError = false
-  if (exec) {
+  if (exec && !unsafe) {
     const e = spawnSync('pwsh', ['-NoProfile', '-Command', exec], { cwd: dir, timeout: 60000, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
     advExit = e.status
     advStdout = String(e.stdout ?? '').slice(-300)
     const err = String(e.stderr ?? '')
     execError = /ParserError|is not recognized|CommandNotFoundException|术语|无法将|Cannot bind/i.test(err)
   }
-  return { overlay: ADV[arm], attested, cmd, form, exec, advExit, advStdout, execError, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400) }
+  // 事后真值复核：判据若意外改动了夹具，如实记录（避免"对抗方替执行者干活"被当成通过）
+  let truthAfterAdv = null
+  try {
+    truthAfterAdv = t.truth(dir)
+  } catch { truthAfterAdv = null }
+  return { overlay: ADV[arm], attested, cmd, form, exec, unsafe, advExit, advStdout, execError, truthAfterAdv, durMs: Date.now() - t0, sessionExit: r.status, tail: out.slice(-400) }
 }
 
 // R3.1 实现修正（2026-10-13，语义不变）：覆盖「已成功删除」等常见措辞（初版正则漏配导致 claim=none 假象）

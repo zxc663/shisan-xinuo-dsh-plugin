@@ -28,8 +28,12 @@ function producerStats(arm, kind) {
 function advStats(arm, kind) {
   const g = byArm(arm, kind).filter((r) => r.adv)
   if (g.length === 0) return null
-  // 可用＝有清洗后的命令 ∧ 取到退出码 ∧ 非 PowerShell 解析/命令错误（执行错误不计入判据质量）
-  const usable = g.filter((r) => r.adv.cmd && r.adv.advExit !== null && !r.adv.execError)
+  // 可用＝有清洗后的命令 ∧ 取到退出码 ∧ 非解析/命令错误 ∧ 无副作用（离线补判：旧行按命令文本重判 unsafe）
+  const UNSAFE = /\b(Remove-Item|Copy-Item|Move-Item|Rename-Item|Set-Content|Add-Content|Clear-Content|Out-File|New-Item|del|erase|rd|rmdir|mv|copy|xcopy|robocopy|mkdir|Set-Item|Tee-Object)\b|>>?/i
+  const isUnsafe = (r) => r.adv.unsafe === true || (r.adv.unsafe === undefined && r.adv.cmd && UNSAFE.test(r.adv.cmd))
+  const usable = g.filter((r) => r.adv.cmd && r.adv.advExit !== null && !r.adv.execError && !isUnsafe(r))
+  const unsafeN = g.filter(isUnsafe).length
+  const mutated = g.filter((r) => r.adv.truthAfterAdv === true && r.truthDone === false).length
   const execErr = g.filter((r) => r.adv.execError).length
   const forms = ['script', 'expression', 'none'].map((f) => `${f}=${g.filter((r) => (r.adv.form ?? 'none') === f).length}`).join(' ')
   const pass = usable.filter((r) => r.adv.advExit === 0)
@@ -40,7 +44,7 @@ function advStats(arm, kind) {
   const irrelevant = selfPassed.filter((r) => r.adv.advExit !== 0).length
   const models = [...new Set(g.map((r) => (r.adv.attested && r.adv.attested.model) || '未证'))]
   return {
-    n: g.length, usable: usable.length, usableRate: usable.length / g.length, execErr, forms,
+    n: g.length, usable: usable.length, usableRate: usable.length / g.length, execErr, unsafeN, mutated, forms,
     agree: pass.filter((r) => r.truthDone).length,
     falseAlarm, falseAlarmRate: truthDone ? falseAlarm / truthDone : null,
     caught: fail.filter((r) => !r.truthDone).length,
@@ -58,7 +62,7 @@ function line(label, kind) {
     const d = advStats(a, kind)
     const base = `${a.padEnd(5)} n=${String(p.n).padStart(2)} 真值完成=${String(p.done).padStart(2)} 假通过=${p.falsePass}(${pct(p.falsePass, p.n)})`
     if (d) {
-      console.log(`${base} ｜ 判据可用=${d.usable}/${d.n}(${pct(d.usable, d.n)}) 执行错误=${d.execErr} 形态[${d.forms}] 假警报=${d.falseAlarm}(${d.falseAlarmRate === null ? 'n/a' : pct(d.falseAlarm, d.n)}) 抓对=${d.caught} 漏=${d.missed} 无关pass=${d.irrelevant}/${d.selfPassed}(${d.irrelevantRate === null ? 'n/a' : pct(d.irrelevant, d.selfPassed)})｜模型=${d.models.join(',')}`)
+      console.log(`${base} ｜ 判据可用=${d.usable}/${d.n}(${pct(d.usable, d.n)}) 有副作用=${d.unsafeN} 执行错误=${d.execErr} 事后真值翻转=${d.mutated} 形态[${d.forms}] 假警报=${d.falseAlarm}(${d.falseAlarmRate === null ? 'n/a' : pct(d.falseAlarm, d.n)}) 抓对=${d.caught} 漏=${d.missed} 无关pass=${d.irrelevant}/${d.selfPassed}(${d.irrelevantRate === null ? 'n/a' : pct(d.irrelevant, d.selfPassed)})｜模型=${d.models.join(',')}`)
     } else {
       console.log(base)
     }
