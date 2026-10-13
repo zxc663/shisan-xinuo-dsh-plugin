@@ -73,6 +73,9 @@ const READONLY_EXEMPTS: Array<{ re: RegExp; afterDanger?: boolean }> = [
   { re: /^\s*(?:echo|Write-Output|Write-Host|printf)\s(?![^;&|]*>>?)[^;&|]*$/i }, // 单段纯输出提及（无分隔符且无重定向=不执行任何危险段；echo > file 是真实写操作不豁免）
 ]
 
+// 收口强制注入文本前缀（单一来源：发送与排除共用，避免两处字面量漂移）
+export const STEER_PREFIX = '[十三希诺收口强制]'
+
 export function judgeL3(cmd: string): string | null {
   for (const p of L3_PATTERNS) {
     const m = p.re.exec(cmd)
@@ -776,6 +779,31 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const LOG_DIR = process.env.SHISANUO_LOG_DIR ?? join(REPO_ROOT, 'logs')
 const LOG_FILE = join(LOG_DIR, 'exec-log.jsonl')
+
+// ── 遥测脱敏（写入前深处理；覆盖常见密钥形态，非穷尽——日志仍按敏感数据处理，可用 SHISANUO_LOG_DIR 指到私密目录）──
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/\b(sk|pk)-[A-Za-z0-9_-]{8,}/g, '$1-***'],
+  [/\bgithub_pat_[A-Za-z0-9_]{16,}/g, 'github_pat_***'],
+  [/\bgh[pousr]_[A-Za-z0-9]{12,}/g, 'gh*_***'],
+  [/\b(Bearer)\s+[A-Za-z0-9._~+/=-]{12,}/gi, '$1 ***'],
+  [/((?:password|passwd|pwd|token|secret|api[-_]?key|apikey|access[-_]?key)\s*[=:]\s*)(["']?)[^\s"',;]{6,}/gi, '$1$2***'],
+  [/(https?:\/\/[^\/\s:@]+:)[^\/\s@]+@/g, '$1***@'],
+]
+
+export function redactSecrets(text: string): string {
+  let out = text
+  for (const [re, rep] of SECRET_PATTERNS) out = out.replace(re, rep)
+  return out
+}
+
+export function redactDeep(value: unknown): unknown {
+  if (typeof value === 'string') return redactSecrets(value)
+  if (Array.isArray(value)) return value.map(redactDeep)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactDeep(v)]))
+  }
+  return value
+}
 // E1 三臂（预注册 v3）：A=惰性观测（无注入无拦截无工具，仅测量）/ B=纯纪律文本（Skill 形态：注入+文本面机检，无拦截无工具无预算）/ C=运行时控制全量（默认）。
 // 切臂：SHISANUO_ARM=A|B|C 环境变量优先；旗标文件（tmp/arm-*.flag）兼容保留。
 const ARM_A_FLAG = join(REPO_ROOT, 'tmp', 'arm-A-observe.flag')
@@ -793,7 +821,7 @@ export function apply(ctx: Context) {
   async function log(entry: Record<string, unknown>): Promise<void> {
     try {
       await mkdir(LOG_DIR, { recursive: true })
-      await appendFile(LOG_FILE, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n', 'utf8')
+      await appendFile(LOG_FILE, JSON.stringify(redactDeep({ ts: new Date().toISOString(), ...entry })) + '\n', 'utf8')
     } catch (e) {
       console.error('[shisan-xinuo] log write failed (non-fatal):', String(e).slice(0, 120))
     }
@@ -1016,7 +1044,7 @@ export function apply(ctx: Context) {
         const txt = assistantText(rawUser.data?.content)
         // 只认真正的用户消息：runtime-context / skill-catalog 等注入文本同样走 user/message 信封（B2 实测），一律剔除。
         if (typeof srcKind === 'string' && srcKind !== 'user') return
-        if (!txt || txt.startsWith('[十三希诺收口强制]')) return
+        if (!txt || txt.startsWith(STEER_PREFIX)) return
         const derived = deriveAssertionsFromUserText(txt)
         const key = sidKeyOf(session)
         if (derived.length > 0 && lastDerivedText.get(key) !== txt) {
@@ -1166,7 +1194,7 @@ export function apply(ctx: Context) {
         agent.steer?.({
           content: [{
             type: 'text',
-            text: `[十三希诺收口强制] 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`,
+            text: `${STEER_PREFIX} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`,
           }],
           source: { kind: 'user' },
         })
@@ -1179,7 +1207,7 @@ export function apply(ctx: Context) {
       agent.steer?.({
         content: [{
           type: 'text',
-          text: `[十三希诺收口强制] 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须调用 discipline_gate（宿主将真实执行你声明的验证命令并比对退出码）；文本 GATE 不再计入合规。若工具不可用，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
+          text: `${STEER_PREFIX} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须调用 discipline_gate（宿主将真实执行你声明的验证命令并比对退出码）；文本 GATE 不再计入合规。若工具不可用，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
         }],
         source: { kind: 'user' },
       })

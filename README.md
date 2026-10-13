@@ -19,6 +19,14 @@
 
 **诚实条款**：本插件保证「过程可审计、收口有真值」，不保证「模型更聪明」；三命题分立——机制存在（✓）≠机制有效（待补样本轮）≠产品有效（待对照终判）。审批卡、命令执行、事件管线均为 DSH 原生能力，插件的净增量在**可替换的策略、真值判定语义与强制闭环**。
 
+## 代价与风险（如实）
+
+- **收口验证是一条新的执行通道**：`discipline_gate`（及 `cmd_exit0` 断言、宿主收口复核）会在插件侧直接执行你声明的验证命令——护栏=危险域清单＋被拒命令指纹（10 分钟），**不是安全沙箱**；清单覆盖面之外（目标替代、重定向覆写、脚本清空等）不拦，与 pwsh 通道同一天花板；仅存在于上游 `.dsh/rules.yaml` 的自定义规则也不覆盖此通道。
+- **收口强制会注入一条以用户信封发送的指令**：turn-stopping 触发时经 `steer` 注入（信封 `source=user` 为宿主接口约束），文本以固定前缀 `[十三希诺收口强制]` 显式标注来源；插件按该前缀排除自身注入，避免自我循环。
+- **遥测日志默认明文落盘**：`<repo>/logs/exec-log.jsonl`（命令截断 200 字符、stdout/stderr 尾 300 字符；写入前对常见密钥形态自动脱敏——非穷尽）。可用 `SHISANUO_LOG_DIR` 指到私密目录；日志不入库（.gitignore）。
+- **开发态绑定**：无 `dsh.bundle` manifest（仅 `file://` patch 挂载）、绑定 cordis `4.0.5-alpha.1`、未发行——宿主 alpha API 变更可能破坏兼容。
+- 一句话：**不要把本插件当作安全边界**——拦截面=枚举覆盖，验证面=真退出码；两者治「过程」，不承诺「安全」。
+
 ## 安装（开发形态）
 
 DSH profile 的 `cordis.patch.yml` 追加：
@@ -53,7 +61,7 @@ DSH profile 的 `cordis.patch.yml` 追加：
 ## 测试与测量
 
 ```bash
-npm test   # 14 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
+npm test   # 16 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # headless 三臂实验（环境经上表变量注入）
@@ -92,7 +100,7 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 ## 目录
 
 - `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/预算/遥测）
-- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 15 套单测
+- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 16 套单测
 - `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告/GUI 验证规程 ｜ `CHANGELOG.md` 版本记录（内部）
 - `CONTRIBUTING.md` 公开文本规范（提交/注释/文档＋机检）
 
