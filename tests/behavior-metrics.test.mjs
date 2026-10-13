@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -84,5 +84,9 @@ check('C5a 第1次无阶梯前缀', failLadderPrefix(1), '')
 check('C5b 第2次只收算子', failLadderPrefix(2).includes('不再接受自由命令形态'), true)
 check('C5c 第3次停止试凑', failLadderPrefix(3).includes('停止试凑'), true)
 check('C5d 阶梯含算子白名单', failLadderPrefix(2).includes('path_contains'), true)
+
+// ── C11/F7 收口措辞禁重述（常量级证据；**行为效果未验证**，需 A/B token 对照）──
+check('C11a 含禁重述指令', STEER_ANTI_REPEAT.includes('不要重复'), true)
+check('C11b 前缀未被污染', STEER_PREFIX.startsWith('['), true)
 
 process.exit(fail > 0 ? 1 : 0)

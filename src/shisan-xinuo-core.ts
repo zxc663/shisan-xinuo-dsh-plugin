@@ -75,6 +75,9 @@ const READONLY_EXEMPTS: Array<{ re: RegExp; afterDanger?: boolean }> = [
 
 // 收口强制注入文本前缀（单一来源：发送与排除共用，避免两处字面量漂移）
 export const STEER_PREFIX = '[十三希诺收口强制]'
+// F7/C11：强制收口时**必须显式禁止重述**——实测中模型接到强制后会把自己那份完整答案再说一遍（164K tok 的一大部分在此）。
+// 统一常量：三处 steer（断言未过／无断言未收口／零工具调用声称完成）共用同一措辞，避免逐处漂移。
+export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出的答案或分析。'
 
 export function judgeL3(cmd: string): string | null {
   for (const p of L3_PATTERNS) {
@@ -1285,7 +1288,7 @@ export function apply(ctx: Context) {
             content: [
               {
                 type: 'text',
-                text: `${STEER_PREFIX} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`,
+                text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`,
               },
             ],
             source: { kind: 'user' },
@@ -1326,7 +1329,7 @@ export function apply(ctx: Context) {
         agent.steer?.({
           content: [{
             type: 'text',
-            text: `${STEER_PREFIX} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`,
+            text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`,
           }],
           source: { kind: 'user' },
         })
@@ -1346,7 +1349,7 @@ export function apply(ctx: Context) {
       agent.steer?.({
         content: [{
           type: 'text',
-          text: `${STEER_PREFIX} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须调用 discipline_gate（宿主将真实执行你声明的验证命令并比对退出码）；文本 GATE 不再计入合规。若工具不可用，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
+            text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须调用 discipline_gate（宿主将真实执行你声明的验证命令并比对退出码）；文本 GATE 不再计入合规。若工具不可用，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
         }],
         source: { kind: 'user' },
       })
