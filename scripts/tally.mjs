@@ -75,7 +75,8 @@ const FIELD_WHITELIST = {
   // Step 0 实测产物：掩码漏网核对（线缆真值越出允许集）
   'budget-leak': ['level', 'count', 'names'],
 }
-const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300, names: 240 }
+// names：`tools-inventory` 落的是全量工具名（代码侧已 slice 300）——帽取 320 容纳该既有字段；`budget-leak` 侧自带 240 截断
+const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300, names: 320 }
 
 function parseArgs(argv) {
   const a = { mode: 'report', file: DEFAULT_LOG, json: false, freeze: false, noSnapshot: false }
