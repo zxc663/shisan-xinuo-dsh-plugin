@@ -602,6 +602,15 @@ export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
   return usedSoFar < cap
 }
 
+// G5/C5 失败阶梯：同一个会话内 gate 连续失败时逐级收紧要求，避免"连试数次才凑到一条无关命令"。
+// 依据：真实轨迹里三次失败（ls／dir /b／dir /m）后第四次用 `cd D:\` 通过——试凑本身就是成本与风险。
+// n=1：给要求结构（C1 已实现）；n=2：只收算子形态；n>=3：停止试凑，交回人在会话外裁决。
+export function failLadderPrefix(n: number): string {
+  if (n <= 1) return ''
+  if (n === 2) return '【阶梯 2／3】本轮**不再接受自由命令形态**：只接受算子——not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串> / cmd_exit0:<命令>。给不出就如实声明「未验证」，不要再试凑命令。\n'
+  return '【阶梯 3／3】**停止试凑**：宿主已不再期待你本轮完成收口。请如实声明「未验证」并说明原因，由人在会话外裁决——继续换命令不会改变判定。\n'
+}
+
 const GATE_CMD_TIMEOUT_MS = 30_000
 const GATE_TAIL_CAP = 300
 
@@ -729,6 +738,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           }
           deps.acceptance.markPassed(execCtx)
           const evidence = classifyEvidence(cmd)
+          ;(deps as { failCount?: number }).failCount = 0 // 通过即重置失败阶梯
           void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, evidence, assertions: formatAssertionResults(assertionResults) })
           let concludedTurn = false
           if (deps.concludeOnPass) {
@@ -760,10 +770,14 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         }
       }
       void deps.log({ kind: 'gate-tool', status: verdict, ...base, realExit: r.code, match })
+      // C5 失败阶梯：同一实例内连续失败逐级收紧（n=2 只收算子；n>=3 停止试凑、交回用户）
+      const failN = ((deps as { failCount?: number }).failCount ?? 0) + 1
+      ;(deps as { failCount?: number }).failCount = failN
+      if (failN >= 2) void deps.log({ kind: 'gate-fail-ladder', status: verdict, n: failN, cmd: String(cmd).slice(0, 120) })
       return {
         status: verdict, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
         // 注意：失败路径**不得**读取断言表（既有语义：mismatch 不触发断言复核，见 tests/assertions.test.mjs）
-        message: gateToolMessage(verdict, claimedExit, r.code) + gateRequirementBlock([], cmd, verdict),
+        message: failLadderPrefix(failN) + gateToolMessage(verdict, claimedExit, r.code) + gateRequirementBlock([], cmd, verdict),
       }
     },
   }

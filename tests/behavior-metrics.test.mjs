@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -78,5 +78,11 @@ check('F8b 最后一次', shouldSteerNow(2, 3), true)
 check('F8c 触顶', shouldSteerNow(3, 3), false)
 check('F8d 超顶', shouldSteerNow(5, 3), false)
 check('F8e 非法 cap 不熔断（保守）', shouldSteerNow(9, 0), true)
+
+// ── failLadderPrefix（C5 失败阶梯）──
+check('C5a 第1次无阶梯前缀', failLadderPrefix(1), '')
+check('C5b 第2次只收算子', failLadderPrefix(2).includes('不再接受自由命令形态'), true)
+check('C5c 第3次停止试凑', failLadderPrefix(3).includes('停止试凑'), true)
+check('C5d 阶梯含算子白名单', failLadderPrefix(2).includes('path_contains'), true)
 
 process.exit(fail > 0 ? 1 : 0)
