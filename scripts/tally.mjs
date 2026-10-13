@@ -68,6 +68,10 @@ const FIELD_WHITELIST = {
   'skill-catalog-cost': ['sourceKind', 'chars'],
   // C16 成本提示（实验）
   'cost-hint': ['turn', 'toolCalls'],
+  // B 组：任务级作用域
+  'task-open': ['id', 'level', 'trigger'],
+  'budget-upgrade-ignored': ['level', 'trigger', 'appliedRank'],
+  'budget-upgrade-capped': ['level', 'trigger', 'allow'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

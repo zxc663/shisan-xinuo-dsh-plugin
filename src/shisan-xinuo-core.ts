@@ -852,7 +852,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(true, execCtx)
           const vAnchored = isVAnchored(String((base as { v?: string }).v ?? ''))
           if (!vAnchored) void deps.log({ kind: 'gate-v-unanchored', status: 'pass', v: String((base as { v?: string }).v ?? '').slice(0, 120), cmd: String(cmd).slice(0, 120) })
-          ;(deps as { failCount?: number }).failCount = 0 // 通过即重置失败阶梯
+          // 通过即重置**本任务**的失败阶梯（T2：换任务不再继承旧计数）
+          ;(deps as { failCountByTask?: Map<string, number> }).failCountByTask?.set((deps as { taskId?: () => string }).taskId?.() ?? 'default', 0)
           void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, evidence, assertions: formatAssertionResults(assertionResults) })
           let concludedTurn = false
           if (deps.concludeOnPass) {
@@ -904,9 +905,12 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
               : ' 证据强度=**弱**且无登记断言 ⇒ **本次通过不闭环**：宿主不据此认定任务完成。请改用 **`assert` 参数**传针对目标的算子（not_exists/exists/path_contains），或如实声明未验证。'),
         }
       }
-      // C5 失败阶梯：同一实例内连续失败逐级收紧（n=2 只收算子；n>=3 停止试凑、交回用户）
-      const failN = ((deps as { failCount?: number }).failCount ?? 0) + 1
-      ;(deps as { failCount?: number }).failCount = failN
+      // C5 失败阶梯（T2 起**按任务**分桶）：同一任务内连续失败逐级收紧；换任务即归零
+      const d0 = deps as { failCountByTask?: Map<string, number>; taskId?: () => string }
+      if (!d0.failCountByTask) d0.failCountByTask = new Map()
+      const taskKey = d0.taskId?.() ?? 'default'
+      const failN = (d0.failCountByTask.get(taskKey) ?? 0) + 1
+      d0.failCountByTask.set(taskKey, failN)
       if (failN >= 2) void deps.log({ kind: 'gate-fail-ladder', status: verdict, n: failN, cmd: String(cmd).slice(0, 120) })
       return {
         status: verdict, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
@@ -1166,6 +1170,23 @@ export function apply(ctx: Context) {
   const budgetLoad = loadBudgetFile(process.env.SHISANUO_BUDGET ?? contentDir + 'budget.json')
   void log({ kind: 'budget', source: budgetLoad.source, valid: budgetLoad.valid, ...(budgetLoad.reason ? { reason: budgetLoad.reason } : {}) })
   let budgetApplied = false
+  // ── B 组：任务级作用域（T1/T2）──
+  // 任务键：用户原文消息开任务；discipline_task register 可显式覆盖。任务切换即重置失败阶梯／熔断计数／断言残留。
+  let taskSeq = 0
+  let currentTaskId = ''
+  let appliedRank = -1 // 已生效档位的序（-1=未裁剪）；**只升不放宽**
+  const readOnlyResearchUpgrade = ['web_search', 'web_fetch', 'job_list', 'job_output', 'skill']
+  // 开任务：切换即重置任务级计数（失败阶梯由 gate 侧按 taskId 分桶；断言与熔断计数在此清理）
+  const openTask = (level: string | null, trigger: string, sessionKey?: string) => {
+    taskSeq++
+    currentTaskId = `t${taskSeq}-${Date.now()}`
+    if (sessionKey) {
+      taskRecords.delete(sessionKey)
+      steerCounts.delete(sessionKey)
+    }
+    void log({ kind: 'task-open', id: currentTaskId, level: level ?? '', trigger })
+    return currentTaskId
+  }
   let pendingMask: BudgetMask | null = null
   let pendingLevel = ''
   const agentCtxLike = (o: unknown): { tools?: { restrict?: (m: BudgetMask) => unknown }; effect?: (fn: () => unknown) => unknown } | undefined =>
@@ -1192,17 +1213,30 @@ export function apply(ctx: Context) {
     if (observeMode || armMode !== 'C' || !budgetLoad.budget) return
     const spec = budgetLoad.budget.levels[level]
     if (!spec) return
-    if (spec === '*') {
-      if (!budgetApplied) { stats.budget = `${level}(全量)`; void log({ kind: 'budget-applied', level, trigger, mask: 'full' }) }
-      budgetApplied = true
+    const newRank = levelRank(level)
+    // **只升不放宽**：低报或同档不重复应用（C3 红线：不得由被验方自行放宽）
+    if (newRank <= appliedRank) {
+      void log({ kind: 'budget-upgrade-ignored', level, trigger, appliedRank })
       return
     }
-    const mask: BudgetMask = { ...spec, allow: completeAllowList(spec.allow) }
-    if (!budgetApplied) {
-      pendingMask = mask
-      pendingLevel = level
-      budgetApplied = true
+    // 升档：先解除旧限制（宿主 restrict 返回解除器），再按新档应用——这是替换"一次性单向门"的关键
+    for (const d of agentRestrictDisposers.values()) {
+      try {
+        if (typeof d === 'function') (d as () => void)()
+      } catch {
+        /* 解除失败不阻塞（fail-open 语义与既有实现一致） */
+      }
     }
+    agentRestrictDisposers.clear()
+    // **升档不给"全量"**：'*' 档按 L2-S 的显式白名单收窄，避免一次升级即无限制放宽
+    const cappedToL2S = spec === '*'
+    const allow = cappedToL2S ? (budgetLoad.budget.levels['L2-S']?.allow ?? []) : spec.allow
+    const mask: BudgetMask = cappedToL2S ? { allow: completeAllowList([...(allow as string[]), ...readOnlyResearchUpgrade]) } : { ...(spec as BudgetMask), allow: completeAllowList((spec as BudgetMask).allow) }
+    pendingMask = mask
+    pendingLevel = cappedToL2S ? `${level}(封顶 L2-S)` : level
+    appliedRank = newRank
+    budgetApplied = true
+    if (cappedToL2S) void log({ kind: 'budget-upgrade-capped', level, trigger, allow: mask.allow?.length ?? 0 })
     // 声明级触发时对现行 agent 立即生效（后续请求即用裁剪面）；新 agent 由 agent/created 统一应用
     if (currentAgent !== undefined && pendingMask) restrictAgentTools(currentAgent, pendingMask, pendingLevel, trigger, currentAgent)
   }
@@ -1389,6 +1423,8 @@ export function apply(ctx: Context) {
           return
         }
         if (!txt || txt.startsWith(STEER_PREFIX)) return
+        // B 组：**用户原文开任务**（客观锚，不依赖模型自觉）——切换任务即重置任务级计数与断言残留
+        openTask(null, 'user-message', sidKeyOf(session, ''))
         const derived = ASSERT_LAYER ? deriveAssertionsFromUserText(txt) : []
         const key = sidKeyOf(session)
         if (derived.length > 0 && lastDerivedText.get(key) !== txt) {
@@ -1500,8 +1536,8 @@ export function apply(ctx: Context) {
         if (t) {
           if (!b.firstText) b.firstText = t
           b.lastText = t
-          // v0.4 预算信号：首条声明判级的文本 → 按该级裁剪工具面（每会话一次，A 臂不裁；对现行 agent 即时生效）
-          if (!budgetApplied) {
+          // v0.4 预算信号：声明判级的文本 → 按该级裁剪工具面（A 臂不裁；T1/T2 起**任务级可升**，由 applyBudget 的"只升不放宽"裁决）
+          {
             const lvl = extractDeclaredLevel(t)
             if (lvl) {
               if (!b.declaredLevel) b.declaredLevel = lvl // C3 第二档：记录自报等级用于"低报度量"
@@ -1627,13 +1663,14 @@ export function apply(ctx: Context) {
           return
         }
         b.steered = true
-        const usedA = steerCounts.get(bucketKey) ?? 0
+        const steerKeyA = currentTaskId || bucketKey // T2：熔断计数按**任务**（换任务即重新计数）
+        const usedA = steerCounts.get(steerKeyA) ?? 0
         if (!shouldSteerNow(usedA, STEER_CAP)) {
           void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedA, cap: STEER_CAP, mode: 'auto-fail' })
           console.log(`[shisan-xinuo] steer capped for session (used=${usedA}, cap=${STEER_CAP}) → 放行并记为未收口`)
           return
         }
-        steerCounts.set(bucketKey, usedA + 1)
+        steerCounts.set(steerKeyA, usedA + 1)
         void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'auto-fail', assertions: pending.length })
         const failLine = failed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
         agent.steer?.({
@@ -1648,13 +1685,14 @@ export function apply(ctx: Context) {
       }
       // 无断言：必须真调 gate（文本 GATE 不再计入合规）
       b.steered = true
-      const usedB = steerCounts.get(bucketKey) ?? 0
+      const steerKeyB = currentTaskId || bucketKey
+      const usedB = steerCounts.get(steerKeyB) ?? 0
       if (!shouldSteerNow(usedB, STEER_CAP)) {
         void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedB, cap: STEER_CAP, mode: 'no-assertions' })
         console.log(`[shisan-xinuo] steer capped for session (used=${usedB}, cap=${STEER_CAP}) → 放行并记为未收口`)
         return
       }
-      steerCounts.set(bucketKey, usedB + 1)
+      steerCounts.set(steerKeyB, usedB + 1)
       void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'no-assertions', assertions: 0 })
       agent.steer?.({
         content: [{
@@ -1712,6 +1750,8 @@ export function apply(ctx: Context) {
           isFullAccess: () => fullAccess,
           acceptance: acceptanceBridge,
           concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
+          // T2：失败阶梯按**任务**分桶（任务切换即归零）
+          taskId: () => currentTaskId,
           onStats: (verdict, execCtx2) => {
             const g = stats.gateTool
             g.calls++

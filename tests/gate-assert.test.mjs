@@ -70,5 +70,25 @@ const mk = (runCmdImpl, evaluateImpl) => {
   t('P1k 提示用 assert', true, r.message.includes('assert'))
 }
 
+// ⑤ T2：失败阶梯**按任务分桶**——换任务即归零（修掉"跨任务累计"）
+{
+  let task = 't1'
+  const def = buildGateToolDefinition({
+    runCmd: async () => ({ code: 1, stdout: '', stderr: '', timedOut: false }),
+    log: () => {},
+    onStats: () => {},
+    taskId: () => task,
+    acceptance: { list: () => [], register: () => ({ count: 0 }), clear: () => {}, markPassed: () => {}, evaluate: () => ({ ok: true, detail: '' }) },
+  })
+  const args = { level: 'L1', v: 'x', cmd: 'do-something', claimedExit: 0 }
+  const r1 = await def.execute(args, {})
+  const r2 = await def.execute(args, {}) // 同一任务第 2 次失败 ⇒ 阶梯 2
+  task = 't2'
+  const r3 = await def.execute(args, {}) // 换任务 ⇒ 阶梯归零
+  t('T2a 首失败 status 仍为 mismatch', 'mismatch', r1.status)
+  t('T2b 同任务第2次 ⇒ 阶梯2', true, r2.message.includes('阶梯 2'))
+  t('T2c 换任务后不再有阶梯前缀', false, r3.message.includes('阶梯'))
+}
+
 console.log(`gate-assert: ${pass} pass, ${fail} fail`)
 process.exit(fail > 0 ? 1 : 0)
