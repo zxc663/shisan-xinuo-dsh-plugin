@@ -88,7 +88,7 @@ const BYPASS = [
   ['docker volume rm pgdata', '数据删除', '删数据卷'],
   ['docker image prune -a', '数据删除', '批量清镜像'],
   // D 组·git 变体
-  ['git stash drop', null, '丢单 stash·灰色（记录）'],
+  ['git stash drop', '数据删除', '丢单 stash（第四份审查裁决：丢弃不可恢复数据=拦，原灰色档升级）'],
   ['git stash clear', '数据删除', '清空全部 stash'],
   ['git push --delete origin old-branch', '远端写/发布', '远端删分支'],
   // E 组·删除别名家族（上批已补，回归验证）

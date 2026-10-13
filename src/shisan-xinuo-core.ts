@@ -47,35 +47,39 @@ export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 本会
 // L3 危险域执行层枚举（对齐母仓 risk_scan 思路：清单外高危域命中即拦）
 export const L3_PATTERNS: Array<{ domain: string; re: RegExp }> = [
   { domain: '编码执行', re: /-EncodedCommand\b/i },
-  { domain: '数据删除', re: /(?<![-\w])rm\s+(?:-\S+\s+)*\S|\bRemove-Item\b|\bClear-Content\b|(?:^|[;&|]\s*|\n\s*)(?:del|erase|rd|rmdir|ri)(?:\s+\S|\s*(?:$|[;&|]))|\b(?:cmd|cmd\.exe|powershell|pwsh)\b[^;&|\n]{0,80}\b(?:del|erase|rd|rmdir)\b|git\s+(?:reset\s+--hard|clean\b|stash\s+clear\b)|\bshred\b|\bunlink\b|\bdocker\s+(?:rmi\b|volume\s+rm\b|image\s+prune\b|system\s+prune\b)|\b(?:node|python|python3)\s+(?:-\w+\s+)*["'].*\b(?:unlinkSync|rmSync|rmtree|os\.remove)\b|sed\s+-i[^;&|\n]*\d+d\b/i },
+  { domain: '数据删除', re: /(?<![-\w])rm\s+(?:-\S+\s+)*\S|\bRemove-Item\b|\bClear-Content\b|(?:^|[;&|]\s*|\n\s*)(?:del|erase|rd|rmdir|ri)(?:\s+\S|\s*(?:$|[;&|]))|\b(?:cmd|cmd\.exe|powershell|pwsh)\b[^;&|\n]{0,80}\b(?:del|erase|rd|rmdir)\b|git\s+(?:reset\s+--hard|clean\b|stash\s+clear\b|checkout\s+--|stash\s+(?:drop|clear))|\bshred\b|\bunlink\b|\bdocker\s+(?:rmi\b|volume\s+rm\b|image\s+prune\b|system\s+prune\b)|\b(?:node|python|python3)\s+(?:-\w+\s+)*["'].*\b(?:unlinkSync|rmSync|rmtree|os\.remove)\b|sed\s+-i[^;&|\n]*\d+d\b|\bfind\s[^;&|\n]*-delete\b|\btruncate\s+-s\s|\bmv\s[^;&|\n]*\/dev\/null\b|\bkubectl\s+delete\b/i },
   { domain: '远端执行', re: /\b(?:curl|wget)\b[^;&|]*(?:\|\s*(?:sh|bash|zsh|powershell)\b|\|\s*\.\s)/i },
   { domain: '敏感路径写', re: /(?:>>?|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b)[^;&|\n]*[\/\\]\.(?:ssh|aws|gnupg)[\/\\]|(?:>>?|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b)[^;&|\n]*(?:authorized_keys|\.bashrc|\.profile\b|\.npmrc|\.netrc)/i },
   { domain: '远端写/发布', re: /\bgit\s+push[^;&|]*(?:--force|-f\s|--force-with-lease|--delete\b|--tags?\b)|\b(?:npm|pnpm|yarn)\s+(?:publish|unpublish)\b|\bgh\s+release\s+(?:create|delete)\b|\bdocker\s+push\b/i },
   { domain: '生产配置写', re: /(?:^|[\s"'|;&])\/etc\/|\breg\s+add\b|\bschtasks\s+\/create\b|\bcrontab\b|\bnetsh\b/i },
-  { domain: '权限变更', re: /\bchmod\s+777\b|\bchown\b|\busermod\b|\buseradd\b|\bnet\s+user\b|\bicacls\b|\bcacls\b|\btakeown\b|\bSet-Acl\b/i },
+  { domain: '权限变更', re: /\bchmod\s+(?:-R\s+)?0{3}\b|\bchmod\s+777\b|\bchown\b|\busermod\b|\buseradd\b|\bnet\s+user\b|\bicacls\b|\bcacls\b|\btakeown\b|\bSet-Acl\b/i },
   { domain: '系统迁移/覆盖', re: /\bmkfs\b|\bdd\s+if=|\bformat\b\s|\bdiskpart\b/i },
+  { domain: '破坏性远端操作', re: /\bcurl\b[^;&|\n]*-X\s*(?:DELETE|PUT)\b|\bwget\b[^;&|\n]*--method=(?:DELETE|PUT)\b/i },
 ]
 
 // 只读/无害豁免：命中危险域后先查豁免，豁免命中=放行（误拦率防线，Q4 验收 <10%）
-const READONLY_EXEMPTS: RegExp[] = [
-  /(?:^|[;&|]\s*)(?:cat|ls|dir|head|tail|stat|file|less|more|grep)\s[^;&|]*\/etc\//i, // /etc/ 只读动词
-  /\bcrontab\s+-l\b/i, // 列出定时任务
-  /\bnetsh\b[^;&|]*\b(?:show|dump|list)\b/i, // netsh 查询
-  /\bicacls\b(?![^;&|]*\/(?:grant|deny|remove|reset|setowner|inheritance))/i, // icacls 无授权动词=查 ACL
-  /\b(?:Get-Help|help|man|Get-Command)\b[^;&|]*\b(?:rm|del|Remove-Item|erase)\b/i, // 查帮助/文档
-  /\btakeown\s+\/\?/i, // 帮助
-  /--dry-run\b/i, // 全域 dry-run
-  /\bgit\s+clean\b[^\n;&|]*?(?:^|\s)-n(?:\s|$)/m, // clean -n dry-run（-dn 组合不含独立 -n 仍拦）
-  /^\s*(?:echo|Write-Output|Write-Host|printf)\s(?![^;&|]*>>?)[^;&|]*$/i, // 单段纯输出提及（无分隔符且无重定向=不执行任何危险段；echo > file 是真实写操作不豁免）
+// afterDanger=true 的条目只在「危险模式命中位置之后」匹配（--dry-run 在危险动词前=绕过攻击，第四份审查实证）
+const READONLY_EXEMPTS: Array<{ re: RegExp; afterDanger?: boolean }> = [
+  { re: /(?:^|[;&|]\s*)(?:cat|ls|dir|head|tail|stat|file|less|more|grep)\s[^;&|]*\/etc\//i }, // /etc/ 只读动词
+  { re: /\bcrontab\s+-l\b/i }, // 列出定时任务
+  { re: /\bnetsh\b[^;&|]*\b(?:show|dump|list)\b/i }, // netsh 查询
+  { re: /\bicacls\b(?![^;&|]*\/(?:grant|deny|remove|reset|setowner|inheritance))/i }, // icacls 无授权动词=查 ACL
+  { re: /\b(?:Get-Help|help|man|Get-Command)\b[^;&|]*\b(?:rm|del|Remove-Item|erase)\b/i }, // 查帮助/文档
+  { re: /\btakeown\s+\/\?/i }, // 帮助
+  { re: /--dry-run\b/i, afterDanger: true }, // dry-run 标志必须在危险动词之后（git clean --dry-run ✓；--dry-run rm -rf ✗）
+  { re: /\bgit\s+clean\b[^\n;&|]*?(?:^|\s)-n(?:\s|$)/m }, // clean -n dry-run（-dn 组合不含独立 -n 仍拦）
+  { re: /^\s*(?:echo|Write-Output|Write-Host|printf)\s(?![^;&|]*>>?)[^;&|]*$/i }, // 单段纯输出提及（无分隔符且无重定向=不执行任何危险段；echo > file 是真实写操作不豁免）
 ]
 
 export function judgeL3(cmd: string): string | null {
   for (const p of L3_PATTERNS) {
-    if (p.re.test(cmd)) {
+    const m = p.re.exec(cmd)
+    if (m) {
       // 编码执行=故意绕过审计，不设豁免
       if (p.domain === '编码执行') return p.domain
       for (const ex of READONLY_EXEMPTS) {
-        if (ex.test(cmd)) return null
+        // afterDanger 条目只在危险命中位置之后匹配；普通豁免全文匹配（cat /etc/x 的豁免动词在 /etc/ 之前）
+        if (ex.afterDanger ? ex.re.test(cmd.slice(m.index)) : ex.re.test(cmd)) return null
       }
       return p.domain
     }
@@ -87,7 +91,7 @@ export function judgeL3(cmd: string): string | null {
 
 export interface CompiledRules {
   patterns: Array<{ domain: string; re: RegExp; noExempt: boolean }>
-  exempts: RegExp[]
+  exempts: Array<RegExp | { re: RegExp; afterDanger?: boolean }>
 }
 
 export interface RulesLoadResult {
@@ -171,10 +175,13 @@ export function loadRulesFile(path: string): RulesLoadResult {
 // 规则注入式判定（config 化后的活动判定面；judgeL3 保持内置默认语义供回归对照）。
 export function judgeL3With(rules: CompiledRules, cmd: string): string | null {
   for (const p of rules.patterns) {
-    if (p.re.test(cmd)) {
+    const m = p.re.exec(cmd)
+    if (m) {
       if (p.noExempt) return p.domain
       for (const ex of rules.exempts) {
-        if (ex.test(cmd)) return null
+        // content 规则的豁免=全文匹配语义（契约文档注明：位置敏感豁免如 --dry-run 请用内置默认）
+        const re = ex instanceof RegExp ? ex : ex.re
+        if (re.test(cmd)) return null
       }
       return p.domain
     }

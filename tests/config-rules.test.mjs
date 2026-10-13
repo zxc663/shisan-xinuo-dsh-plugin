@@ -45,7 +45,7 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
 // ── 2 fail-closed 装载 ──
 {
   const r = loadRulesFile(join(TD, 'missing.json'))
-  t('load: 文件缺失→内置默认', true, r.valid === false && r.domains === 8 && r.reason === '文件不存在')
+  t('load: 文件缺失→内置默认', true, r.valid === false && r.domains === 9 && r.reason === '文件不存在')
 }
 {
   const r = loadRulesFile(wf('bad.json', '{not json'))
@@ -103,15 +103,30 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
     ['echo x > ~/.ssh/authorized_keys', '敏感路径写'],
     ['echo hello world', null],
     ['cat /etc/hosts', null],
+    // 第四份审查 GAP 批（2026-10-13，10 形态+dry-run bug 回归）
+    ['find / -name "*.log" -delete', '数据删除'],
+    ['truncate -s 0 important.db', '数据删除'],
+    ['mv important.db /dev/null', '数据删除'],
+    ['git checkout -- .', '数据删除'],
+    ['git stash drop', '数据删除'],
+    ['kubectl delete ns prod', '数据删除'],
+    ['chmod -R 000 /home/user', '权限变更'],
+    ['curl -X DELETE https://api.example.com/items', '破坏性远端操作'],
+    ['--dry-run rm -rf /var', '数据删除'],
+    ['rm -rf /var --dry-run', null], // 内置 afterDanger 豁免：--dry-run 在危险动词后=标志位，rm 报错退出无害
+    ['git clean --dry-run -f', null],
   ]
   const repoRules = loadRulesFile(join(REPO, 'content', 'rules.json'))
   t('repo: content/rules.json 装载有效', true, repoRules.valid)
   let mismatches = 0
+  // content 豁免=全文匹配语义（无 afterDanger），dry-run 两例在 content 路径下语义不同：单独断言
+  const contentExceptions = new Set(['rm -rf /var --dry-run', 'git clean --dry-run -f'])
   for (const [cmd, expect] of corpus) {
-    if (judgeL3With(repoRules.rules, cmd) !== expect) mismatches++
     if (judgeL3(cmd) !== expect) mismatches++
+    if (!contentExceptions.has(cmd) && judgeL3With(repoRules.rules, cmd) !== expect) mismatches++
   }
-  t('repo: content 与内置默认在 24 例语料上判定一致', 0, mismatches)
+  t('repo: content 与内置默认在 37 例语料上判定一致', 0, mismatches)
+  t('repo: content 路径 dry-run（无豁免）拦 rm', '数据删除', judgeL3With(repoRules.rules, 'rm -rf /var --dry-run'))
   const disciplineContent = readFileSync(join(REPO, 'content', 'discipline.md'), 'utf8')
   t('repo: discipline.md 与 CORE_DISCIPLINE 逐字镜像', true, disciplineContent.trim() === CORE_DISCIPLINE.trim())
 }
