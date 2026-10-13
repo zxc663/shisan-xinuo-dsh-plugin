@@ -23,7 +23,7 @@ const FIELD_WHITELIST = {
   behavior: ['turn', 'hasText', 'restated', 'levelDeclared', 'gate', 'gateQuality', 'textClaim'],
   'gate-ok': ['turn', 'via', 'tail'],
   'gate-missing': ['turn', 'toolCalls', 'gateVerdict', 'tail'],
-  'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error', 'assertions'],
+  'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error', 'assertions', 'evidence'],
   rules: ['source', 'valid', 'domains', 'reason'],
   discipline: ['source', 'valid', 'reason'],
   budget: ['source', 'valid', 'reason'],

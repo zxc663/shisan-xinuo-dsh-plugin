@@ -585,6 +585,17 @@ export function gateRequirementBlock(registered: string[], cmd: string | null, v
   return '\n' + lines.join('\n')
 }
 
+// G6：pass 必须标"证据强度"——无关命令的 pass 与真验证的 pass 记录同形（实测：`cd D:\` 也拿到 pass）。
+// 只按"形态"分类（能否自动判定相关性已被论证为不可行）：用检查类算子/动词=strong，其余=weak。
+// weak 不是失败，只是**如实标注**：该通过不携带"与目标相关"的信息。
+export function classifyEvidence(cmd: string | null): 'strong' | 'weak' {
+  if (!cmd) return 'weak'
+  const strong =
+    /\b(Test-Path|Get-Content|Get-Item|Select-String|Measure-Object|Compare-Object|Get-FileHash|Get-ChildItem|Test-File|findstr)\b/i.test(cmd) ||
+    /\b(not_exists|exists|path_contains|cmd_exit0)\b/.test(cmd)
+  return strong ? 'strong' : 'weak'
+}
+
 const GATE_CMD_TIMEOUT_MS = 30_000
 const GATE_TAIL_CAP = 300
 
@@ -711,7 +722,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             }
           }
           deps.acceptance.markPassed(execCtx)
-          void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, assertions: formatAssertionResults(assertionResults) })
+          const evidence = classifyEvidence(cmd)
+          void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, evidence, assertions: formatAssertionResults(assertionResults) })
           let concludedTurn = false
           if (deps.concludeOnPass) {
             const ct = (execCtx as { concludeTurn?: () => void }).concludeTurn
@@ -731,7 +743,13 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
             assertions: assertionResults,
             ...(concludedTurn ? { concludedTurn } : {}),
-            message: gateToolMessage('pass', claimedExit, r.code) + ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。`,
+            evidence,
+            message:
+              gateToolMessage('pass', claimedExit, r.code) +
+              ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。` +
+              (evidence === 'weak'
+                ? ' 证据强度=**弱**：该命令未使用检查类算子，宿主无法据此判断它与任务目标相关——请补一条针对目标的判据（not_exists/exists/path_contains/cmd_exit0），或如实说明未验证事项。'
+                : ' 证据强度=强（使用了检查类算子）。'),
           }
         }
       }

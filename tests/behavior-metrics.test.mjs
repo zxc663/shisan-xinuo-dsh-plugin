@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -65,5 +65,11 @@ check('G2d 失败归类', rb1.includes('退出码不符'), true)
 const rb2 = gateRequirementBlock([], 'if (Test-Path "D:\\a") { exit 1 } else { exit 0 }', 'honest-fail')
 check('G2e 有路径则不提示', rb2.includes('未引用任何路径'), false)
 check('G2f 空登记给替代路径', rb2.includes('discipline_task'), true)
+
+// ── classifyEvidence（G6 pass 证据强度）──
+check('G6a cd 型=弱', classifyEvidence('cd D:\\'), 'weak')
+check('G6b Test-Path 型=强', classifyEvidence('if (Test-Path "D:\\a") { exit 1 } else { exit 0 }'), 'strong')
+check('G6c 算子形态=强', classifyEvidence('cmd_exit0:node -e "1"'), 'strong')
+check('G6d 空=弱', classifyEvidence(null), 'weak')
 
 process.exit(fail > 0 ? 1 : 0)
