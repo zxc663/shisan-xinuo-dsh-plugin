@@ -52,6 +52,11 @@
 
 - **R11（2026-10-13，harness 限流退避；不改判据）**：实测免费档存在速率限制——执行会话结束后立即发起出题调用会命中 `RATE_LIMIT 429 code 1302`（并使出题会话 0 输出退出）。处置：跑批器对**执行与出题两处**加入「限流退避重试」（30s→60s，最多两次额外尝试），仅在 stderr／stdout 命中限流特征时触发；判据、阈值、臂定义均不变。另：**M 臂锚定段与既有 P 臂同构**（同为 NO_ASSERT＋pinned＋flash）⇒ 跳过不跑，避免重复占用额度。
 
+- **R12（2026-10-13，备用模型源探活：本地网关与本地模型）**：
+  - **本地 new-api 网关（免费池聚合）**：`D:\ai本地模型\new-api\new-api-v1.0.0-rc.44.exe` 为可用实体，但**服务未运行**（:3000 无监听）；已拉起并复核 **`GET /v1/models` = 200，35 个模型**。逐模型探活结果：**仅 `glm-4.5-flash` 可用**（200）；`ab-kilo-free`／`mimo-v2.6-flash-free`／`openrouter/free`／`jev-1.13-free`／`longcat-2.5-preview-free`／`ling-3.1-flash-free`／`muse-spark-*`／`liquid/lfm-2.5-2.6b:free`／`nvidia/nemotron-*:free` 全部 **500 upstream `do request failed`**；`glm-4.6` 返回 **429 余额不足**。⇒ 网关的免费别名当前**通道不可用**，不构成新的档位来源。
+  - **本地 Ollama**：`qwen3:4b` 已在库（2.5 GB／Q4_K_M／声明 `context_length=262144`／支持 tools）。结构：36 层、32 头、**8 KV 头（GQA）**、head_dim=80 ⇒ **KV ≈ 90 KB/token**（8K≈0.7 GB／32K≈2.9 GB／64K≈5.9 GB）。本机无独显（Intel Iris Xe＋32 GB 内存）。标定（`num_ctx=8192`，prompt 6285 token）：**prefill 约 2.5 万 tok/s、decode 仅 4.0 tok/s**；插针召回**失败**（注：走 `/api/generate` 裸提示词绕开 chat 模板，且 `think:false`，该结果不能直接当作模型上限，仅作可用性提示）。⇒ 4B 本地档的约束不是内存而是**解码速度与长上下文召回**，建议阈 **8192–16384**（按此，agent 循环单步仍可能耗时数分钟）。
+  - 结论：**档位来源仍只有 `zhipu-cloud/glm-4.5-flash`**；多档矩阵维持外部资源阻塞。
+
 ## 6. 预注册扩项（2026-10-13 · H5／E 臂：对抗复核层）
 
 > 提案：判为 L2 的任务额外路由一个对抗模型复核。本节给出该提案的可执行形态（§6.1）、宿主可行性实查（§6.2）、缺口清单（§6.3）与冻结判据（§6.4）。
