@@ -136,6 +136,8 @@ node "<dsh>/lib/bin.js" permtest "回复 ok"
 
 目录工具原样返回（节选）：`本档位显式允许：read, write, edit, glob, grep, pwsh, todo_write, web_search, web_fetch, job_list, job_output, exit_plan_mode, skill` ／ `线缆真值（宿主这次实际发给模型的 16 件）：…, skill, **subagent**, todo_write, …`。
 
+**取证路径**（截图外置，不入库）：`D:\tmp\gui-b\step-03-reply.png`（首声明未生效）／`step-04-tools.png`（升档后目录，wire=16）／`b2-05-catalog.png`（L1 下的漏网上报行）；机证＝`logs/exec-log.jsonl` 的 `budget-applied`／`budget-upgrade-capped`／`budget-leak` 三类行（时刻见上表）。复算后 `git ls-remote` = `f24b392`。
+
 **改判结论**：
 
 1. **掩码不是封闭面**：同一份实现，headless 档 `allow=9 → wire=9`（无漏网），**桌面档 `allow=9 → wire=10`、`allow=15 → wire=16`，恒定多出 `subagent`**。⇒ 交接档的"未定论"**不是纯显示口径问题**：桌面档确实有一件工具逃出掩码。
