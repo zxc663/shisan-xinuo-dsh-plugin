@@ -351,6 +351,131 @@ export function planGate(cmd: string, judge: (c: string) => string | null = judg
   return domain ? { action: 'refuse', domain } : { action: 'run' }
 }
 
+// ── B2 验收绑定（v2 内核）：任务记录持有验收断言＝**资源真值探测**。
+// 设计约束（同族问题）：断言复核对"资源"（文件系统/命令真值）判定，与调用工具无关——
+// 模型换工具（write→pwsh→edit）、换目标（write 清空代删除）都绕不过；这是与"工具调用匹配"的本质区别。
+
+export type AcceptanceAssertion =
+  | { kind: 'not_exists'; path: string }
+  | { kind: 'exists'; path: string }
+  | { kind: 'path_contains'; path: string; substr: string }
+  | { kind: 'cmd_exit0'; cmd: string }
+
+export interface AssertionResult { assertion: AcceptanceAssertion; ok: boolean; detail: string }
+
+const ASSERTION_KINDS = new Set(['not_exists', 'exists', 'path_contains', 'cmd_exit0'])
+
+export function explainAssertion(a: AcceptanceAssertion): string {
+  switch (a.kind) {
+    case 'not_exists': return `不存在(${a.path})`
+    case 'exists': return `存在(${a.path})`
+    case 'path_contains': return `包含(${a.path} ⊇ "${a.substr}")`
+    case 'cmd_exit0': return `命令退出0(${a.cmd})`
+    default: return JSON.stringify(a)
+  }
+}
+
+// 断言规格串（discipline_task 工具入参）：`kind:payload` 以 ';' 分隔；path_contains 用 '::' 分隔 path 与 substr。
+export function parseAssertionSpec(spec: string): AcceptanceAssertion[] {
+  const out: AcceptanceAssertion[] = []
+  for (const rawSeg of spec.split(';')) {
+    const seg = rawSeg.trim()
+    if (!seg) continue
+    const idx = seg.indexOf(':')
+    if (idx <= 0) continue
+    const kind = seg.slice(0, idx).trim()
+    const payload = seg.slice(idx + 1).trim()
+    if (!ASSERTION_KINDS.has(kind) || !payload) continue
+    if (kind === 'path_contains') {
+      const sep = payload.indexOf('::')
+      if (sep <= 0) continue
+      out.push({ kind, path: payload.slice(0, sep).trim(), substr: payload.slice(sep + 2) })
+    } else if (kind === 'cmd_exit0') {
+      out.push({ kind, cmd: payload })
+    } else {
+      out.push({ kind: kind as 'not_exists' | 'exists', path: payload })
+    }
+    if (out.length >= 8) break
+  }
+  return out
+}
+
+// 路径 token 抽取：盘符路径 / ./ ../ 相对路径；目录 token + 紧随文件名（"在 D:\x\ 创建 note.txt"）拼接。
+const PATH_TOKEN_RE = /(?:[A-Za-z]:[\\/][^\s"'`,;，。；（）()【】[\]<>|]+|(?:\.{1,2}[\\/]|~[\\/])[^\s"'`,;，。；（）()【】[\]<>|]+)/g
+const DIR_NAME_JOIN_RE = /([A-Za-z]:[\\/][^\s"'`,;，。；（）()【】[\]<>|]*[\\/])\s*(?:创建|新建|写入|生成|建|create|write)[^\n]{0,12}?([\w.\-]+\.[A-Za-z0-9]{1,5})/g
+const DELETE_INTENT_RE = /(删除|删掉|移除|清理掉|\bdelete\b|\bremove\b|\brm\b)/i
+const DELETE_NEGATION_RE = /(不要|别|勿|无需|不用|请勿|don'?t|do\s+not|never)[^，。;；\n]{0,10}(删除|删掉|移除|delete|remove|rm)/i
+const CREATE_INTENT_RE = /(创建|新建|写入|生成|建一个|建个|\bcreate\b|\bwrite\b)/i
+
+// 从用户原文自动推导断言（启发式 v0；来源标 auto，可被 discipline_task 改正）。
+// 删除类→not_exists；创建类→exists。误报代价=收口被打回（显式可见），不漏报为假完成。
+export function deriveAssertionsFromUserText(text: string): AcceptanceAssertion[] {
+  if (!text || typeof text !== 'string') return []
+  const rawTokens = [...text.matchAll(PATH_TOKEN_RE)].map((m) => m[0].replace(/[.,;，。；：:]+$/, '').replace(/[\\/]+$/, ''))
+  const joined = [...text.matchAll(DIR_NAME_JOIN_RE)].map((m) => (m[1] + m[2]).replace(/[\\/]+$/, ''))
+  // 目录 token 若已被"目录+文件名"拼接项吸收，则不再单独成断言（避免 exists(目录) 噪声断言）
+  const isDirOfJoined = (r: string): boolean => joined.some((j) => j.startsWith(r + '\\') || j.startsWith(r + '/'))
+  const uniq = [...new Set([...joined, ...rawTokens.filter((r) => !isDirOfJoined(r))].filter((p) => p.length > 1))].slice(0, 4)
+  if (uniq.length === 0) return []
+  const out: AcceptanceAssertion[] = []
+  if (DELETE_INTENT_RE.test(text) && !DELETE_NEGATION_RE.test(text)) {
+    for (const p of uniq) out.push({ kind: 'not_exists', path: p })
+    return out.slice(0, 4)
+  }
+  if (CREATE_INTENT_RE.test(text)) {
+    for (const p of uniq) out.push({ kind: 'exists', path: p })
+    return out.slice(0, 4)
+  }
+  return []
+}
+
+export interface AssertionEvalDeps {
+  runCmd?: (cmd: string, opts?: { timeoutMs?: number; signal?: AbortSignal }) => Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>
+  judge?: (cmd: string) => string | null
+}
+
+// 断言真值评估（宿主侧直测；cmd_exit0 走 planGate 预检，断言不得成为 L3 侧门）。
+export async function evaluateAssertion(a: AcceptanceAssertion, deps: AssertionEvalDeps = {}): Promise<AssertionResult> {
+  try {
+    if (a.kind === 'not_exists') {
+      const present = existsSync(a.path)
+      return { assertion: a, ok: !present, detail: present ? '目标仍存在' : '已不存在（通过）' }
+    }
+    if (a.kind === 'exists') {
+      const present = existsSync(a.path)
+      return { assertion: a, ok: present, detail: present ? '已存在（通过）' : '目标不存在' }
+    }
+    if (a.kind === 'path_contains') {
+      if (!existsSync(a.path)) return { assertion: a, ok: false, detail: '文件不存在' }
+      const t = readFileSync(a.path, 'utf8')
+      const ok = t.includes(a.substr)
+      return { assertion: a, ok, detail: ok ? '内容匹配（通过）' : '内容不包含目标文本' }
+    }
+    const domain = (deps.judge ?? judgeL3)(a.cmd)
+    if (domain) return { assertion: a, ok: false, detail: `命令命中 L3 危险域（${domain}），宿主拒绝执行` }
+    const runCmd = deps.runCmd ?? runGateCommand
+    const r = await runCmd(a.cmd, { timeoutMs: 30_000 })
+    if (r.timedOut || r.code === null) return { assertion: a, ok: false, detail: r.timedOut ? '执行超时' : '未能取得退出码' }
+    return { assertion: a, ok: r.code === 0, detail: `exit=${r.code}` }
+  } catch (e) {
+    return { assertion: a, ok: false, detail: `断言评估异常：${String(e).slice(0, 120)}` }
+  }
+}
+
+export function formatAssertionResults(results: AssertionResult[]): string {
+  return results.map((r) => `${r.ok ? '✔' : '✘'} ${explainAssertion(r.assertion)} — ${r.detail}`).join('；')
+}
+
+// 任务记录验收桥（apply() 注入实现；工具与测试只依赖此接口）
+export interface AssertionRecord { assertion: AcceptanceAssertion; source: 'auto' | 'tool' }
+export interface AcceptanceBridge {
+  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown) => { count: number; mark: string }
+  clear: (ctx?: unknown) => void
+  list: (ctx?: unknown) => AssertionRecord[]
+  evaluate: (a: AcceptanceAssertion, ctx?: unknown) => Promise<AssertionResult>
+  markPassed: (ctx?: unknown) => void
+}
+
 // 真值判定：match=声明与实测一致（诚实度）；verdict=验证本身是否通过（exit 0）。
 // 三态分离（release-plan §7.2 证据三分离）：honest-fail=诚实声明了失败验证，同样不得宣告完成。
 export function judgeGateToolResult(claimedExit: number, realExit: number): {
@@ -397,6 +522,8 @@ export interface GateToolDeps {
   onStats?: (verdict: string) => void
   judge?: (cmd: string) => string | null
   isFullAccess?: () => boolean
+  /** B2 验收桥：验证通过后附加复核已登记断言（资源真值）；未接线=沿用旧行为 */
+  acceptance?: AcceptanceBridge
 }
 
 // 工具定义构造器（对接真相=app.asar 内建工具样例：parameters DSL {名:{type,required,description}} + output{schema,render} + execute(args,exec)）
@@ -419,7 +546,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       schema: {
         type: 'object',
         properties: {
-          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error'] },
+          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error', 'assertion-fail'] },
           claimedExit: { type: 'number' },
           realExit: { type: 'number' },
           match: { type: 'boolean' },
@@ -469,11 +596,89 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
 
       const { match, verdict } = judgeGateToolResult(claimedExit, r.code)
       deps.onStats?.(verdict)
+      if (verdict === 'pass' && deps.acceptance) {
+        // B2：命令验证通过 ≠ 任务本义通过——按登记的「资源真值」断言复核（工具无关，同族替换绕不过）
+        const pending = deps.acceptance.list(execCtx).map((x) => x.assertion)
+        if (pending.length > 0) {
+          const assertionResults: AssertionResult[] = []
+          for (const a of pending) assertionResults.push(await deps.acceptance.evaluate(a, execCtx))
+          const failed = assertionResults.filter((x) => !x.ok)
+          if (failed.length > 0) {
+            deps.onStats?.('assertion-fail')
+            void deps.log({ kind: 'gate-tool', status: 'assertion-fail', ...base, realExit: r.code, match, assertions: formatAssertionResults(assertionResults) })
+            return {
+              status: 'assertion-fail' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
+              assertions: assertionResults,
+              message:
+                `ASSERTION-FAIL：命令验证通过，但已登记验收断言未过——任务不得宣告完成。✘ ` +
+                failed.map((f) => `${explainAssertion(f.assertion)} — ${f.detail}`).join('；') +
+                `。断言复核的是资源真值（换工具/换目标都绕不过）：请完成真实目标后重新调用本工具；如断言本身登记有误，可用 discipline_task 改正后重验。`,
+            }
+          }
+          deps.acceptance.markPassed(execCtx)
+          void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, assertions: formatAssertionResults(assertionResults) })
+          return {
+            status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
+            assertions: assertionResults,
+            message: gateToolMessage('pass', claimedExit, r.code) + ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。`,
+          }
+        }
+      }
       void deps.log({ kind: 'gate-tool', status: verdict, ...base, realExit: r.code, match })
       return {
         status: verdict, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
         message: gateToolMessage(verdict, claimedExit, r.code),
       }
+    },
+  }
+}
+
+// ── B2 discipline_task：验收断言登记工具（模型可改正自动推导；登记后收口强制复核）──
+export interface TaskToolDeps {
+  log: (entry: Record<string, unknown>) => void | Promise<void>
+  acceptance: AcceptanceBridge
+}
+
+export function buildTaskToolDefinition(deps: TaskToolDeps) {
+  return {
+    name: 'discipline_task',
+    description:
+      '验收断言登记（收口复核依据）：把任务目标中可机器判定的事实登记为断言（删除类→not_exists:路径；创建/写入类→exists:路径；内容→path_contains:路径::文本；命令→cmd_exit0:命令）。收口调用 discipline_gate 时宿主自动复核全部断言，未过不得宣告完成；断言登记有误可用本工具改正。',
+    parameters: {
+      action: { type: 'string', required: true, description: 'register | clear | status' },
+      goal: { type: 'string', required: false, description: '任务目标原文摘录（随断言记录）' },
+      assertions: { type: 'string', required: false, description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { status: { type: 'string' }, count: { type: 'number' }, message: { type: 'string' } },
+        required: ['status', 'message'],
+      },
+      render(_args: unknown, value: unknown) {
+        return [{ type: 'text', text: JSON.stringify(value) }]
+      },
+    },
+    async execute(args: Record<string, unknown>, execCtx: { signal?: AbortSignal } = {}) {
+      const action = String(args.action ?? '')
+      const goal = args.goal === undefined ? '' : String(args.goal).slice(0, 300)
+      if (action === 'register') {
+        const list = parseAssertionSpec(String(args.assertions ?? ''))
+        if (list.length === 0) {
+          void deps.log({ kind: 'task-register', status: 'empty' })
+          return { status: 'empty', count: 0, message: '未解析到有效断言（格式：not_exists:路径; cmd_exit0:命令）。若目标无法机器判定，请在文本 GATE 的 exempt 中明说“未绑定断言”，不要伪造。' }
+        }
+        const r = deps.acceptance.register(list, goal, execCtx)
+        void deps.log({ kind: 'task-register', status: 'ok', mark: r.mark, count: r.count, goal })
+        return { status: 'ok', count: r.count, message: `已登记 ${r.count} 条验收断言：${list.map(explainAssertion).join('；')}。收口时 discipline_gate 将自动复核。` }
+      }
+      if (action === 'clear') {
+        deps.acceptance.clear(execCtx)
+        void deps.log({ kind: 'task-register', status: 'cleared' })
+        return { status: 'cleared', count: 0, message: '已清空验收断言（仅在你确认原断言登记错误时使用）。' }
+      }
+      const cur = deps.acceptance.list(execCtx)
+      return { status: 'status', count: cur.length, message: cur.length ? cur.map((c) => `${c.source}: ${explainAssertion(c.assertion)}`).join('；') : '当前无已登记断言。' }
     },
   }
 }
@@ -515,6 +720,7 @@ export function apply(ctx: Context) {
     checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
     gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, last: '未调用' as string },
     budget: '未裁剪' as string, wireTools: 0, fullAccess: false,
+    assertion: '未登记' as string,
   }
 
   // ── v0.3 content 层装载（fail-closed：无效回退引擎内置默认，防护不静默解除；装载事件落账可审计）──
@@ -625,12 +831,78 @@ export function apply(ctx: Context) {
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
   const turnBuckets = new Map<unknown, { turn: number; toolCalls: number; firstText: string; lastText: string; gateTool: boolean; steered: boolean }>()
   let inventoryLogged = false
+
+  // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
+  interface TaskRec {
+    raw: string
+    goal: string
+    assertions: AssertionRecord[]
+    assertionsPassedAt: number | null
+    unresolvedLogged: boolean
+  }
+  const taskRecords = new Map<string, TaskRec>()
+  const lastDerivedText = new Map<string, string>()
+  const sidKeyOf = (x: unknown, fallback = 'default'): string => {
+    const c = x as { id?: unknown; session?: unknown; sessionId?: unknown; agentId?: unknown; agent?: { session?: unknown } } | null
+    const cand = c && typeof c === 'object' ? (c.session ?? c.agent?.session ?? c.sessionId ?? c.agentId ?? c) : null
+    const id = (cand as { id?: unknown } | null)?.id ?? cand
+    if (typeof id === 'string' && id) return id
+    if (typeof id === 'number') return String(id)
+    return fallback
+  }
+  const resolveKey = (ctx: unknown): string => {
+    const direct = sidKeyOf(ctx, '')
+    if (direct && taskRecords.has(direct)) return direct
+    if (taskRecords.size === 1) return [...taskRecords.keys()][0]
+    return direct || 'default'
+  }
+  const acceptanceBridge: AcceptanceBridge = {
+    register: (assertions, goal, ctx) => {
+      const key = resolveKey(ctx)
+      const mark = assertions.map(explainAssertion).join('；').slice(0, 240)
+      taskRecords.set(key, { raw: goal, goal, assertions: assertions.map((a) => ({ assertion: a, source: 'tool' as const })), assertionsPassedAt: null, unresolvedLogged: false })
+      stats.assertion = `${assertions.length} 条待复(登记)`
+      return { count: assertions.length, mark }
+    },
+    clear: (ctx) => {
+      taskRecords.delete(resolveKey(ctx))
+      stats.assertion = '未登记'
+    },
+    list: (ctx) => taskRecords.get(resolveKey(ctx))?.assertions ?? [],
+    evaluate: (a) => evaluateAssertion(a, { judge: activeJudge }),
+    markPassed: (ctx) => {
+      const rec = taskRecords.get(resolveKey(ctx))
+      if (rec) { rec.assertionsPassedAt = Date.now(); stats.assertion = '已通过' }
+    },
+  }
   // 完全权限感知（用户裁决）：宿主 sandbox/mode=danger-full-access 时用户已全局授权，
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
   let fullAccess = false
 
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
+      // B2 自动推导：用户原文（跳过我方 steer 注入）→ 断言登记；新任务替换旧记录并记录遗留
+      const rawUser = event as { type?: unknown; data?: { content?: unknown; source?: { kind?: unknown } } }
+      if (rawUser?.type === 'user/message') {
+        const srcKind = rawUser.data?.source?.kind
+        const txt = assistantText(rawUser.data?.content)
+        // 只认真正的用户消息：runtime-context / skill-catalog 等注入文本同样走 user/message 信封（B2 实测），一律剔除。
+        if (typeof srcKind === 'string' && srcKind !== 'user') return
+        if (!txt || txt.startsWith('[十三希诺收口强制]')) return
+        const derived = deriveAssertionsFromUserText(txt)
+        const key = sidKeyOf(session)
+        if (derived.length > 0 && lastDerivedText.get(key) !== txt) {
+          lastDerivedText.set(key, txt)
+          const prev = taskRecords.get(key)
+          if (prev && prev.assertions.length > 0 && prev.assertionsPassedAt === null) {
+            void log({ kind: 'task-carryover', count: prev.assertions.length, prior: prev.raw.slice(0, 120) })
+          }
+          taskRecords.set(key, { raw: txt.slice(0, 300), goal: txt.slice(0, 300), assertions: derived.map((a) => ({ assertion: a, source: 'auto' as const })), assertionsPassedAt: null, unresolvedLogged: false })
+          stats.assertion = `${derived.length} 条待复(自动)`
+          void log({ kind: 'task-auto', count: derived.length, sourceKind: String(srcKind), raw: txt.slice(0, 160), mark: derived.map(explainAssertion).join('；').slice(0, 240) })
+        }
+        return
+      }
       const rawMode = event as { type?: unknown; data?: { mode?: unknown } }
       if (rawMode?.type === 'sandbox/mode') {
         const was = fullAccess
@@ -709,6 +981,14 @@ export function apply(ctx: Context) {
             void log({ kind: 'gate-missing', turn: ev.turn, toolCalls: b.toolCalls, tail: b.lastText.slice(-200) })
           }
         }
+        {
+          // B2 遗留可见：本回合收尾时断言仍未通过 → 落账（供追账/统计；不阻塞，会话继续）
+          const rec = taskRecords.get(sidKeyOf(session))
+          if (verdict !== 'skip' && rec && rec.assertions.length > 0 && rec.assertionsPassedAt === null && !rec.unresolvedLogged) {
+            rec.unresolvedLogged = true
+            void log({ kind: 'assertion-unresolved', turn: ev.turn, count: rec.assertions.length, gate: verdict })
+          }
+        }
         turnBuckets.delete(bucketKey)
       }
     } catch (e) {
@@ -728,15 +1008,22 @@ export function apply(ctx: Context) {
       if (!bucketKey || typeof payload?.turn !== 'number') return
       const b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== payload.turn) return
-      // 只强制实质工作回合（≥1 工具调用）；已调 gate 或已有文本 GATE → 合规放行；本回合已 steer 过 → 放行
-      if (b.toolCalls < 1 || b.gateTool || b.steered) return
-      if (judgeGate(b.lastText, b.toolCalls, 'completed') === 'ok') return
+      const rec = taskRecords.get(sidKeyOf(bucketKey))
+      const assertionsOpen = Boolean(rec && rec.assertions.length > 0 && rec.assertionsPassedAt === null)
+      // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）
+      if (b.toolCalls < 1 || b.steered) return
+      const textGateOk = judgeGate(b.lastText, b.toolCalls, 'completed') === 'ok'
+      // 合规放行仅当"无未过断言"：断言开启时，gate 工具或文本 GATE 都不算收口（必须复核资源真值）
+      if (!assertionsOpen && (b.gateTool || textGateOk)) return
       b.steered = true
-      void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls })
+      void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, assertionsOpen, assertions: rec?.assertions.length ?? 0 })
+      const assertLine = assertionsOpen
+        ? `⚠ 本任务已登记 ${rec!.assertions.length} 条验收断言（${rec!.assertions.map((x) => explainAssertion(x.assertion)).join('；').slice(0, 160)}）——断言复核的是资源真值，文本 GATE 不能替代。`
+        : ''
       const steerMsg = {
         content: [{
           type: 'text',
-          text: `[十三希诺收口强制] 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须：①调用 discipline_gate 工具（宿主将真实执行你声明的验证命令并比对退出码），或 ②在回复末尾补齐文本 GATE 单行（GATE: {level=…, v=…, cmd=…, exit=真实退出码, files=…, exempt=…}）。未收口不得宣告任务完成。`,
+          text: `[十三希诺收口强制] 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。${assertLine}必须：①调用 discipline_gate 工具（宿主将真实执行你声明的验证命令并比对退出码${assertionsOpen ? '，并自动复核全部已登记断言；断言未过≠收口成立' : ''}），或 ②在回复末尾补齐文本 GATE 单行（GATE: {level=…, v=…, cmd=…, exit=真实退出码, files=…, exempt=…}${assertionsOpen ? '，并在 exempt 明说断言未验证' : ''}）。未收口不得宣告任务完成。`,
         }],
         source: { kind: 'user' },
       }
@@ -770,6 +1057,7 @@ export function apply(ctx: Context) {
           `- 工作回合已检 ${stats.checked} 次（GATE 齐 ${stats.gateOk}/缺 ${stats.gateMissing}）｜L3 拦截 ${stats.intercepted} 次｜上一工作回合 GATE: ${stats.lastGate}`,
           `- discipline_gate 真值收口：${stats.gateTool.calls} 次（通过 ${stats.gateTool.pass}/不符 ${stats.gateTool.mismatch}/诚实失败 ${stats.gateTool.honestFail}/拒 ${stats.gateTool.refused}/错 ${stats.gateTool.error}）｜上次=${stats.gateTool.last}`,
           `- 工具预算：${stats.budget}｜当前请求工具面=${stats.wireTools} 个${stats.fullAccess ? '｜⚠完全权限模式：L3 审批卡已按用户全局授权暂停' : ''}｜GATE 缺口>0 或上回合 GATE=无 时，下一任务收口必须调用 discipline_gate（或补齐文本 GATE 单行）。`,
+          `- 验收断言：${stats.assertion}${stats.assertion.includes('待复') ? '｜收口时 discipline_gate 将复核断言；断言未过不得宣告完成（文本 GATE 不能替代）' : ''}`,
         ].join('\n'),
     })
     console.log('[shisan-xinuo] live status banner installed')
@@ -787,6 +1075,7 @@ export function apply(ctx: Context) {
           log: (entry) => void log(entry),
           judge: activeJudge,
           isFullAccess: () => fullAccess,
+          acceptance: acceptanceBridge,
           onStats: (verdict) => {
             const g = stats.gateTool
             g.calls++
@@ -798,6 +1087,10 @@ export function apply(ctx: Context) {
         const d = toolsAny.register(def)
         if (typeof d === 'function') gateToolDispose = d
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
+        const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
+        const d2 = toolsAny.register(taskDef)
+        if (typeof d2 === 'function') statusDisposes.push(() => d2())
+        console.log('[shisan-xinuo] discipline_task tool registered (acceptance-assertion registry)')
       } catch (e) {
         // 注册失败=降级为纯文本 GATE 模式；拦截与机检不受影响（错误处理不拖垮宿主面）
         console.error('[shisan-xinuo] gate tool registration FAILED (fallback to text GATE):', String(e).slice(0, 200))
