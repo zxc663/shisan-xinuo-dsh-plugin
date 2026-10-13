@@ -1,5 +1,10 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## GUI 抽检与高能力档首证（2026-10-13 · 桌面 App）
+
+- 注册 ModelScope provider（headless/desktop 双侧；密钥入各自 `.credentials.yaml` refs，外于仓库、不入库）；高能力档=`deepseek-ai/DeepSeek-V4-Pro`（推理型）＋备选 `Qwen/Qwen3.5-397B-A17B`。
+- GUI 四会话（删除/陷阱/钉死锚/无锚）：与 headless 电池结论一致；G2 模型自诊断机制错误并交还人类裁决，G3 外部锚干净收口。详见 `docs/validity-report-20261013.md` §6。
+
 ## 完成信号有效性验证轮（2026-10-13，85 会话）
 
 - 执行预注册电池（`docs/design-specs/completion-signal-validity-plan-20261013.md`，含 R1–R5）：五臂（A 裸/B 仅 gate/C 全量/D 全量＋锚/P 锚替启发式）× 锚定 12＋无锚 6＋陷阱 1；模型固定免费档，headless 批量。
