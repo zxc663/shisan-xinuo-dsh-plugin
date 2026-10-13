@@ -594,6 +594,12 @@ export function gateRequirementBlock(registered: string[], cmd: string | null, v
 // weak 不是失败，只是**如实标注**：该通过不携带"与目标相关"的信息。
 // C10：收口证据必须**写在结果里**（工具卡可见、模型可转述）——用户点名的诉求："验证通过了也要写出来给我看"。 #决策 2026-10-13 23:55
 // 形态选择：**不动注入通道**——`inject()` 亦按 `UserMessage` 投递（会显示为"用户发言"，同 F6 问题），故证据走工具返回。
+// C16（实验，默认关）：模型看不到自己的成本。宿主不回传 token，故只注入**可观测的量**——轮数与工具调用数，
+// 并明说"每步重发整个上下文"。经 `inject()`（非强制上下文通道）投递；前缀自曝来源（F6：投递类型所限，会显示为用户侧，故必须标注）。
+export function costHintLine(turns: number, toolCalls: number): string {
+  return `[十三希诺成本提示] 本会话已 ${turns} 轮、累计 ${toolCalls} 次工具调用；宿主每步重发整个上下文，故"轮数×上下文量"是主要成本——任务若已达成，请尽早收口。`
+}
+
 export function evidenceLine(
   cmd: string | null,
   claimedExit: number,
@@ -1244,7 +1250,7 @@ export function apply(ctx: Context) {
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean; costHinted?: boolean }>()
   let inventoryLogged = false
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
@@ -1495,6 +1501,15 @@ export function apply(ctx: Context) {
       if (!bucketKey || typeof payload?.turn !== 'number') return
       const b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== payload.turn) return
+      // C16（实验，默认关）：成本提示——inject 非唤醒通道，每回合最多一次，且从第 2 轮起才发（避免开场噪声）
+      if (process.env.SHISANUO_COST_HINT === '1' && !b.costHinted && b.turn >= 2) {
+        b.costHinted = true
+        ;(agent as { inject?: (m: unknown) => void })?.inject?.({
+          content: [{ type: 'text', text: costHintLine(b.turn, b.toolCalls) }],
+          source: { kind: 'user' },
+        })
+        void log({ kind: 'cost-hint', turn: b.turn, toolCalls: b.toolCalls })
+      }
       // F2 盲区（默认关闭）：零工具调用却声称完成——本轮不经任何收口检查，故单列记录并按需轻量提示一次
       if (b.toolCalls < 1) {
         if (ZEROTOOL_GUARD && !b.steered && judgeZeroToolClaim(b.lastText)) {

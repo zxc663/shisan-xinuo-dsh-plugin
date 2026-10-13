@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, BUDGET_ALWAYS_ALLOW, evidenceLine } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, BUDGET_ALWAYS_ALLOW, evidenceLine, costHintLine } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -136,6 +136,14 @@ check('C2e 写类工具名亦被识别', hostLevelFromCall('apply_patch', ''), '
   check('C10c 含闭环状态', l1.includes('闭环=是'), true)
   const l2 = evidenceLine('cd D:\\', 0, 0, 'weak', false, 0)
   check('C10d 弱证据不闭环可见', l2.includes('闭环=否') && l2.includes('证据强度=弱'), true)
+}
+
+// ── C16 成本提示（实验，默认关）──
+{
+  const h = costHintLine(4, 9)
+  check('C16a 含来源自曝前缀', h.includes('[十三希诺成本提示]'), true)
+  check('C16b 含轮数与工具调用数', h.includes('4 轮') && h.includes('9 次'), true)
+  check('C16c 明说每步重发上下文', h.includes('重发整个上下文'), true)
 }
 
 process.exit(fail > 0 ? 1 : 0)

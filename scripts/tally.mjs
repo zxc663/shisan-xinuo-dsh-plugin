@@ -66,6 +66,8 @@ const FIELD_WHITELIST = {
   'tools-catalog': ['level', 'visible', 'denied'],
   // C14 skill 类注入体积（度量；裁剪不在插件面）
   'skill-catalog-cost': ['sourceKind', 'chars'],
+  // C16 成本提示（实验）
+  'cost-hint': ['turn', 'toolCalls'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 
