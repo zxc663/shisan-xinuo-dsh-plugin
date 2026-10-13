@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -88,5 +88,12 @@ check('C5d 阶梯含算子白名单', failLadderPrefix(2).includes('path_contain
 // ── C11/F7 收口措辞禁重述（常量级证据；**行为效果未验证**，需 A/B token 对照）──
 check('C11a 含禁重述指令', STEER_ANTI_REPEAT.includes('不要重复'), true)
 check('C11b 前缀未被污染', STEER_PREFIX.startsWith('['), true)
+
+// ── isVAnchored（C6/G4 v 描述锚定性；仅可见性判定）──
+check('C6a 含路径=锚定', isVAnchored('检查 D:\\tmp\\a.txt 是否存在'), true)
+check('C6b 含算子=锚定', isVAnchored('not_exists: D:\\tmp\\a.txt'), true)
+check('C6c 真实轨迹的泛描述=未锚定', isVAnchored('验证仓库类型分析结果'), false)
+check('C6d 空=未锚定', isVAnchored(''), false)
+check('C6e 检查动词=锚定', isVAnchored('用 Test-Path 确认目标已消失'), true)
 
 process.exit(fail > 0 ? 1 : 0)

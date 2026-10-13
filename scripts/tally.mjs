@@ -48,6 +48,8 @@ const FIELD_WHITELIST = {
   'gate-steer-capped': ['turn', 'used', 'cap', 'mode'],
   // C5 失败阶梯
   'gate-fail-ladder': ['status', 'n', 'cmd'],
+  // C6 v 描述锚定性
+  'gate-v-unanchored': ['status', 'v', 'cmd'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

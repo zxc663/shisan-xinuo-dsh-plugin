@@ -599,6 +599,16 @@ export function classifyEvidence(cmd: string | null): 'strong' | 'weak' {
   return strong ? 'strong' : 'weak'
 }
 
+// G4/C6：`v`（"验证什么"的描述）当前是自由文本，且**不锚定目标**——真实轨迹里 v="验证仓库类型分析结果" 而命令是 `cd D:\`。
+// 本函数只做**可见性判定**（不拦、不改判定）：描述里出现路径样 token、算子名或检查动词 ⇒ 视为已锚定。
+export function isVAnchored(v: string | null | undefined): boolean {
+  const s = String(v ?? '').trim()
+  if (s.length < 2) return false
+  return /[A-Za-z]:[\\/]|\/|\b(not_exists|exists|path_contains|cmd_exit0)\b|\b(Test-Path|Get-Content|Select-String|Measure-Object|Compare-Object|Get-Item|Get-FileHash|findstr)\b/i.test(
+    s,
+  )
+}
+
 // F8：跨回合熔断判定（纯函数，便于单测）。cap 为整会话允许的强制收口次数上限。
 export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
   if (!Number.isFinite(cap) || cap <= 0) return true // 非法/未配置 ⇒ 不熔断（保守：不因配置错误而放行）
@@ -741,6 +751,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           }
           deps.acceptance.markPassed(execCtx)
           const evidence = classifyEvidence(cmd)
+          const vAnchored = isVAnchored(String((base as { v?: string }).v ?? ''))
+          if (!vAnchored) void deps.log({ kind: 'gate-v-unanchored', status: 'pass', v: String((base as { v?: string }).v ?? '').slice(0, 120), cmd: String(cmd).slice(0, 120) })
           ;(deps as { failCount?: number }).failCount = 0 // 通过即重置失败阶梯
           void deps.log({ kind: 'gate-tool', status: 'pass', ...base, realExit: r.code, match, evidence, assertions: formatAssertionResults(assertionResults) })
           let concludedTurn = false
@@ -768,7 +780,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
               ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。` +
               (evidence === 'weak'
                 ? ' 证据强度=**弱**：该命令未使用检查类算子，宿主无法据此判断它与任务目标相关——请补一条针对目标的判据（not_exists/exists/path_contains/cmd_exit0），或如实说明未验证事项。'
-                : ' 证据强度=强（使用了检查类算子）。'),
+                : ' 证据强度=强（使用了检查类算子）。') +
+              (vAnchored ? '' : ' 另：`v`（验证描述）未锚定目标（无路径/算子/检查动词）——描述与目标脱钩时，即便通过也不携带"验的是这件事"的信息。'),
           }
         }
       }
