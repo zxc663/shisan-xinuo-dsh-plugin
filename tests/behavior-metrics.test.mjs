@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -55,5 +55,15 @@ check('Z3 诚实阻塞', judgeZeroToolClaim('无法完成：工具被拒绝，�
 check('Z4 纯汇报无完成语', judgeZeroToolClaim('这是对当前目录的说明。'), false)
 check('Z5 空串', judgeZeroToolClaim(''), false)
 check('Z6 完成语+阻塞语并存→按阻塞', judgeZeroToolClaim('已写入，但写入失败，未能完成。'), false)
+
+// ── gateRequirementBlock（G2 失败返回带要求结构）──
+const rb1 = gateRequirementBlock(['不存在(D:\\tmp\\x.txt)'], 'echo ok', 'mismatch')
+check('G2a 含算子白名单', rb1.includes('not_exists'), true)
+check('G2b 列出已登记判据', rb1.includes('D:\\tmp\\x.txt'), true)
+check('G2c 无路径提示（cd 类命令）', rb1.includes('未引用任何路径'), true)
+check('G2d 失败归类', rb1.includes('退出码不符'), true)
+const rb2 = gateRequirementBlock([], 'if (Test-Path "D:\\a") { exit 1 } else { exit 0 }', 'honest-fail')
+check('G2e 有路径则不提示', rb2.includes('未引用任何路径'), false)
+check('G2f 空登记给替代路径', rb2.includes('discipline_task'), true)
 
 process.exit(fail > 0 ? 1 : 0)

@@ -571,6 +571,20 @@ export function gateToolMessage(verdict: string, claimedExit: number, realExit: 
   return `PASS：宿主实测 exit=${realExit}，与声称一致，验证通过。收口成立。`
 }
 
+// G2：失败返回必须带"要求结构"——否则模型只能靠现编命令硬凑（实测：连试 4 次才凑到一条无关的 exit 0）。
+// 本块只陈述"合格判据长什么样"，不替代模型判断相关性（相关性自动判定已被论证为不可行）。
+export function gateRequirementBlock(registered: string[], cmd: string | null, verdict: string): string {
+  const lines = [
+    '—— 合格判据的要求（照此重写，不要再试凑命令）——',
+    `① 本任务已登记的判据：${registered.length > 0 ? registered.slice(0, 6).join('；') : '（无；可用 discipline_task 登记，或由会话外 pinned 锚提供）'}`,
+    '② 可接受形态：not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串> / cmd_exit0:<命令>',
+    '③ 两条自检：a) 这条判据的成败**是否取决于本任务目标**——换成另一个任务它是否照样通过？若是，它不构成证据；b) 判据是否**只读**、不改变被验对象？会改则改用检查类算子。',
+    `④ 本次失败归类：${verdict === 'mismatch' ? '退出码不符（声称与实测不一致）' : verdict === 'honest-fail' ? '验证未通过（非零退出码）' : verdict}`,
+  ]
+  if (cmd && !/[A-Za-z]:\\|\//.test(cmd)) lines.push('⑤ 提示：该命令未引用任何路径；多数任务目标与某个文件/目录的物理状态有关，优先从目标取路径。')
+  return '\n' + lines.join('\n')
+}
+
 const GATE_CMD_TIMEOUT_MS = 30_000
 const GATE_TAIL_CAP = 300
 
@@ -724,7 +738,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       void deps.log({ kind: 'gate-tool', status: verdict, ...base, realExit: r.code, match })
       return {
         status: verdict, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
-        message: gateToolMessage(verdict, claimedExit, r.code),
+        // 注意：失败路径**不得**读取断言表（既有语义：mismatch 不触发断言复核，见 tests/assertions.test.mjs）
+        message: gateToolMessage(verdict, claimedExit, r.code) + gateRequirementBlock([], cmd, verdict),
       }
     },
   }

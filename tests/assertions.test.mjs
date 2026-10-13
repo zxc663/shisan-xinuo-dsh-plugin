@@ -208,6 +208,9 @@ function mkAccept(list, evalOk = true) {
   const r = await def.execute({ level: 'L1', v: 'x', cmd: 'echo x', claimedExit: 0 }, {})
   t('gate: mismatch 不触发断言复核', 0, acc.stat.listCalls)
   t('gate: mismatch 原语义保持', 'mismatch', r.status)
+  // C1／G2 新增证据（端到端）：失败返回必须带上"合格判据的要求"，而不是只报一句失败
+  t('G2: mismatch 返回含算子白名单', true, /not_exists/.test(r.message))
+  t('G2: mismatch 返回含目标锚提示', true, /discipline_task|pinned/.test(r.message))
 }
 {
   const acc = mkAccept([{ kind: 'exists', path: 'D:\\a' }], true)
