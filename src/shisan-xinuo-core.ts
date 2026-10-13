@@ -592,6 +592,19 @@ export function gateRequirementBlock(registered: string[], cmd: string | null, v
 // G6：pass 必须标"证据强度"——无关命令的 pass 与真验证的 pass 记录同形（实测：`cd D:\` 也拿到 pass）。
 // 只按"形态"分类（能否自动判定相关性已被论证为不可行）：用检查类算子/动词=strong，其余=weak。
 // weak 不是失败，只是**如实标注**：该通过不携带"与目标相关"的信息。
+// C10：收口证据必须**写在结果里**（工具卡可见、模型可转述）——用户点名的诉求："验证通过了也要写出来给我看"。
+// 形态选择：**不动注入通道**——`inject()` 亦按 `UserMessage` 投递（会显示为"用户发言"，同 F6 问题），故证据走工具返回。
+export function evidenceLine(
+  cmd: string | null,
+  claimedExit: number,
+  realExit: number | null,
+  evidence: 'strong' | 'weak',
+  closed: boolean,
+  assertions: number,
+): string {
+  return `【收口证据】cmd=${String(cmd ?? '').slice(0, 120)} ｜ claimedExit=${claimedExit} ｜ realExit=${realExit} ｜ 断言通过=${assertions} ｜ 证据强度=${evidence === 'strong' ? '强' : '弱'} ｜ 闭环=${closed ? '是' : '否'}`
+}
+
 export function classifyEvidence(cmd: string | null): 'strong' | 'weak' {
   if (!cmd) return 'weak'
   const strong =
@@ -812,6 +825,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             evidence,
             closed: true, // 断言全部通过 ⇒ 闭环（A1）
             message:
+              evidenceLine(cmd, claimedExit, r.code, evidence, true, assertionResults.length) + ' ' +
               gateToolMessage('pass', claimedExit, r.code) +
               ` 另已登记验收断言 ${assertionResults.length} 条全部通过（资源真值复核）。` +
               (evidence === 'weak'
@@ -832,6 +846,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
           evidence: evWeak, closed: closedWeak,
           message:
+            evidenceLine(cmd, claimedExit, r.code, evWeak, closedWeak, 0) + ' ' +
             gateToolMessage('pass', claimedExit, r.code) +
             (closedWeak
               ? ' 证据强度=强（使用了检查类算子）。'
@@ -845,7 +860,9 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       return {
         status: verdict, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
         // 注意：失败路径**不得**读取断言表（既有语义：mismatch 不触发断言复核，见 tests/assertions.test.mjs）
-        message: failLadderPrefix(failN) + gateToolMessage(verdict, claimedExit, r.code) + gateRequirementBlock([], cmd, verdict),
+        message:
+          evidenceLine(cmd, claimedExit, r.code, classifyEvidence(cmd), false, 0) + ' ' +
+          failLadderPrefix(failN) + gateToolMessage(verdict, claimedExit, r.code) + gateRequirementBlock([], cmd, verdict),
       }
     },
   }

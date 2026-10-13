@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, BUDGET_ALWAYS_ALLOW } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, BUDGET_ALWAYS_ALLOW, evidenceLine } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -126,6 +126,16 @@ check('C2e 写类工具名亦被识别', hostLevelFromCall('apply_patch', ''), '
   check('C9c 声明本工具无恢复能力', r.message.includes('无恢复能力'), true)
   check('C9d 落 tools-catalog', logs.some((e) => e.kind === 'tools-catalog'), true)
   check('C9e 目录工具恒可见（always-allow）', BUDGET_ALWAYS_ALLOW.includes('discipline_tools'), true)
+}
+
+// ── C10 收口证据行 ──
+{
+  const l1 = evidenceLine('if (Test-Path "D:\\a") { exit 1 } else { exit 0 }', 0, 0, 'strong', true, 2)
+  check('C10a 含证据前缀', l1.includes('【收口证据】'), true)
+  check('C10b 含真退出码', l1.includes('realExit=0'), true)
+  check('C10c 含闭环状态', l1.includes('闭环=是'), true)
+  const l2 = evidenceLine('cd D:\\', 0, 0, 'weak', false, 0)
+  check('C10d 弱证据不闭环可见', l2.includes('闭环=否') && l2.includes('证据强度=弱'), true)
 }
 
 process.exit(fail > 0 ? 1 : 0)
