@@ -783,7 +783,10 @@ const LOG_FILE = join(LOG_DIR, 'exec-log.jsonl')
 const LOG_ENABLED = process.env.SHISANUO_LOG_DISABLE !== '1'
 // 研究旗标（仅实验用，默认关闭）：L3_OFF=拦截层退位为仅记录（剔除 headless 审批 fail-closed 混杂）；NO_ASSERT=关闭断言面
 const L3_ENFORCE = process.env.SHISANUO_L3_OFF !== '1'
-const ASSERT_LAYER = process.env.SHISANUO_NO_ASSERT !== '1'
+// 判据来源默认序：外部锚（pinned）与工具自登记（tool）为一线；**启发式推导（auto）默认退位为可选辅助**。
+// 依据：完成信号电池实测误推导 3/13（代价＝1 次假阻塞＋1 次超时＋2 次 steered），且关闭推导后步数 8→6、
+// 每任务累计上下文 −41%。需要推导时显式设 SHISANUO_ASSERT_LAYER=1（研究／实验用途）。
+const ASSERT_LAYER = process.env.SHISANUO_NO_ASSERT !== '1' && process.env.SHISANUO_ASSERT_LAYER === '1'
 
 // ── 遥测脱敏（写入前深处理；覆盖常见密钥形态，非穷尽——日志仍按敏感数据处理，可用 SHISANUO_LOG_DIR 指到私密目录）──
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -1309,7 +1312,7 @@ export function apply(ctx: Context) {
           if (typeof d2 === 'function') statusDisposes.push(() => d2())
           console.log('[shisan-xinuo] discipline_task tool registered (acceptance-assertion registry)')
         } else {
-          console.log('[shisan-xinuo] discipline_task skipped (SHISANUO_NO_ASSERT=1 research mode)')
+          console.log('[shisan-xinuo] discipline_task skipped (derived layer off by default; SHISANUO_ASSERT_LAYER=1 enables it)')
         }
       } catch (e) {
         // 注册失败=降级为纯文本 GATE 模式；拦截与机检不受影响（错误处理不拖垮宿主面）

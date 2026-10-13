@@ -47,8 +47,9 @@ const TASKS = [
 const ARMS = {
   A: () => ({ SHISANUO_ARM: 'A' }),
   B: () => ({ SHISANUO_L3_OFF: '1', SHISANUO_NO_ASSERT: '1' }),
-  C: () => ({ SHISANUO_L3_OFF: '1' }),
-  D: (t, dir) => ({ SHISANUO_L3_OFF: '1', SHISANUO_ASSERTIONS: t.pinned ? t.pinned(dir) : '' }),
+  // C／D 显式开启推导层：2026-10-13 起推导层默认退位（锚优先），显式开启以保持与本表既有数据的同语义可比
+  C: () => ({ SHISANUO_L3_OFF: '1', SHISANUO_ASSERT_LAYER: '1' }),
+  D: (t, dir) => ({ SHISANUO_L3_OFF: '1', SHISANUO_ASSERT_LAYER: '1', SHISANUO_ASSERTIONS: t.pinned ? t.pinned(dir) : '' }),
   // D′（R5）：外部锚替代启发式——钉死断言＋关闭自动推导（审查 §五「判据锚在模型外」的准确形态）
   P: (t, dir) => ({ SHISANUO_L3_OFF: '1', SHISANUO_NO_ASSERT: '1', SHISANUO_ASSERTIONS: t.pinned ? t.pinned(dir) : '' }),
   // 强度矩阵（§6.11）：全部为 D′ 语义；执行档由 ARM_PATCH 切模型，对抗档由 ADV 指定出题人

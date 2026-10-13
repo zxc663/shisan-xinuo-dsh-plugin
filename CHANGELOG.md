@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 判据来源默认序调整（2026-10-13）：启发式推导退位为可选辅助
+
+- 依据（电池实测双重指标）：误推导 3/13（代价＝1 次假阻塞＋1 次超时＋2 次 steered）；关闭推导后步数 8→6、每任务累计上下文 351 KB→208 KB（−41%）。
+- 变更：`ASSERT_LAYER` 默认关闭；新增 `SHISANUO_ASSERT_LAYER=1` 显式启用（研究／实验）；`SHISANUO_NO_ASSERT=1` 仍为最高优先关闭位。
+- 判据来源默认序＝会话外锚（pinned）> 工具自登记（tool）；推导层在启用后仍受「pinned > auto > tool」约束。
+- 跑批器同步：C／D 两臂显式设 `SHISANUO_ASSERT_LAYER=1`，与既有电池数据保持同语义可比。
+
 ## GUI 抽检与高能力档首证（2026-10-13 · 桌面 App）
 
 - 注册 ModelScope provider（headless/desktop 双侧；密钥入各自 `.credentials.yaml` refs，外于仓库、不入库）；高能力档=`deepseek-ai/DeepSeek-V4-Pro`（推理型）＋备选 `Qwen/Qwen3.5-397B-A17B`。
