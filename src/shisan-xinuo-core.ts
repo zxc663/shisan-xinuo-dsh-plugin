@@ -215,7 +215,8 @@ export interface BudgetMask { allow?: string[]; deny?: string[] }
 export interface BudgetConfig { version: 1; levels: Record<string, BudgetMask | '*'> }
 
 // 纪律必需工具：任何 allow 白名单强制并入——预算裁剪永不裁掉收口验证与基本读写（引擎固定，不开放 Config）。
-export const BUDGET_ALWAYS_ALLOW = ['discipline_gate', 'read', 'pwsh', 'write', 'edit']
+// C9：`discipline_tools`（只读工具目录）必须恒在可见面内——否则"查询被裁掉了什么"的工具自己会被裁掉
+export const BUDGET_ALWAYS_ALLOW = ['discipline_gate', 'discipline_tools', 'read', 'pwsh', 'write', 'edit']
 
 // fail-open：任何无效（文件缺失/坏 JSON/结构错/无有效级）→ null=不裁剪。
 export function loadBudgetFile(path: string): { budget: BudgetConfig | null; source: string; valid: boolean; reason?: string } {
@@ -854,6 +855,46 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
 export interface TaskToolDeps {
   log: (entry: Record<string, unknown>) => void | Promise<void>
   acceptance: AcceptanceBridge
+}
+
+// C9：只读工具目录——回答"我被裁掉了什么、怎么申请恢复"。**本身不含恢复能力**（恢复权在会话外）。
+export function buildToolsCatalogDefinition(deps: {
+  level: () => string
+  visible: () => string[]
+  allow: () => string[]
+  deny: () => string[]
+  log: (entry: Record<string, unknown>) => void
+}) {
+  return {
+    name: 'discipline_tools',
+    description:
+      '工具面目录（只读）：列出当前可见工具、本档位被裁剪掉的工具名与恢复路径。本工具**不接受**任何"恢复／放开"请求——恢复只由人在会话外操作。',
+    parameters: {},
+    output: {
+      schema: { type: 'object', properties: { status: { type: 'string' }, message: { type: 'string' } }, required: ['status', 'message'] },
+      render(_a: unknown, v: unknown) {
+        return [{ type: 'text', text: JSON.stringify(v) }]
+      },
+    },
+    async execute() {
+      const level = deps.level()
+      const visible = deps.visible()
+      const allow = deps.allow()
+      const deny = deps.deny()
+      deps.log({ kind: 'tools-catalog', level, visible: visible.length, denied: deny.length })
+      return {
+        status: 'ok',
+        message: [
+          `当前预算档位：${level || '未裁剪'}`,
+          `可见工具（${visible.length}）：${visible.join(', ') || '（未采集）'}`,
+          `本档位被裁剪（${deny.length}）：${deny.join(', ') || '（无）'}`,
+          `本档位显式允许：${allow.join(', ') || '（未配置）'}`,
+          '恢复路径：**会话外**——由人修改预算配置或另启会话；本工具无恢复能力，也不接受放宽请求。',
+          '说明：本目录反映"当前可见面 ＋ 本档位 deny 名单"；完整清单以宿主轨迹中的 tools-inventory 为准。',
+        ].join('\n'),
+      }
+    },
+  }
 }
 
 export function buildTaskToolDefinition(deps: TaskToolDeps) {
@@ -1535,6 +1576,27 @@ export function apply(ctx: Context) {
         const d = toolsAny.register(def)
         if (typeof d === 'function') gateToolDispose = d
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
+        // C9：只读工具目录（恒可见；不含恢复能力）
+        try {
+          const catalog = buildToolsCatalogDefinition({
+            level: () => pendingLevel || (budgetApplied ? '已裁剪' : ''),
+            visible: () => {
+              try {
+                return ((ctx.tools as { schemas?: () => Array<{ name?: string }> }).schemas?.() ?? []).map((s) => String(s.name ?? '')).filter(Boolean)
+              } catch {
+                return []
+              }
+            },
+            allow: () => (pendingMask?.allow ?? []).map(String),
+            deny: () => (pendingMask?.deny ?? []).map(String),
+            log: (entry) => void log(entry),
+          })
+          const d3 = toolsAny.register(catalog as unknown)
+          if (typeof d3 === 'function') statusDisposes.push(() => d3())
+          console.log('[shisan-xinuo] discipline_tools tool registered (read-only tool catalog)')
+        } catch (e) {
+          console.error('[shisan-xinuo] tools catalog registration FAILED:', String(e).slice(0, 120))
+        }
         console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS === '1' ? 'ON (experimental)' : 'off (default)'}`)
         if (ASSERT_LAYER) {
           const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })

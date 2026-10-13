@@ -32,7 +32,8 @@ t('load: 全部级无效（空数组）→null', true, loadBudgetFile(wf('empty.
 }
 
 // ── completeAllowList ──
-t('complete: 并入 always-allow 且去重', ['read', 'subagent', 'discipline_gate', 'pwsh', 'write', 'edit'], completeAllowList(['read', 'subagent']))
+// C9 起 always-allow 增列 discipline_tools（目录工具须恒可见，否则"查询被裁了什么"的工具自己会被裁掉）
+t('complete: 并入 always-allow 且去重', ['read', 'subagent', 'discipline_gate', 'discipline_tools', 'pwsh', 'write', 'edit'], completeAllowList(['read', 'subagent']))
 t('complete: undefined 透传', undefined, completeAllowList(undefined))
 t('complete: always 集含纪律五件', true, ['discipline_gate', 'read', 'pwsh', 'write',edit_ok()].every((x) => BUDGET_ALWAYS_ALLOW.includes(x)))
 function edit_ok() { return 'edit' }

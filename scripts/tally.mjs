@@ -62,6 +62,8 @@ const FIELD_WHITELIST = {
   'gate-skip-readonly': ['turn', 'toolCalls', 'hostLevel'],
   // C3 第二档 低报度量
   'level-divergence': ['turn', 'declared', 'host', 'toolCalls'],
+  // C9 只读工具目录
+  'tools-catalog': ['level', 'visible', 'denied'],
 }
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300 }
 

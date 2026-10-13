@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, BUDGET_ALWAYS_ALLOW } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -109,5 +109,23 @@ check('C2b 写文件调用→L2（按工具名兜住）', hostLevelFromCall('wri
 check('C2c pwsh 删除命令→L2', hostLevelFromCall('pwsh', extractCommand({ name: 'pwsh', arguments: { command: 'Remove-Item D:\\x' } })), 'L2')
 check('C2d judge 命中→L3', hostLevelFromCall('pwsh', 'rm -rf D:\\x', () => '数据删除'), 'L3')
 check('C2e 写类工具名亦被识别', hostLevelFromCall('apply_patch', ''), 'L2')
+
+// ── C9 只读工具目录 ──
+{
+  const logs = []
+  const def = buildToolsCatalogDefinition({
+    level: () => 'L1',
+    visible: () => ['read', 'write', 'discipline_gate'],
+    allow: () => ['read', 'write', 'discipline_gate'],
+    deny: () => ['subagent', 'task'],
+    log: (e) => logs.push(e),
+  })
+  const r = await def.execute({}, {})
+  check('C9a 列出被裁项', r.message.includes('subagent'), true)
+  check('C9b 声明恢复在会话外', r.message.includes('会话外'), true)
+  check('C9c 声明本工具无恢复能力', r.message.includes('无恢复能力'), true)
+  check('C9d 落 tools-catalog', logs.some((e) => e.kind === 'tools-catalog'), true)
+  check('C9e 目录工具恒可见（always-allow）', BUDGET_ALWAYS_ALLOW.includes('discipline_tools'), true)
+}
 
 process.exit(fail > 0 ? 1 : 0)
