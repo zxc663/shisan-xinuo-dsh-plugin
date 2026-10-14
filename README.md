@@ -4,6 +4,38 @@
 
 > **状态：工程验收版（内部）· 未发行。** 有效性对照已完成机制验证轮（四臂×3 任务×3 轮，36 会话，A/B/C/D 含干净 DSH 基线）：运行时控制组的收口合规 5/9 vs 纪律文本组 0/9；行为有效性待 n≥5 补样本轮判定。
 
+## 状态与发行口径
+
+- **阶段**：工程验收版（内部）。机制面已验收，**有效性待补样本轮**（见下表主张 6）。
+- **发行态**：**无发行版**——0 tag、0 release、无打包产物（`package.json` 无 `dsh.bundle` 清单，当前仅 `file://` 开发态加载）。
+- **口径**：**只有打包好的公开发行版才算真实验证可用**。本仓现在**没有可用版本**，下表中的一切主张都只是开发态结论；发行暂不进行——先经过实际环境验证。
+
+## 三库导航
+
+| 库 | 放什么 | 入库标准 | 入口 |
+|---|---|---|---|
+| 想法库 | 未验证的想法与疑问 | 无门槛——如实标注即可，本身不构成主张 | [想法库/](想法库/) |
+| 推进库 | 在推进的设计／批次／待办／路线 | 有验收判据、有回滚基线、有边界 | [推进库/](推进库/) |
+| 验证库 | 可复跑的证据与结论口径 | 给出可重跑命令与退出码；不可复现的如实标注 | [验证库/](验证库/) |
+
+## 希望社区帮助验证什么
+
+本仓已有 20 套单测与 20 条可外部重跑的主张，但它们都是**开发态**证据。下面这些问题只能靠真实使用回答，欢迎直接开 Issue 讨论：
+
+1. 在**非 Windows** 宿主（macOS／Linux）上，拦截与收口的形态是否与 Windows 一致？
+2. 换成**更小的模型**（8B 级本地模型）后，L3 拦截与收口强制是否仍成立，还是退化为纯摩擦？
+3. **误阻率**在真实项目里的量级是多少？现有误阻守卫（举例／通配／目录内容／删除+创建／恢复／备份六类）是否够用？
+4. 收口强制的提示**在界面上显示为一条「用户发言」**（宿主投递接口的约束，详见「代价与风险」）——你能接受吗？有更好的呈现方式吗？
+5. 与 [dsh-permission-rules](https://github.com/PerryLink/dsh-permission-rules) 的分工是否重复？什么场景下只该用其中一个？
+6. 任务级作用域（按用户原文开任务、失败阶梯按任务归零）在你的长会话里是否真的减少了误伤？
+
+## 如何反馈
+
+- **Bug／兼容性／文档问题／设计讨论**：开 [Issue](https://github.com/zxc663/shisan-xinuo-dsh-plugin/issues/new/choose)，按类型选模板。
+- **还没有定论的设计议题**：到 [Discussions](https://github.com/zxc663/shisan-xinuo-dsh-plugin/discussions)（实验性想法、Agent 工作流做法、跨项目借鉴）。
+- **参与代码**：先读 [CONTRIBUTING.md](CONTRIBUTING.md)。欢迎提修改，但**不承诺全部采纳**；方向、优先级与合并决定留在维护者手里。
+- **安全相关**：走私密披露渠道，见 [SECURITY.md](SECURITY.md)——本插件**不是安全边界**，这一点请先读清。
+
 ## 能力矩阵（主张=状态标签制，证据可复查）
 
 | # | 主张 | 状态 | 宿主面 vs 插件增量 | 证据 |
@@ -70,7 +102,7 @@ DSH profile 的 `cordis.patch.yml` 追加：
 ## 测试与测量
 
 ```bash
-npm test   # 16 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
+npm test   # 20 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # headless 三臂实验（环境经上表变量注入）
@@ -104,12 +136,14 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 - **E1-v4**（四臂×3 轮，含干净 DSH 基线）：C vs B 收口 5/9 vs 0/9；裸模型删除行为三型方差（目标替代/不作为/真删）；惰性插件≈干净基线（A≈D 纯度通过）
 - **轨迹层审计**：43 会话注入面解析——四臂同质（均含宿主原生 runtime-context+skill-catalog），无第三方纪律污染
 
-报告：`docs/e1-v1-report-20261013.md` / `docs/e1-desktop-report-20261013.md` / `docs/e1-v4-four-arm-report-20261013.md`；预注册与设计：`docs/design-specs/`。
+报告：`docs/e1-v1-report-20261013.md` / `docs/e1-desktop-report-20261013.md` / `docs/e1-v4-four-arm-report-20261013.md`；预注册与设计：`docs/design-specs/`。证据分层与可重跑命令见 [验证库/](验证库/)。
 
 ## 目录
 
 - `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/预算/遥测）
-- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 16 套单测
+- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 20 套单测
+- `想法库/` 未验证想法 ｜ `推进库/` 在推进事项的入口索引 ｜ `验证库/` 可复跑证据与结论口径
+- `.github/` Issue 与 PR 模板＋CI ｜ `SECURITY.md` 安全披露（含「不是安全边界」声明）｜ `LICENSE` MIT
 - `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告/GUI 验证规程 ｜ `CHANGELOG.md` 版本记录（内部）
 - `CONTRIBUTING.md` 公开文本规范（提交/注释/文档＋机检）
 
