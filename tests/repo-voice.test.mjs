@@ -1,4 +1,4 @@
-// 公开文本机检自测 + 全仓工作树校验（规则与豁免见 CONTRIBUTING.md §4/§5）。
+// 公开文本机检自测 + 全仓工作树校验（规则与豁免见 CONTRIBUTING.md 的「词汇表」与「机检」两节）。
 // 本文件在机检豁免集内（含正样本字符串）；规则行为由函数级断言独立验证。
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'

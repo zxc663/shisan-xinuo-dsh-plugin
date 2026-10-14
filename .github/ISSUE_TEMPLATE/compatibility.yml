@@ -1,0 +1,57 @@
+name: 兼容性报告
+description: 宿主版本、平台或与其它插件的组合下出现异常
+title: "[兼容性] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        宿主处于预览期，官方已声明存在兼容性破坏。请尽量给出**具体版本与平台**，否则无法定位。
+  - type: input
+    id: host
+    attributes:
+      label: 宿主与插件版本
+      placeholder: 宿主版本 ／ 插件提交号
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - 其它（请在正文说明）
+    validations:
+      required: true
+  - type: dropdown
+    id: mount
+    attributes:
+      label: 挂载方式
+      options:
+        - file:// patch（开发态）
+        - bundle 清单
+        - 其它（请在正文说明）
+    validations:
+      required: true
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 启动日志、失活警告、功能缺失、报错栈等；请贴脱敏后的原文
+    validations:
+      required: true
+  - type: textarea
+    id: coexist
+    attributes:
+      label: 共存的其它扩展（可选）
+      description: 例如同时挂载了其它拦截类插件——这类组合容易互相遮蔽，请如实列出
+  - type: checkboxes
+    id: blocking
+    attributes:
+      label: 影响程度
+      options:
+        - label: 完全不可用（阻断启动或每轮失败）
+        - label: 部分功能失效
+        - label: 仅告警，不影响使用

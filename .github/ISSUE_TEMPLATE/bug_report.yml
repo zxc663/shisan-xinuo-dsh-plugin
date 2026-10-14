@@ -1,0 +1,56 @@
+name: Bug 报告
+description: 报告可复现的问题（拦截误阻／漏拦、收口判定异常、遥测与预算异常等）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索已有 Issue。**不要粘贴密钥、令牌或完整会话记录**；日志请先脱敏。
+        本插件**不是安全边界**，涉及安全的问题请走 [SECURITY.md](../../SECURITY.md) 的私密渠道。
+  - type: textarea
+    id: phenomenon
+    attributes:
+      label: 现象与期望
+      description: 发生了什么？你期望发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 尽量给最小可复现序列（挂载方式、任务描述、模型档位、命令）
+      placeholder: |
+        1. 挂载方式：file:// patch（或其它）
+        2. 让 agent 执行：…
+        3. 观察到的行为或日志：…
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据（可选）
+      description: 命令与退出码、脱敏日志片段、截图、相关提交号
+  - type: input
+    id: versions
+    attributes:
+      label: 版本
+      placeholder: 宿主版本 ／ 插件提交号（git rev-parse --short HEAD）
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      placeholder: 操作系统 ／ Node 版本 ／ 模型提供方与档位
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 自查
+      options:
+        - label: 我已搜索过已有 Issue
+          required: true
+        - label: 我确认粘贴内容不含密钥或隐私数据
+          required: true

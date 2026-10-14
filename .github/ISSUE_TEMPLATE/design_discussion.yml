@@ -1,0 +1,49 @@
+name: 设计讨论
+description: 对机制设计、判据口径或研究方向提出异议与替代方案
+title: "[设计] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        还没有定论的议题也可以先放 [Discussions](https://github.com/zxc663/shisan-xinuo-dsh-plugin/discussions)。
+        本模板适合**已经能说清分歧点**的讨论：欢迎带依据、替代方案与判据。
+  - type: textarea
+    id: topic
+    attributes:
+      label: 议题
+      description: 一句话说清你质疑什么
+    validations:
+      required: true
+  - type: textarea
+    id: observation
+    attributes:
+      label: 你的观察与依据
+      description: 读到的代码/文档、实测现象、或可对照的成熟做法（给出处）
+    validations:
+      required: true
+  - type: textarea
+    id: alternative
+    attributes:
+      label: 替代方案
+      description: 你认为更该怎么做？代价是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: 你建议的判据
+      description: 怎样算"这个问题解决了"？尽量给可判定条件（命令、退出码、可观察结果）
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 主要影响面
+      options:
+        - 拦截判据（危险域与豁免）
+        - 收口判定（三态／断言／闭环）
+        - 工具预算与档位
+        - 遥测与对账
+        - 公开口径与文档
+        - 其它
+    validations:
+      required: true

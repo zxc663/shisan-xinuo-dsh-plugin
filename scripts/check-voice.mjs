@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 公开文本机检：工作树文件（默认）或提交信息范围（--commits <A>..<B>）。
-// 规则与豁免口径见 CONTRIBUTING.md §4/§5；退出码：0=通过，1=违规，2=用法。
+// 规则与豁免口径见 CONTRIBUTING.md 的「词汇表」与「机检」两节；退出码：0=通过，1=违规，2=用法。
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -86,7 +86,7 @@ export function scanCommitRange(range) {
     const short = String(sha).slice(0, 8)
     for (const f of scanText(message, `${short}（提交信息）`)) findings.push({ ...f, subject })
     if (!/^(Merge\b|Revert\b|fixup!|squash!)/.test(subject) && !/^(feat|fix|docs|test|chore|refactor|perf|build|ci)(\([a-z0-9-]+\))?!?: .+/.test(subject)) {
-      findings.push({ file: `${short}（提交信息）`, line: 1, col: 1, rule: 'commit-format', snippet: subject.slice(0, 80), hint: '格式：type(scope): 摘要（见 CONTRIBUTING.md §1）', subject })
+      findings.push({ file: `${short}（提交信息）`, line: 1, col: 1, rule: 'commit-format', snippet: subject.slice(0, 80), hint: '格式：type(scope): 摘要（见 CONTRIBUTING.md 的提交信息规范）', subject })
     }
   }
   return findings
@@ -113,7 +113,7 @@ function main() {
   for (const f of findings) {
     console.log(`${f.file}:${f.line}:${f.col} [${f.rule}] ${JSON.stringify(f.snippet)} — ${f.hint}`)
   }
-  console.log(`\n共 ${findings.length} 处违规（规则见 CONTRIBUTING.md §4）`)
+  console.log(`\n共 ${findings.length} 处违规（规则见 CONTRIBUTING.md 的词汇表）`)
   process.exit(1)
 }
 
