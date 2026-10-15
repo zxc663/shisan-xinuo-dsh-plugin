@@ -1,5 +1,15 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 探针批＋施工批（2026-10-15）：宿主 API 五证实／concludeTurn 改道／guard 单调层／发行形态打通
+
+- **探针批（docs/probe-host-api-20261015.md）**：对实际绑定线 0.2.0-rc.2 宿主包静态取证——`ctx.tools.guard`（单调缝，源码注释确认）、`concludeTurn`、`defineTool`、`workflowEngine`、`ctx.goals` **五个 API 全部存在**；第三方评审 P0-1/P0-3 的「能力普查缺口」成立。
+- **concludeTurn 根因改判＋修复**：b2「本版不可用」结论被推翻——宿主实现 `WeakSet.add(this)`，我方解构裸调丢 `this` 即抛 weak-set 错（**调用姿势 bug，非宿主能力缺失**）。修复：`ct.call(execCtx)`；补齐无断言 pass 分支缺失的 conclude 块（弱证据不闭环不标记）；真会话对照实验证实语义（探针：工具结果后回合立即终止；对照：模型仍有收尾发言）。
+- **收口改道默认启用（方案三施工）**：`concludeOnPass` 默认 ON（`SHISANUO_CONCLUDE_ON_PASS=0` 退位）；失败路径 steer 打回不变。
+- **guard 单调层（方案一施工）**：新增 `ctx.tools.guard` 注册——被上游规则拒绝的命令 TTL 内经任何工具通道重试=单调拒绝（重放防护，HMR 移规则不豁免）；L3 ask 留 pre-execute（guard 只承载 deny，官方分工）。「下游优先」顺序机制保留（用户 deny 压过我方 ask 的实测语义；瀑布重排 API 未实证不盲拆——如实偏离评审「退役补丁」口径并记录理由）。
+- **发行形态打通（P0-4 闭环）**：`dsh.bundle` manifest＋`cordis.patch.yml`（包名+子路径）＋`pnpm pack`；**实测发现 Node 22 type-stripping 不支持 node_modules 下 .ts → 预编译 lib/ 为发行必需**（新增 `npm run build`＝tsc 转译，构建零错误）；隔离档 tgz 安装→组成树合成→**会话级挂载证实**（注入面含纪律文本）。运行时零宿主硬依赖（cordis 仅 type-only），不声明 peerDependencies——规避宿主 fail-closed peer 检查（outcome-loop 拒装案例）。
+- 新日志 kind：`probe-conclude`／`guard-deny`（tally 白名单机检先红后绿）。构建配置：`tsconfig.build.json`（转译导向宽松型）＋`types/cordis-stub.d.ts`（宿主 alpha 类型面波动隔离）。
+- 验证：`npm test` 20/20；探针会话×4＋对照×1（证据=会话日志+exec-log）；发行链 tgz→add→dump-config→boot 五步实测。
+
 ## 仓库结构（2026-10-15）：三库结构落地 ＋ 协作面建设
 
 - **三库结构**：新增 [想法库/](想法库/)（未验证想法，含条目规则与索引）、[推进库/](推进库/)（在推进事项的入口索引＋入库标准：验收判据／回滚基线／边界）、[验证库/](验证库/)（三层证据＋可重跑命令＋结论口径）；原 `想法思路总结/` 改名入列。README 增「状态与发行口径」「三库导航」「希望社区帮助验证什么」「如何反馈」四节。

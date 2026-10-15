@@ -1,0 +1,8 @@
+# dsh.bundle 安装层（`dsh plugin add` 使用）：插件行经「包名+子路径」解析到**预编译产物** lib/。
+# 重要：Node 22 type-stripping 不支持 node_modules 下的 .ts（实测报错），发行必须走 tsc 预构建（npm run build）。
+# 开发态挂载示例（file:// 直载 .ts）见 cordis.yml——两者行为一致，lib/ 由 src/ 转译而来。
+# 说明：运行时零宿主硬依赖（cordis 仅 type-only import，装载期被剥离），故不声明 peerDependencies——
+# 宿主 0.2.x 对 peer 声明做 fail-closed 检查（实测 outcome-loop 拒装案例），无声明即无拒装面。
+- insert:
+    - id: shisanxinuo-core
+      name: 'shisan-xinuo-dsh-plugin/lib/shisan-xinuo-core.js'

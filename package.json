@@ -1,18 +1,39 @@
 {
   "name": "shisan-xinuo-dsh-plugin",
   "version": "1.0.0",
-  "private": true,
-  "description": "DeepSeek Harness 运行时治理插件：L3 拦截+真值收口+规则 Config 化+工具预算（工程验收版，未发行）",
+  "description": "DeepSeek Harness 运行时治理插件：L3 拦截+真值收口+规则 Config 化+工具预算（工程验收版）",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zxc663/shisan-xinuo-dsh-plugin.git"
+  },
   "engines": {
     "node": ">=22.18"
   },
+  "files": [
+    "lib",
+    "content",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "node scripts/run-all-tests.mjs",
     "tally:report": "node scripts/tally.mjs --report --freeze",
     "tally:check": "node scripts/tally.mjs --check"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.5-alpha.1"
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@types/node": "^22.20.5",
+    "typescript": "5.7"
   }
 }

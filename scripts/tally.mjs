@@ -41,6 +41,8 @@ const FIELD_WHITELIST = {
   'bypass-blocked': ['cmd', 'fingerprint'],
   'upstream-block': ['tool', 'cmd', 'upstreamKind', 'l3'],
   'gate-conclude': ['status', 'cmd', 'error', 'ctType'],
+  'probe-conclude': ['status', 'error'],
+  'guard-deny': ['tool', 'cmd', 'reason'],
   'auto-closeout': ['turn', 'count', 'result', 'table'],
   // F2 零工具调用盲区（SHISANUO_ZEROTOOL_GUARD=1 时落账）
   'zerotool-claim': ['turn', 'tail'],

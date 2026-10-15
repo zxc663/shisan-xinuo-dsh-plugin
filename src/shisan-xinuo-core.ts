@@ -692,7 +692,7 @@ export async function runGateCommand(
 ): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; spawnError?: string }> {
   return new Promise((resolve) => {
     exec(cmd, { timeout: opts.timeoutMs ?? GATE_CMD_TIMEOUT_MS, signal: opts.signal, maxBuffer: 1024 * 256 }, (err, stdout, stderr) => {
-      const timedOut = Boolean(err && (err as NodeJS.ErrnoException & { killed?: boolean }).killed)
+      const timedOut = Boolean(err && (err as unknown as NodeJS.ErrnoException & { killed?: boolean }).killed)
       resolve({
         code: err && typeof (err as { code?: number | string }).code === 'number' ? (err as { code: number }).code : err ? null : 0,
         stdout: String(stdout).slice(-GATE_TAIL_CAP),
@@ -713,8 +713,12 @@ export interface GateToolDeps {
   isFullAccess?: () => boolean
   /** B2 验收桥：验证通过后附加复核已登记断言（资源真值）；未接线=沿用旧行为 */
   acceptance?: AcceptanceBridge
-  /** B2.2：pass＋断言全过时标记 concludeTurn（工具级强制收口；默认关，实验档显式开启） */
+  /** B2.2：pass＋断言全过时标记 concludeTurn（工具级强制收口；探针实证后默认启用，=0 退位） */
   concludeOnPass?: boolean
+  /** T2：失败阶梯按任务分桶（任务切换即归零） */
+  taskId?: () => string
+  /** A1：闭环与否由 gate 结果决定（弱证据且无断言 ⇒ 通过但不闭环） */
+  onClosed?: (closed: boolean, execCtx?: unknown) => void
 }
 
 // 工具定义构造器（对接真相=app.asar 内建工具样例：parameters DSL {名:{type,required,description}} + output{schema,render} + execute(args,exec)）
@@ -772,7 +776,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         let ok = false
         let detail = ''
         try {
-          const res = (deps.acceptance as { evaluate?: (a: string) => { ok?: boolean; detail?: string } } | undefined)?.evaluate?.(assertSpec)
+          const res = (deps.acceptance as unknown as { evaluate?: (a: string) => { ok?: boolean; detail?: string } } | undefined)?.evaluate?.(assertSpec)
           ok = !!res?.ok
           detail = String(res?.detail ?? '')
         } catch (e) {
@@ -870,7 +874,9 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             const ct = (execCtx as { concludeTurn?: () => void }).concludeTurn
             if (typeof ct === 'function') {
               try {
-                ct()
+                // B2.2 复盘修正：必须以方法调用保住 this（宿主 concludeTurn 内部 WeakSet.add(this)，
+                // 裸调 ct() 会使 this=undefined → TypeError: Invalid value used in weak set）
+                ct.call(execCtx)
                 concludedTurn = true
                 void deps.log({ kind: 'gate-conclude', status: 'marked', cmd: cmd.slice(0, 120) })
               } catch (e) {
@@ -904,9 +910,27 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         const closedWeak = evWeak === 'strong'
         ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(closedWeak, execCtx)
         if (!closedWeak) void deps.log({ kind: 'gate-pass-weak', status: 'pass', evidence: evWeak, cmd: String(cmd).slice(0, 120) })
+        // B2.2 复盘补齐：闭环 pass 同样标记 concludeTurn（原缺口：仅带断言分支有 conclude 块）。
+        // 弱证据不闭环 ⇒ 不标记——宿主不据此收回合，与「通过但不闭环」语义一致。
+        let concludedTurn2 = false
+        if (closedWeak && deps.concludeOnPass) {
+          const ct2 = (execCtx as { concludeTurn?: () => void }).concludeTurn
+          if (typeof ct2 === 'function') {
+            try {
+              ct2.call(execCtx) // 同 B2.2 修正：方法调用保住 this（WeakSet.add(this)）
+              concludedTurn2 = true
+              void deps.log({ kind: 'gate-conclude', status: 'marked', cmd: cmd.slice(0, 120) })
+            } catch (e) {
+              void deps.log({ kind: 'gate-conclude', status: 'call-error', error: String(e).slice(0, 140) })
+            }
+          } else {
+            void deps.log({ kind: 'gate-conclude', status: 'no-method', ctType: typeof ct2 })
+          }
+        }
         return {
           status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
           evidence: evWeak, closed: closedWeak,
+          ...(concludedTurn2 ? { concludedTurn: true } : {}),
           message:
             evidenceLine(cmd, claimedExit, r.code, evWeak, closedWeak, 0) + ' ' +
             gateToolMessage('pass', claimedExit, r.code) +
@@ -1247,7 +1271,7 @@ export function apply(ctx: Context) {
     agentRestrictDisposers.clear()
     // **升档不给"全量"**：'*' 档按 L2-S 的显式白名单收窄，避免一次升级即无限制放宽
     const cappedToL2S = spec === '*'
-    const allow = cappedToL2S ? (budgetLoad.budget.levels['L2-S']?.allow ?? []) : spec.allow
+    const allow = cappedToL2S ? ((budgetLoad.budget.levels['L2-S'] as BudgetMask | undefined)?.allow ?? []) : (spec as BudgetMask).allow
     const mask: BudgetMask = cappedToL2S ? { allow: completeAllowList([...(allow as string[]), ...readOnlyResearchUpgrade]) } : { ...(spec as BudgetMask), allow: completeAllowList((spec as BudgetMask).allow) }
     pendingMask = mask
     pendingLevel = cappedToL2S ? `${level}(封顶 L2-S)` : level
@@ -1349,6 +1373,34 @@ export function apply(ctx: Context) {
     return r
   })
   console.log('[shisan-xinuo] L3 pre-execute guard installed')
+
+  // ── 方案一：单调守卫层（宿主 tools.guard——pre-execute 瀑布之后的最终 deny，后续监听者不可翻回）──
+  // 探针实证（docs/probe-host-api-20261015.md）：0.2.0-rc.2 提供 ctx.tools.guard 单调缝，guardReason 取首个非空 deny。
+  // 职责：被上游规则拒绝的命令在 TTL 内经**任何工具通道**重试 → 单调拒绝（重放防护；HMR 移规则亦不豁免）。
+  // 边界（如实）：L3 ask 留在 pre-execute——guard 只承载 deny，ask 需要宿主审批卡交互（官方分工：
+  // restrict 管收敛、guard 管封闭、pre-execute 管可组合策略）。「下游优先」顺序机制保留（用户手写 deny
+  // 压过我方 ask 的实测语义，见 reuse-decision-permission-rules Q1/V2；瀑布重排 API 未实证，不盲拆）。
+  let guardDispose: (() => void) | undefined
+  const toolsGuardAny = ctx.tools as { guard?: (g: (exec: unknown) => string | undefined) => unknown } | undefined
+  if (typeof toolsGuardAny?.guard === 'function') {
+    try {
+      const gd = toolsGuardAny.guard((exec: unknown) => {
+        const cmd = String(extractCommand(exec as { name?: string; arguments?: unknown }))
+        const fp = matchDeniedFingerprint(deniedFingerprints, cmd, Date.now(), FINGERPRINT_TTL_MS)
+        if (fp) {
+          void log({ kind: 'guard-deny', tool: (exec as { name?: string })?.name, cmd: cmd.slice(0, 200), reason: '上游拒绝指纹(单调)' })
+          return '[十三希诺纪律] 该命令已被上游规则拒绝（指纹命中），TTL 内不可经其他工具通道重试。'
+        }
+        return undefined
+      })
+      if (typeof gd === 'function') guardDispose = gd as () => void
+      console.log('[shisan-xinuo] monotonic guard installed (fingerprint replay deny)')
+    } catch (e) {
+      console.log(`[shisan-xinuo] ctx.tools.guard registration failed — monotonic layer skipped (${String(e).slice(0, 100)})`)
+    }
+  } else {
+    console.log('[shisan-xinuo] ctx.tools.guard not available — monotonic layer skipped (宿主线 < 0.2.0-rc)')
+  }
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
   const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean; costHinted?: boolean }>()
@@ -1781,7 +1833,9 @@ export function apply(ctx: Context) {
           judge: gateJudge,
           isFullAccess: () => fullAccess,
           acceptance: acceptanceBridge,
-          concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
+          // 方案三施工（2026-10-15 探针实证后默认启用）：gate 闭环 pass → concludeTurn 标记回合终态。
+          // SHISANUO_CONCLUDE_ON_PASS=0 可退位（回退开关；失败路径 steer 打回不受影响）。
+          concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS !== '0',
           // T2：失败阶梯按**任务**分桶（任务切换即归零）
           taskId: () => currentTaskId,
           onStats: (verdict, execCtx2) => {
@@ -1803,8 +1857,36 @@ export function apply(ctx: Context) {
           },
         })
         const d = toolsAny.register(def)
-        if (typeof d === 'function') gateToolDispose = d
+        if (typeof d === 'function') gateToolDispose = d as () => void
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
+        // ── P1a-2 探针（默认关，仅探测会话）：concludeTurn 正确调用姿势直测——
+        //    方法调用保 this（宿主实现 WeakSet.add(this)），直验宿主「工具级强制收口」语义。
+        //    触发：SHISANUO_PROBE_TOOLS=conclude；产物=[probe-conclude] 日志行＋会话结果字段。
+        if (process.env.SHISANUO_PROBE_TOOLS === 'conclude') {
+          try {
+            toolsAny.register({
+              name: 'probe_conclude_turn',
+              description: 'probe: mark this turn as concluded via execCtx.concludeTurn() (correct this-binding), then return immediately',
+              parameters: {},
+              output: { schema: { type: 'object', properties: { done: { type: 'boolean' } }, required: ['done'] }, render: () => [] },
+              async execute(_args: Record<string, unknown>, execCtx: unknown = {}) {
+                const ec = execCtx as { concludeTurn?: () => void }
+                let called = false
+                try {
+                  ec.concludeTurn?.()
+                  called = true
+                  void log({ kind: 'probe-conclude', status: 'called' })
+                } catch (e) {
+                  void log({ kind: 'probe-conclude', status: 'call-error', error: String(e).slice(0, 140) })
+                }
+                return { done: called }
+              },
+            })
+            console.log('[shisan-xinuo] probe_conclude_turn tool registered (concludeTurn probe)')
+          } catch (e) {
+            console.log(`[probe-conclude] register THROW ${String(e).slice(0, 140)}`)
+          }
+        }
         // C9：只读工具目录（恒可见；不含恢复能力） #决策 2026-10-13 23:55
         try {
           const catalog = buildToolsCatalogDefinition({
@@ -1829,7 +1911,7 @@ export function apply(ctx: Context) {
         } catch (e) {
           console.error('[shisan-xinuo] tools catalog registration FAILED:', String(e).slice(0, 120))
         }
-        console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS === '1' ? 'ON (experimental)' : 'off (default)'}`)
+        console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS !== '0' ? 'ON (probe-verified 2026-10-15; =0 可退位)' : 'off (退位开关生效)'}`)
         // P2：断言登记工具**默认可达**（不再受推导层的默认关牵连）；研究旗标 NO_ASSERT=1 仍可整体关闭
         if (process.env.SHISANUO_NO_ASSERT !== '1') {
           const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
@@ -1853,6 +1935,7 @@ export function apply(ctx: Context) {
     for (const d of statusDisposes) d()
     budgetDisposeWrap()
     toolDispose()
+    guardDispose?.()
     sessionEventDispose()
     turnStoppingDispose()
   }
