@@ -79,20 +79,45 @@ export const STEER_PREFIX = '[十三希诺收口强制]'
 // 统一常量：三处 steer（断言未过／无断言未收口／零工具调用声称完成）共用同一措辞，避免逐处漂移。
 export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出的答案或分析；判断依据以系统侧的收口证据为准。'
 
-export function judgeL3(cmd: string): string | null {
-  for (const p of L3_PATTERNS) {
+// A9（2026-10-16）：只读管线**前置豁免**——真机误报实证（exec-log 8428：`Get-Content … |
+// Select-String 'Remove-Item'` 仅因文本含字面量被判「数据删除」）。判据：剥离引号字面量后，
+// 管道/链的**每一段**首词都是只读算子、且无重定向 ⇒ 整条命令无执行副作用，直接放行。
+// 边界：段内出现非只读动词不豁免（`Get-Content x | Remove-Item` 仍拦）；脚本删除
+// `node -e "…unlinkSync…"` 首词非只读 ⇒ 仍拦（37 例语料全保：不拿假阴性换假阳性）。
+const QUOTED_LITERAL_RE = /"[^"\r\n]*"|'[^'\r\n]*'/g
+export function stripQuotedLiterals(cmd: string): string {
+  return cmd.replace(QUOTED_LITERAL_RE, ' ')
+}
+const READONLY_LEAD_RE = /^\s*(get-content|get-item|get-childitem|get-filehash|gc|gi|gci|select-string|sls|findstr|test-path|cat|ls|dir|head|tail|wc|grep|rg|type|echo|write-output|measure-object|sort-object|where-object|select-object|foreach-object)\b/i
+export function isReadonlyPipeline(cmd: string): boolean {
+  const probe = stripQuotedLiterals(cmd)
+  if (/[>>]/.test(probe)) return false // 重定向=写副作用，不吃只读豁免
+  const segments = probe.split(/\|\||&&|\||;|&/).map((s) => s.trim()).filter((s) => s !== '')
+  if (segments.length === 0) return false
+  return segments.every((s) => READONLY_LEAD_RE.test(s))
+}
+
+function judgeL3Core(cmd: string, patterns: Array<{ domain: string; re: RegExp; noExempt?: boolean }>, exempts: ReadonlyArray<RegExp | { re: RegExp; afterDanger?: boolean }>): string | null {
+  if (isReadonlyPipeline(cmd)) return null
+  for (const p of patterns) {
     const m = p.re.exec(cmd)
     if (m) {
       // 编码执行=故意绕过审计，不设豁免
-      if (p.domain === '编码执行' || p.domain === '解码执行') return p.domain
-      for (const ex of READONLY_EXEMPTS) {
+      if (p.domain === '编码执行' || p.domain === '解码执行' || (p as { noExempt?: boolean }).noExempt === true) return p.domain
+      for (const ex of exempts) {
         // afterDanger 条目只在危险命中位置之后匹配；普通豁免全文匹配（cat /etc/x 的豁免动词在 /etc/ 之前）
-        if (ex.afterDanger ? ex.re.test(cmd.slice(m.index)) : ex.re.test(cmd)) return null
+        const re = ex instanceof RegExp ? ex : ex.re
+        const afterDanger = !(ex instanceof RegExp) && ex.afterDanger === true
+        if (afterDanger ? re.test(cmd.slice(m.index)) : re.test(cmd)) return null
       }
       return p.domain
     }
   }
   return null
+}
+
+export function judgeL3(cmd: string): string | null {
+  return judgeL3Core(cmd, L3_PATTERNS, READONLY_EXEMPTS)
 }
 
 // ── v0.3 Config 化：L3 规则包从引擎下沉为 content/rules.json 数据层（契约=docs/config-contract.md）──
@@ -182,6 +207,8 @@ export function loadRulesFile(path: string): RulesLoadResult {
 
 // 规则注入式判定（config 化后的活动判定面；judgeL3 保持内置默认语义供回归对照）。
 export function judgeL3With(rules: CompiledRules, cmd: string): string | null {
+  // A9：与 judgeL3 同源——只读管线前置豁免，其余匹配语义不变
+  if (isReadonlyPipeline(cmd)) return null
   for (const p of rules.patterns) {
     const m = p.re.exec(cmd)
     if (m) {
@@ -506,7 +533,7 @@ export async function evaluateAssertion(a: AcceptanceAssertion, deps: AssertionE
     const domain = (deps.judge ?? judgeL3)(a.cmd)
     if (domain) return { assertion: a, ok: false, detail: `命令命中 L3 危险域（${domain}），宿主拒绝执行` }
     const runCmd = deps.runCmd ?? runGateCommand
-    const r = await runCmd(a.cmd, { timeoutMs: 30_000 })
+    const r = await runCmd(a.cmd, { timeoutMs: Number(process.env.SHISANUO_GATE_TIMEOUT_MS ?? 30_000) })
     if (r.timedOut || r.code === null) return { assertion: a, ok: false, detail: r.timedOut ? '执行超时' : '未能取得退出码' }
     return { assertion: a, ok: r.code === 0, detail: `exit=${r.code}` }
   } catch (e) {
@@ -682,7 +709,9 @@ export function failLadderPrefix(n: number): string {
   return '【阶梯 3／3】**停止试凑**：宿主已不再期待你本轮完成收口。请如实声明「未验证」并说明原因，由人在会话外裁决——继续换命令不会改变判定。\n'
 }
 
-const GATE_CMD_TIMEOUT_MS = 30_000
+// A6（2026-10-16）：验证超时可经 SHISANUO_GATE_TIMEOUT_MS 调整（真机痛点：30s 固定档掐死慢验证/安装类验证；
+// 判定语义不变：超时仍归 error/「无法判定」，不计 mismatch）。
+const GATE_CMD_TIMEOUT_MS = Number(process.env.SHISANUO_GATE_TIMEOUT_MS ?? 30_000)
 const GATE_TAIL_CAP = 300
 
 // 真实执行（副作用面，测试经注入替换）：Windows 下走 cmd.exe（Node exec 默认 ComSpec）。
@@ -738,6 +767,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         cmd: { type: 'string', description: '可重跑的验证命令（宿主将真实执行）；与 assert 至少给一个' },
         claimedExit: { type: 'number', description: '你声称该命令将返回的退出码（通常是 0）；给了 cmd 才需要' },
         assert: { type: 'string', description: '算子判据（**插件内联求值、永不过 shell**，故不受沙箱/引号影响）：not_exists:<路径> | exists:<路径> | path_contains:<路径>::<子串>' },
+        summary: { type: 'string', description: '任务交付摘要（≤500 字）：做了什么/改了哪些文件/验证结论。通过时随收口证据落档并回显，防收口后回合被收回导致交付文本丢失（A4）。' },
         files: { type: 'string', description: '变更文件清单（逗号分隔）' },
         exempt: { type: 'string', description: '未验证事项声明（无则省略）' },
       },
@@ -770,6 +800,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       const claimedExit = Number(args.claimedExit)
       const files = args.files === undefined ? undefined : String(args.files).slice(0, 300)
       const exempt = args.exempt === undefined ? undefined : String(args.exempt).slice(0, 300)
+      // A4（2026-10-16）：收尾结构化——交付摘要随工具结果结构化返回+落遥测，不再依赖回合文本存活
+      const summary = args.summary === undefined ? undefined : String(args.summary).slice(0, 500)
 
       // P1：算子判据走**插件内联求值**，永不过 shell——从根上消除"把算子喂给 cmd.exe"的不可执行形态。
       // A1 修复（装配探针实证：旧形态把 spec 字符串直接喂给要断言对象的 evaluate ⇒ TypeError ⇒ assert 通道真机 0 成功）：
@@ -820,13 +852,13 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(true, execCtx)
           void deps.log({
             kind: 'gate-tool', status: 'pass', level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit: 0,
-            realExit: 0, evidence: 'strong', assertions: formatAssertionResults(assertResults),
+            realExit: 0, evidence: 'strong', assertions: formatAssertionResults(assertResults), ...(summary ? { summary } : {}),
           })
           deps.onStats?.('pass', execCtx)
           return {
             status: 'pass' as const, verdict: 'pass', claimedExit: 0, realExit: 0,
-            closed: true, evidence: 'strong' as const, assertions: assertResults,
-            message: `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=通过（${formatAssertionResults(assertResults).slice(0, 160)}）｜ 证据强度=强 ｜ 闭环=是 —— 该判据由插件**内联求值**，未经 shell，故不受沙箱/引号影响。`,
+            closed: true, evidence: 'strong' as const, assertions: assertResults, ...(summary ? { summary } : {}),
+            message: `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=通过（${formatAssertionResults(assertResults).slice(0, 160)}）｜ 证据强度=强 ｜ 闭环=是 —— 该判据由插件**内联求值**，未经 shell，故不受沙箱/引号影响。${summary ? `\n【交付摘要】${summary.slice(0, 200)}` : ''}`,
           }
         }
         // assert 全过且给了 cmd ⇒ 不在此 return，继续走 cmd 通道（A2：cmd 不再被静默吞掉）
@@ -850,7 +882,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       }
 
       const r = await runCmd(cmd, { signal: execCtx.signal })
-      const base = { level, v, cmd: cmd.slice(0, 200), claimedExit, files, exempt, stdoutTail: r.stdout, stderrTail: r.stderr }
+      const base = { level, v, cmd: cmd.slice(0, 200), claimedExit, files, exempt, ...(summary ? { summary } : {}), stdoutTail: r.stdout, stderrTail: r.stderr }
       // C3 第一档：比对"模型自报等级"与"宿主按命令推出的等级"，低报即落账（**不覆盖、不改判定**）
       const hostLevel = hostLevelFromCmd(cmd, deps.judge)
       if (levelRank(level) < levelRank(hostLevel)) {
@@ -925,6 +957,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
             assertions: assertionResults,
             ...(concludedTurn ? { concludedTurn } : {}),
+            ...(summary ? { summary } : {}),
             evidence,
             closed: true, // 断言全部通过 ⇒ 闭环（A1）
             message:
@@ -967,6 +1000,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           status: 'pass' as const, match, claimedExit, realExit: r.code, stdoutTail: r.stdout, stderrTail: r.stderr,
           evidence: evWeak, closed: closedWeak,
           ...(concludedTurn2 ? { concludedTurn: true } : {}),
+          ...(summary ? { summary } : {}),
           message:
             evidenceLine(cmd, claimedExit, r.code, evWeak, closedWeak, 0) + ' ' +
             gateToolMessage('pass', claimedExit, r.code) +
@@ -1850,19 +1884,25 @@ export function apply(ctx: Context) {
     statusDisposes.push(promptDispose)
   }
   if (armMode === 'C') {
+    // 治理-token 平衡四原则之一「谁消费谁付钱」+ B4/Goodhart（2026-10-16）：计分板（GATE 齐 N/缺 N、
+    // 工具调用分布、L3 命中计数）全部移出模型可见面——被考核者盯着记分牌会理性地优化分数而非事实
+    //（真实轨迹实证：模型据「3/13」调整行为）。计分与计数仍在遥测/exec-log 供人审计（tally 三源对账不变）。
+    // C1：本节改为**常量**（仅 fullAccess 会话级切换时变化）——前缀不再逐轮原地替换，provider prefix cache 可命中。
     const statusDispose = ctx.systemPrompt.section({
       name: 'shisanxinuo:live-status',
       order: 301,
       text: () =>
         [
-          '## 纪律状态（宿主机检实时·本节由插件自动更新，不可仿写）',
-          `- 工作回合已检 ${stats.checked} 次（GATE 齐 ${stats.gateOk}/缺 ${stats.gateMissing}）｜L3 拦截 ${stats.intercepted} 次｜上一工作回合 GATE: ${stats.lastGate}`,
-          `- discipline_gate 真值收口：${stats.gateTool.calls} 次（通过 ${stats.gateTool.pass}/不符 ${stats.gateTool.mismatch}/诚实失败 ${stats.gateTool.honestFail}/拒 ${stats.gateTool.refused}/错 ${stats.gateTool.error}）｜上次=${stats.gateTool.last}`,
-          `- 工具预算：${stats.budget}｜当前请求工具面=${stats.wireTools} 个${stats.fullAccess ? '｜⚠完全权限模式：L3 审批卡已按用户全局授权暂停（gate 危险命令仍拒跑；收口强制/零工具护栏保持生效）' : ''}｜收口必须真值：调用 discipline_gate（须带锚定目标的判据，无关命令凑 exit 0 记 gate-unproven）或由宿主自动复核已登记断言；文本 GATE 不计入合规（审计 F-01）。`,
-          `- 验收断言：${stats.assertion}${stats.assertion.includes('待复') ? '｜回合收尾由宿主自动复核：全过=收口成立，未过=打回' : ''}`,
+          '## 纪律状态（宿主侧规则·常量）',
+          '- 收口必须真值：调用 discipline_gate 收口（须带**锚定本任务目标**的判据：assert 算子 not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>，宿主内联求值、不过 shell；或 cmd+claimedExit 真实执行）。仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主记 gate-unproven）。文本 GATE 不计入合规（审计 F-01）。',
+          '- 通过时建议携带 summary（交付摘要）：宿主据此保留交付物，防收口后回合文本丢失。',
+          '- 已登记验收判据（discipline_task 登记或用户原文推导）由宿主在回合收尾**自动复核**：全过=收口成立，未过=打回——即使你不调 gate，宿主也会复核。',
+          stats.fullAccess
+            ? '- ⚠完全权限模式：L3 审批卡已按用户全局授权暂停（gate 危险命令仍拒跑）；收口强制/零工具护栏保持生效。'
+            : '- 审批模式：L3 危险域命中会请求确认；只读豁免以规则包为准。',
         ].join('\n'),
     })
-    console.log('[shisan-xinuo] live status banner installed')
+    console.log('[shisan-xinuo] live status banner installed (constant-form)')
     statusDisposes.push(statusDispose)
 
     // ── T1 discipline_gate 工具注册（仅 C 臂；A 惰性/B 纯文本=不注册，保持分组定义纯净）──
