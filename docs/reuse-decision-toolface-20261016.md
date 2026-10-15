@@ -12,12 +12,21 @@
 | Yan-Zero/dsh-progressive-tools | 单日项目已死 | — | — | Schema 注入在历史结果位置=缓存语义最正确，但依赖 pi-ai 内部包装 | 等 DSH 主线 transform hook |
 | ysr666/dsh-vision-router（文档） | 3.0.3，1,151★ | — | — | progressive-tools-cache.md=「boot-time 稳定+渐进仅 opt-in+默认值双重加固」权威论据 | 论据引用 |
 
-## 2. 待跑：会话级 A/B 程序（时间盒 ~1h）
+## 2. 会话级 A/B 实测结果（2026-10-16 goal 批，headless + --patch 隔离，模型=glm-4.5-flash 免费档，零配置侵入）
 
-1. 备份 `D:\ai本地模型\dsh\profiles\desktop\cordis.patch.yml` → 挂 A（dsh-tool-search）→ 重启 DSH → headless 探针会话（模型固定 glm-4.5-flash）：量 tools-wire chars（exec-log）、一次检索成本、guard 共存性（本插件 ctx.tools.guard 同轮不冲突）→ 截图+遥测。
-2. 卸 A 挂 B，同表重测（+设置卡片渲染截图）。
-3. 对照本插件现役运行时裁剪（同会话基线已实测：30→10 工具，GUI 实拍「移除 20 个」）。
-4. 裁决表：Windows 兼容（两包均纯 TS，理论 ✓）/token 实值/共存性三列，数据定去留；自研运行时裁剪逻辑随后退役（保留 guard 层与目录工具，披露层让位上游）。
+| 组 | 常驻工具 | wire chars | vs 基线 | 启动告警 | 治理链共存（gate 穿越实测） |
+|---|---|---|---|---|---|
+| 基线（仅本插件） | 27 | 21,605 | — | — | — |
+| **A：Letter2025/dsh-tool-search 0.1.7** | **7** | **3,374** | **−84.4%** | 无 | ✅ 模型 tool_search 发现 discipline_gate → 解锁注入（7→9）→ 真实调用 `gate-tool status=pass`（assert 通道） |
+| B：studyzy/@studyzy/dsh-lazy-tools 0.0.1 | 10 | 5,761 | −73.3% | 无 | ✅ `gate-tool pass`×3；模型还自发使用 summary 语义（本插件 A4 横幅文案生效佐证） |
+
+实测方法：`DSH_HOME=headless-home dsh --profile headless --patch <overlay.yml> "<任务>"`——overlay 用 file:// URL 直指 /tmp 安装树（**包根会 failed to import，必须指到 lib/index.js 入口文件**），零接触现有配置；测量仪=本插件 tools-wire 遥测（B2 的 instanceId/sid 区分三次运行）。
+
+**裁决（数据定案）**：
+- **采纳 Letter2025 为主**：折叠率最高（−84.4%）、发现→解锁→调用闭环真机验证通过、npm 1,950/月+当日活跃、monotonic guard 与本插件 guard 层同向。
+- studyzy 留作备选：−73.3% 也不错+设置卡片+不改注册表；0.0.1 太早期。
+- **本插件运行时裁剪（budget/mask 层）确认退役路线**：披露减法让位上游，保留治理面（gate/assert/断言桥/guard 接线/遥测对账）与目录工具如实上报。退役执行=独立批次（含 budget 测试套件改写）。
+- 治理工具被折叠**不构成风险**：A 组实测 gate 可被 search 发现并解锁后真实调用。
 
 ## 3. Tier 2 裁决（GO 套餐接入，已完成查证）
 
