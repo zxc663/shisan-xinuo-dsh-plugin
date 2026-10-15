@@ -1222,11 +1222,16 @@ export function applyArmMode(): 'A' | 'B' | 'C' {
 }
 
 export function apply(ctx: Context) {
+  // B2（2026-10-16）：遥测归属底座——每条记录附 instanceId（进程实例）与 sid（最近活跃会话），
+  // 修复「全局单文件混多会话不可复算」。sid 由会话/回合事件处理器实时刷新（最近活跃归属）；
+  // 逐调用点精确归属需把 ctx 贯穿全部调用点，列后续批（findings-20261016 §阶段六）。
+  const instanceId = `${process.pid}-${Date.now().toString(36)}`
+  let currentSid = 'boot'
   async function log(entry: Record<string, unknown>): Promise<void> {
     if (!LOG_ENABLED) return
     try {
       await mkdir(LOG_DIR, { recursive: true })
-      await appendFile(LOG_FILE, JSON.stringify(redactDeep({ ts: new Date().toISOString(), ...entry })) + '\n', 'utf8')
+      await appendFile(LOG_FILE, JSON.stringify(redactDeep({ ts: new Date().toISOString(), instanceId, sid: currentSid, ...entry })) + '\n', 'utf8')
     } catch (e) {
       console.error('[shisan-xinuo] log write failed (non-fatal):', String(e).slice(0, 120))
     }
@@ -1553,6 +1558,9 @@ export function apply(ctx: Context) {
 
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
+      // B2：遥测 sid 刷新（最近活跃会话归属）
+      const sidRaw = (session as { id?: unknown } | null)?.id
+      if (typeof sidRaw === 'string' && sidRaw) currentSid = sidRaw
       // B2 自动推导：用户原文（跳过我方 steer 注入）→ 断言登记；新任务替换旧记录并记录遗留
       const rawUser = event as { type?: unknown; data?: { content?: unknown; source?: { kind?: unknown } } }
       if (rawUser?.type === 'user/message') {
@@ -1766,6 +1774,8 @@ export function apply(ctx: Context) {
       if (armMode !== 'C') return
       const agent = payload?.agent
       const bucketKey = sidKeyOf(agent?.session, '')
+      // B2：遥测 sid 刷新（回合事件归属当前会话）
+      if (bucketKey) currentSid = bucketKey
       if (!bucketKey || typeof payload?.turn !== 'number') return
       const b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== payload.turn) return

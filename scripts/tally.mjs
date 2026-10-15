@@ -14,7 +14,8 @@ const DEFAULT_LOG = join(repo, 'logs', 'exec-log.jsonl')
 const SNAPSHOT = process.env.TALLY_SNAPSHOT ?? join(repo, 'logs', 'tally-report.last.json')
 
 // ── 遥测字段白名单（release-plan §四：v0.2 起生效；新增字段须先改此表再落日志）──
-const COMMON = new Set(['ts', 'kind'])
+// B2（2026-10-16）：每条记录带 instanceId（进程实例）+ sid（最近活跃会话）——混多会话日志可归属可复算
+const COMMON = new Set(['ts', 'kind', 'instanceId', 'sid'])
 const FIELD_WHITELIST = {
   arm: ['mode'],
   'pre-execute': ['tool', 'cmd', 'l3'],
@@ -22,7 +23,7 @@ const FIELD_WHITELIST = {
   'l3-intercept': ['tool', 'domain', 'cmd'],
   behavior: ['turn', 'hasText', 'restated', 'levelDeclared', 'gate', 'gateQuality', 'textClaim'],
   'gate-ok': ['turn', 'via', 'tail'],
-  'gate-missing': ['turn', 'toolCalls', 'gateVerdict', 'tail'],
+  'gate-missing': ['turn', 'toolCalls', 'gateVerdict', 'unproven', 'tail'],
   'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error', 'assertions', 'evidence'],
   rules: ['source', 'valid', 'domains', 'reason'],
   discipline: ['source', 'valid', 'reason'],
@@ -154,7 +155,7 @@ function checkWhitelist(lines) {
     for (const [f, cap] of Object.entries(CAPS)) {
       if (typeof l[f] === 'string' && l[f].length > cap) v.push(`line ${i + 1}: 字段 ${f} 超 ${cap} 字符截断帽（实际 ${l[f].length}）`)
     }
-    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'ok-auto', 'gate-fail', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
+    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'ok-auto', 'gate-unproven', 'gate-fail', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
   })
   return v
 }
