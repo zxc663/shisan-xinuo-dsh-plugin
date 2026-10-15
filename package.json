@@ -1,6 +1,6 @@
 {
   "name": "shisan-xinuo-dsh-plugin",
-  "version": "1.0.0",
+  "version": "1.0.0-rc.1",
   "description": "DeepSeek Harness 运行时治理插件：L3 拦截+真值收口+规则 Config 化+工具预算（工程验收版）",
   "type": "module",
   "license": "MIT",
