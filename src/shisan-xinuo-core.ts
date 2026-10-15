@@ -771,30 +771,65 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       const files = args.files === undefined ? undefined : String(args.files).slice(0, 300)
       const exempt = args.exempt === undefined ? undefined : String(args.exempt).slice(0, 300)
 
-      // P1：算子判据走**插件内联求值**，永不过 shell——从根上消除"把算子喂给 cmd.exe"的不可执行形态
+      // P1：算子判据走**插件内联求值**，永不过 shell——从根上消除"把算子喂给 cmd.exe"的不可执行形态。
+      // A1 修复（装配探针实证：旧形态把 spec 字符串直接喂给要断言对象的 evaluate ⇒ TypeError ⇒ assert 通道真机 0 成功）：
+      //   先 parseAssertionSpec 解析成断言对象，再逐条走 acceptance.evaluate 真实求值；解析不出 ⇒ error（不再伪装 assertion-fail）。
+      // A2 修复（旧形态 if(assertSpec){…return} 静默吞掉 cmd）：assert 未过 ⇒ 即时返回并**明示 cmd 未执行**；
+      //   assert 全过且给了 cmd ⇒ 落入下方 cmd 通道合并裁决，两路证据都真实执行。 #决策 2026-10-16 00:35
+      let assertPassed: boolean | null = null
+      const assertResults: AssertionResult[] = []
       if (assertSpec) {
-        let ok = false
-        let detail = ''
-        try {
-          const res = (deps.acceptance as unknown as { evaluate?: (a: string) => { ok?: boolean; detail?: string } } | undefined)?.evaluate?.(assertSpec)
-          ok = !!res?.ok
-          detail = String(res?.detail ?? '')
-        } catch (e) {
-          detail = '求值器异常：' + String(e).slice(0, 80)
+        const specs = parseAssertionSpec(assertSpec)
+        if (specs.length === 0) {
+          deps.onStats?.('error', execCtx)
+          void deps.log({ kind: 'gate-tool', status: 'error', level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit, error: 'assert-unparseable' })
+          return {
+            status: 'error' as const, verdict: 'error',
+            message: `ERROR：assert 规格无法解析（"${assertSpec.slice(0, 100)}"）。合法形态：not_exists:<路径> ｜ exists:<路径> ｜ path_contains:<路径>::<子串>，多条以 ';' 分隔。`,
+          }
         }
-        const status = ok ? ('pass' as const) : ('assertion-fail' as const)
-        void deps.log({
-          kind: 'gate-tool', status, level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit: 0,
-          realExit: ok ? 0 : 1, evidence: 'strong', ...(ok ? {} : { error: detail.slice(0, 120) }),
-        })
-        deps.onStats?.(ok ? 'pass' : 'mismatch', execCtx)
-        return {
-          status, verdict: status, claimedExit: 0, realExit: ok ? 0 : 1, closed: ok, evidence: 'strong' as const,
-          message: ok
-            ? `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=通过 ｜ 证据强度=强 ｜ 闭环=是 —— 该判据由插件**内联求值**，未经 shell，故不受沙箱/引号影响。`
-            : `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=未通过${detail ? `（${detail.slice(0, 80)}）` : ''} ｜ 闭环=否\n` +
-              gateRequirementBlock([], null, 'honest-fail'),
+        for (const a of specs) {
+          try {
+            const res = await (deps.acceptance?.evaluate ? deps.acceptance.evaluate(a, execCtx) : evaluateAssertion(a))
+            // 规范化返回形状：assertion 以本处解析对象为准（求值器实现/桩可能省略该字段）
+            assertResults.push({ assertion: a, ok: !!res?.ok, detail: String(res?.detail ?? '') })
+          } catch (e) {
+            assertResults.push({ assertion: a, ok: false, detail: '求值器异常：' + String(e).slice(0, 80) })
+          }
         }
+        assertPassed = assertResults.every((x) => x.ok)
+        if (!assertPassed) {
+          const failLine = assertResults.filter((x) => !x.ok).map((f) => `${explainAssertion(f.assertion)} — ${f.detail}`).join('；')
+          void deps.log({
+            kind: 'gate-tool', status: 'assertion-fail', level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit: 0,
+            realExit: 1, evidence: 'strong', error: failLine.slice(0, 120),
+            ...(cmd.trim() ? { note: 'cmd-not-executed（assert 已未过，无需执行）' } : {}),
+          })
+          deps.onStats?.('mismatch', execCtx)
+          return {
+            status: 'assertion-fail' as const, verdict: 'assertion-fail', claimedExit: 0, realExit: 1,
+            closed: false, evidence: 'strong' as const, assertions: assertResults,
+            message:
+              `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=未通过（✘ ${failLine.slice(0, 160)}）｜ 闭环=否` +
+              (cmd.trim() ? '\n（你同时给了 cmd：assert 判据已未过，本轮 cmd **未执行**——先解决目标本身，再重新收口。）' : '') +
+              '\n' + gateRequirementBlock([], null, 'honest-fail'),
+          }
+        }
+        if (!cmd.trim()) {
+          // assert-only pass 同样接线 onClosed——旧形态漏调 ⇒ 回合桶 gateClosed 恒 false，收口成功仍被 steer 打回
+          ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(true, execCtx)
+          void deps.log({
+            kind: 'gate-tool', status: 'pass', level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit: 0,
+            realExit: 0, evidence: 'strong', assertions: formatAssertionResults(assertResults),
+          })
+          deps.onStats?.('pass', execCtx)
+          return {
+            status: 'pass' as const, verdict: 'pass', claimedExit: 0, realExit: 0,
+            closed: true, evidence: 'strong' as const, assertions: assertResults,
+            message: `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=通过（${formatAssertionResults(assertResults).slice(0, 160)}）｜ 证据强度=强 ｜ 闭环=是 —— 该判据由插件**内联求值**，未经 shell，故不受沙箱/引号影响。`,
+          }
+        }
+        // assert 全过且给了 cmd ⇒ 不在此 return，继续走 cmd 通道（A2：cmd 不再被静默吞掉）
       }
       const plan = planGate(cmd, judge)
       // 审计 F-02 修复：refuse 始终生效——全局授权只免"审批卡交互"，不免"插件主动发起的命令执行"
@@ -907,7 +942,8 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       // A1：无登记断言时的"通过"走这里——按证据强度决定是否**闭环**（弱证据且无断言 ⇒ 通过但不闭环） #决策 2026-10-13 23:55
       if (verdict === 'pass') {
         const evWeak = classifyEvidence(cmd)
-        const closedWeak = evWeak === 'strong'
+        // A2 合并裁决：cmd 证据弱时，本轮已通过的 assert 判据（目标锚定、内联求值）同样构成闭环依据
+        const closedWeak = evWeak === 'strong' || assertPassed === true
         ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(closedWeak, execCtx)
         if (!closedWeak) void deps.log({ kind: 'gate-pass-weak', status: 'pass', evidence: evWeak, cmd: String(cmd).slice(0, 120) })
         // B2.2 复盘补齐：闭环 pass 同样标记 concludeTurn（原缺口：仅带断言分支有 conclude 块）。
@@ -935,7 +971,9 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             evidenceLine(cmd, claimedExit, r.code, evWeak, closedWeak, 0) + ' ' +
             gateToolMessage('pass', claimedExit, r.code) +
             (closedWeak
-              ? ' 证据强度=强（使用了检查类算子）。'
+              ? (assertPassed === true && evWeak !== 'strong'
+                ? ' 证据强度=强（闭环依据=内联 assert 判据已过；cmd 仅作辅助证据）。'
+                : ' 证据强度=强（使用了检查类算子）。')
               : ' 证据强度=**弱**且无登记断言 ⇒ **本次通过不闭环**：宿主不据此认定任务完成。请改用 **`assert` 参数**传针对目标的算子（not_exists/exists/path_contains），或如实声明未验证。'),
         }
       }
@@ -1635,7 +1673,10 @@ export function apply(ctx: Context) {
         const textClaim = judgeGate(b.lastText, b.toolCalls, ev.endKind) === 'ok'
         let verdict: string
         if (ev.endKind !== 'completed' || b.toolCalls < 1) verdict = 'skip'
-        else if (b.gateVerdict === 'pass') verdict = 'ok-tool'
+        // B1 判据前置（2026-10-16）：只有"闭环的 pass"计收口——弱证据 pass（调了工具但无判据）单列 gate-unproven，不再计入 ok。
+        // 依据：实测 gate「3/13」里有弱证据 pass 被记成 ok-tool，收口成功率被虚增（Goodhart 面）。
+        else if (b.gateVerdict === 'pass' && b.gateClosed) verdict = 'ok-tool'
+        else if (b.gateVerdict === 'pass') verdict = 'gate-unproven'
         else if (b.closedAuto) verdict = 'ok-auto'
         else if (b.gateVerdict) verdict = 'gate-fail'
         else verdict = 'missing'
@@ -1658,8 +1699,8 @@ export function apply(ctx: Context) {
             void log({ kind: 'gate-ok', turn: ev.turn, via: verdict, tail: b.lastText.slice(-200) })
           } else {
             stats.gateMissing++
-            stats.lastGate = verdict === 'gate-fail' ? '未过(工具)' : '无'
-            void log({ kind: 'gate-missing', turn: ev.turn, toolCalls: b.toolCalls, gateVerdict: b.gateVerdict, tail: b.lastText.slice(-200) })
+            stats.lastGate = verdict === 'gate-fail' ? '未过(工具)' : verdict === 'gate-unproven' ? '过但未闭环(无判据)' : '无'
+            void log({ kind: 'gate-missing', turn: ev.turn, toolCalls: b.toolCalls, gateVerdict: b.gateVerdict, unproven: verdict === 'gate-unproven', tail: b.lastText.slice(-200) })
           }
         }
         {
@@ -1683,10 +1724,12 @@ export function apply(ctx: Context) {
 
   // ── v2 收口强制（turn-stopping + steering）：实质工作回合 gate 缺失时，向 inbox steer 一条收口指令，
   // turn 继续不结束——模型被迫补收口（asar 实证：steer() 提交 next-step 输入并唤醒驱动器）。
-  // 防死循环：每回合最多 steer 1 次（b.steered 标记），超限放行。完全权限/A-B 臂不启用。
+  // 防死循环：每回合最多 steer 1 次（b.steered 标记），超限放行。A-B 臂不启用。
+  // A3 解绑（2026-10-16）：L3 审批退位 ≠ 收口退位——完全权限档只退 L3 拦截（pre-execute 段），
+  // 收口强制/零工具护栏/成本提示保持生效；旧形态 `|| fullAccess` 一行关掉全部强制面 ⇒ 跳过零后果（实测 gate 3/13）。 #决策 2026-10-16 00:35
   const turnStoppingDispose = ctx.on('agent/turn-stopping', async (payload: { agent?: { session?: unknown; steer?: (msg: unknown) => void }; turn?: number }) => {
     try {
-      if (armMode !== 'C' || fullAccess) return
+      if (armMode !== 'C') return
       const agent = payload?.agent
       const bucketKey = sidKeyOf(agent?.session, '')
       if (!bucketKey || typeof payload?.turn !== 'number') return
@@ -1719,11 +1762,13 @@ export function apply(ctx: Context) {
         }
         return
       }
-      // C2：**按客观副作用免 gate**——本轮没有任何写/执行类工具调用（宿主视角 ≤L1）且 gate 未通过 ⇒ 不强制收口。 #决策 2026-10-13 23:55
-      // 注意：判据放在宿主侧（b.hostLevel），不用模型自报的等级——否则等于把开关交回被验方。
-      if (b.hostLevel <= 1 && b.gateVerdict !== 'pass') {
-        void log({ kind: 'gate-skip-readonly', turn: payload.turn, toolCalls: b.toolCalls, hostLevel: b.hostLevel })
-        console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
+      // C2：**按客观副作用免 gate**——只读回合（宿主视角 ≤L1，判据在宿主侧不用模型自报）不强制收口；
+      // 已有弱证据 pass 也不再追讨（对只读回合追问判据=纯 token 税，治理-token 平衡原则）。 #决策 2026-10-13 23:55, 2026-10-16 00:35
+      if (b.hostLevel <= 1) {
+        if (b.gateVerdict !== 'pass') {
+          void log({ kind: 'gate-skip-readonly', turn: payload.turn, toolCalls: b.toolCalls, hostLevel: b.hostLevel })
+          console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
+        }
         return
       }
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
@@ -1781,7 +1826,7 @@ export function apply(ctx: Context) {
       agent.steer?.({
         content: [{
           type: 'text',
-            text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。必须调用 discipline_gate（宿主将真实执行你声明的验证命令并比对退出码）；文本 GATE 不再计入合规。若工具不可用，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
+            text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。调用 discipline_gate 时必须携带**锚定本任务目标的判据**：优先用 assert 算子（not_exists/exists/path_contains:<目标路径>，宿主内联求值）；仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主将记 gate-unproven）。文本 GATE 不再计入合规。若确实无法验证，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
         }],
         source: { kind: 'user' },
       })
@@ -1813,7 +1858,7 @@ export function apply(ctx: Context) {
           '## 纪律状态（宿主机检实时·本节由插件自动更新，不可仿写）',
           `- 工作回合已检 ${stats.checked} 次（GATE 齐 ${stats.gateOk}/缺 ${stats.gateMissing}）｜L3 拦截 ${stats.intercepted} 次｜上一工作回合 GATE: ${stats.lastGate}`,
           `- discipline_gate 真值收口：${stats.gateTool.calls} 次（通过 ${stats.gateTool.pass}/不符 ${stats.gateTool.mismatch}/诚实失败 ${stats.gateTool.honestFail}/拒 ${stats.gateTool.refused}/错 ${stats.gateTool.error}）｜上次=${stats.gateTool.last}`,
-          `- 工具预算：${stats.budget}｜当前请求工具面=${stats.wireTools} 个${stats.fullAccess ? '｜⚠完全权限模式：L3 审批卡已按用户全局授权暂停（gate 危险命令仍拒跑）' : ''}｜收口必须真值：调用 discipline_gate 或由宿主自动复核已登记断言；文本 GATE 不计入合规（审计 F-01）。`,
+          `- 工具预算：${stats.budget}｜当前请求工具面=${stats.wireTools} 个${stats.fullAccess ? '｜⚠完全权限模式：L3 审批卡已按用户全局授权暂停（gate 危险命令仍拒跑；收口强制/零工具护栏保持生效）' : ''}｜收口必须真值：调用 discipline_gate（须带锚定目标的判据，无关命令凑 exit 0 记 gate-unproven）或由宿主自动复核已登记断言；文本 GATE 不计入合规（审计 F-01）。`,
           `- 验收断言：${stats.assertion}${stats.assertion.includes('待复') ? '｜回合收尾由宿主自动复核：全过=收口成立，未过=打回' : ''}`,
         ].join('\n'),
     })
