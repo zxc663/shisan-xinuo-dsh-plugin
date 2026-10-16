@@ -966,7 +966,16 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         const pending = deps.acceptance.list(execCtx).map((x) => x.assertion)
         if (pending.length > 0) {
           const assertionResults: AssertionResult[] = []
-          for (const a of pending) assertionResults.push(await deps.acceptance.evaluate(a, execCtx))
+          for (const a of pending) {
+            // 形状规范化（2026-10-16）：不假定求值器返回带 `.assertion` 的完整结果——
+            // 非符合形状的求值器（如外部 custom verifier）会让 explainAssertion 读到 undefined 而崩。
+            try {
+              const res = await deps.acceptance.evaluate(a, execCtx)
+              assertionResults.push({ assertion: a, ok: !!res?.ok, detail: String(res?.detail ?? '') })
+            } catch (e) {
+              assertionResults.push({ assertion: a, ok: false, detail: '求值器异常：' + String(e).slice(0, 80) })
+            }
+          }
           const failed = assertionResults.filter((x) => !x.ok)
           if (failed.length > 0) {
             deps.onStats?.('assertion-fail', execCtx)

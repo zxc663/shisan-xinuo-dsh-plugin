@@ -129,5 +129,24 @@ const mk = (runCmdImpl, evaluateImpl) => {
   t('P2c 登记断言全过 ⇒ 仍 pass', 'pass', r2.status)
 }
 
+// ⑧ 同族不变量：cmd 路径亦须复核**已登记断言（含 pinned）**——登记断言未过 ⇒ assertion-fail（不闭环）
+{
+  const def = buildGateToolDefinition({
+    runCmd: async () => ({ code: 0, stdout: 'ok', stderr: '', timedOut: false }),
+    log: () => {},
+    onStats: () => {},
+    acceptance: {
+      list: () => [{ assertion: { kind: 'exists', path: 'D:\\tmp\\never2.txt' }, source: 'pinned' }],
+      register: () => ({ count: 0 }),
+      clear: () => {},
+      markPassed: () => {},
+      evaluate: async () => ({ ok: false, detail: 'pinned 未满足' }),
+    },
+  })
+  const r = await def.execute({ level: 'L1', v: 'x', cmd: 'echo ok', claimedExit: 0 }, {})
+  t('P3a cmd 通过但已登记断言未过 ⇒ assertion-fail', 'assertion-fail', r.status)
+  t('P3b 该路径不闭环', false, r.closed === true)
+}
+
 console.log(`gate-assert: ${pass} pass, ${fail} fail`)
 process.exit(fail > 0 ? 1 : 0)
