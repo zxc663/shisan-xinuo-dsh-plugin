@@ -44,6 +44,7 @@
 - `design-specs/layer3-quantification-prereg-20261016.md` — 层3/D 量化实验预注册（四臂冻结判据）。
 - `design-specs/layer3-quantification-results-20261016.md` — 层3/D 量化实验结果（H1 支持/H2 代价量化/H3 成立）。
 - `design-specs/install-and-peer-conclusion-20261016.md` — 安装与 peer 结论（三形态实测、不声明 peer 的依据与代价、上游锁定）。
+- `design-specs/v5-execution-report-20261016.md` — 收口执行报告 v5（逐批状态、三指标真值、交付物索引、待裁四项、复跑命令）。
 
 ## 其余（评估 · 证据 · 交接）
 
