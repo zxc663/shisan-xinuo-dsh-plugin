@@ -4,6 +4,7 @@
 
 - **gate 降级（本批已落）**：`discipline_gate` 在"无 cmd/assert"时——若给了 `exempt`（未验证声明）→ 返回 **`unverified`**（诚实未验证：非 pass、非 error、不计完成），回合以 `behavior.gate=unverified` 如实登记且不再打回；无 `exempt` 仍为 `error`（提示补 assert 或如实声明）。修掉"只读/语义型任务无合规收口形态"的真缺口（GUI 批4 会话实测 `error:empty-cmd`）。单测 `tests/gate-tool.test.mjs` +6；tally `behavior.gate` 白名单同步。
 - **D2 修复**：完全权限档命中 L3 时改为**短路瀑布**（直接返回 `{kind:'allow'}`，不再 `next()` 让下游 permission-rules 的 ask 落到 `approval=never` 的 0-1ms 硬失败并谎报"用户拒绝"）。形状经宿主源码验证——`ctx.waterfall(carrier,"tools/pre-execute",exec,()=>({kind:"allow"}))` 即宿主自身放行终态；我方与上游 170 例语料 0 不一致 ⇒ 我方命中即上游会命中。**未验证**：全权档 GUI 实机（模式控件未成功切换）。
+- **闭环宿主终结（缺口修复）**：`discipline_gate` 的**断言专用通道**（assert-only pass，最常用路径）也标记 `concludeTurn`——旧形态只有 cmd 路径有 conclude 块，故 assert 收口从不终结回合（实机证据：assert-only `gate-tool pass` 之后无 `gate-conclude`）。修后 `gate-conclude marked`（cmd=`assert:…`）；单测 `tests/gate-assert.test.mjs` +3（CJ1-CJ3）。
 - **outcome-loop 必查（限时盒）**：`gh api` 复测——最新 Release 仍为 `v0.1.0-beta.8`（2026-08-20；仓库 2026-09-20 有推送但无新发行）⇒ **无 0.2.x 适配版**，批1「未过/移除」裁定维持。
 - **基线度量（exec-log 全量）**：`gate-steer=77`（＝计划所称基线）、`auto-closeout=12`、`ok-auto=12` vs `ok-tool=224`（**auto-closeout 占比 5%**）。
 - **待决**：`宿主默认判据`／`auto 派生扩容`（auto-closeout ≥80%／steer↓≥50% 的机制）涉及把"目标校验"降级为"动作落地校验"，与项目 T2/T8/T10 与 A1 的严格性条款冲突——按分歧铁律**待裁决**；D2（换芯链路 ask 假拒）与 conclude 回归（实战档含审批应答）仍在列。
