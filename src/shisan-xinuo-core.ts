@@ -1331,9 +1331,12 @@ export function apply(ctx: Context) {
         return next()
       }
       if (fullAccess) {
-        // 完全权限（宿主 danger-full-access）：用户已全局授权，插件退位为仅记录，不再弹卡
+        // 完全权限（宿主 danger-full-access）：用户已全局授权——D2 修复（批5 2026-10-16）：
+        // 旧形态 `return next()` 把裁决让给下游 permission-rules，其 ask 在 approval=never 下变 0-1ms 硬失败
+        // 并**谎报"用户拒绝"**（会话日志实测 5 条 asked→rejected）。我方与上游在 170 例语料上 0 不一致
+        // ⇒ 我方命中即上游会命中；直接给 allow 终态短路瀑布，退位覆盖整条链路。
         void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'allow-full-access' })
-        return next()
+        return { kind: 'allow' }
       }
       void log({ kind: 'l3-intercept', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200) })
       // B3 优先级翻转：先让下游裁决（用户手写规则优先）；下游拦截→原样返回并记指纹
