@@ -1302,7 +1302,6 @@ export function apply(ctx: Context) {
   // 正确挂点=agent/created 监听拿 agent.ctx；per-agent 注册须包 agent.ctx.effect 并在插件卸载时自行清理。
   const budgetLoad = loadBudgetFile(process.env.SHISANUO_BUDGET ?? contentDir + 'budget.json')
   void log({ kind: 'budget', source: budgetLoad.source, valid: budgetLoad.valid, ...(budgetLoad.reason ? { reason: budgetLoad.reason } : {}) })
-  let budgetApplied = false
   // ── B 组：任务级作用域（T1/T2）──
   // 任务键：用户原文消息开任务；discipline_task register 可显式覆盖。任务切换即重置失败阶梯／熔断计数／断言残留。
   let taskSeq = 0
@@ -1368,7 +1367,6 @@ export function apply(ctx: Context) {
     pendingMask = mask
     pendingLevel = cappedToL2S ? `${level}(封顶 L2-S)` : level
     appliedRank = newRank
-    budgetApplied = true
     if (cappedToL2S) void log({ kind: 'budget-upgrade-capped', level, trigger, allow: mask.allow?.length ?? 0 })
     // 声明级触发时对现行 agent 立即生效（后续请求即用裁剪面）；新 agent 由 agent/created 统一应用
     if (currentAgent !== undefined && pendingMask) restrictAgentTools(currentAgent, pendingMask, pendingLevel, trigger, currentAgent)
@@ -1503,6 +1501,8 @@ export function apply(ctx: Context) {
   // 掩码漏网核对：最近一次实测的越出允许集的工具名（供目录工具与状态横幅如实上报）
   let lastLeakNames: string[] = []
   let lastLeakKey = ''
+  // 批3 方向 A：最近一次自报等级（仅观测，供目录上限展示；不驱动裁剪）
+  let lastDeclaredLevel: string | null = null
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
   interface TaskRec {
@@ -1749,14 +1749,12 @@ export function apply(ctx: Context) {
         if (t) {
           if (!b.firstText) b.firstText = t
           b.lastText = t
-          // v0.4 预算信号：声明判级的文本 → 按该级裁剪工具面（A 臂不裁；T1/T2 起**任务级可升**，由 applyBudget 的"只升不放宽"裁决）
-          {
-            const lvl = extractDeclaredLevel(t)
-            if (lvl) {
-              if (!b.declaredLevel) b.declaredLevel = lvl // C3 第二档：记录自报等级用于"低报度量"
-              const sid = (session as { id?: unknown }).id
-              applyBudget(lvl, 'declared', sid !== undefined ? agentsById.get(sid)?.ctx : undefined)
-            }
+          // 批3 方向 A（2026-10-16）：判级**仅观测**——自报等级不再驱动工具面裁剪（消除锁级体感/upgrade-ignored→0）。
+          // 仍记录供低报度量（level-divergence）；工具预算只由操作员 env（SHISANUO_BUDGET_LEVEL）受控设定/降档。
+          const lvl = extractDeclaredLevel(t)
+          if (lvl) {
+            if (!b.declaredLevel) b.declaredLevel = lvl // C3 第二档：记录自报等级用于"低报度量"
+            lastDeclaredLevel = lvl
           }
         }
       } else if (ev.type === 'turn/end') {
@@ -2003,7 +2001,11 @@ export function apply(ctx: Context) {
         // C9：只读工具目录（恒可见；不含恢复能力） #决策 2026-10-13 23:55
         try {
           const catalog = buildToolsCatalogDefinition({
-            level: () => pendingLevel || (budgetApplied ? '已裁剪' : ''),
+            level: () => {
+              const obs = lastDeclaredLevel ? `自报=${lastDeclaredLevel}（仅观测）` : '自报=无（仅观测）'
+              const budget = pendingLevel ? `预算=${pendingLevel}（操作员 env）` : '预算=未裁剪（上限=全量）'
+              return `${obs}；${budget}`
+            },
             visible: () => {
               try {
                 // P4：优先报**线缆真值**（宿主实际发出去的那份）；未产生请求时退回声明面
