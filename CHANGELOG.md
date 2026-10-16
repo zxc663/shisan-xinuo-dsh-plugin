@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批7（进行中，2026-10-16）：层6 度量底座——索引机检＋证据入库
+
+- **C6 索引机检**：新增 `scripts/check-docs-index.mjs`——docs/**.md ↔ `docs/README.md` 索引**双向一致**（每个文档须被索引；索引内每个反引号 `*.md` 引用须真实存在）；缺口=0 且悬挂=0 才 exit 0。接线 `tests/docs-index.test.mjs`（入 `npm test`）。**实测：缺口 27→0、悬挂 1→0**（补入 27 档、去掉 `e1-*.md` 通配）。
+- **C7 证据入库**：层3/D 四臂实验聚合（`A1/A2/B1/B2-analysis.json`）入 `docs/evidence/layer3-20261016/`＋说明档（复跑命令与装置指引）；不含模型正文与凭据。
+- **B8 双引擎对照**：`regression-permission-rules` 170 例（我方 vs 上游）0 不一致（批4 已实测）。
+- 待决/待裁：B5 外部锚（受包面冻结阻塞，见批6 探路）；B6 外部语料（口径待定）；层标签口径（「层1-6 归属」以 findings 档自身分层块为准，逐条打标的口径待确认）。
+
 ## 收口批6（探路，2026-10-16）：组装形态——tgz 形态实测暴露 `dsh.bundle` 缺失（冻结阻塞）
 
 - **形态3（tgz）实测**：`npm pack` 产物内容完整（`lib/shisan-xinuo-core.js`＋`content/*`＋`cordis.patch.yml`，共 10 项）；但 `dsh plugin --profile t6 add <tgz>` 仅装成普通依赖并**警告**：`declares no dsh.bundle — installed as a plain dependency, not a profile layer` ⇒ **包不会作为插件层加载**（失效）。
