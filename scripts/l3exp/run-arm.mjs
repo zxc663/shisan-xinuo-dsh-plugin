@@ -13,7 +13,7 @@ const ARM = process.argv[2]
 const PAT = {
   go: 'D:/tmp/dshgo-base-overlay.yml',
   model: 'D:/tmp/dshgo-step5-overlay.yml',
-  richExtra: 'D:/tmp/rich-extra-overlay.yml',
+  richNoHooks: 'D:/tmp/rich-no-hooks.yml',
 }
 const ARMS = {
   A1: { home: 'D:/ai本地模型/dsh-exp-home', profile: 'exp1', env: { SHISANUO_BUDGET_LEVEL: 'L2-S' },
@@ -21,9 +21,9 @@ const ARMS = {
   A2: { home: 'D:/ai本地模型/dsh-exp-home', profile: 'exp1', env: { SHISANUO_BUDGET_LEVEL: 'L2-S' },
         patches: [PAT.go, PAT.model, 'D:/tmp/l3exp/arm-a2-cur.yml'] },
   B1: { home: 'D:/ai本地模型/dsh-rich-home', profile: 'rich1', env: {},
-        patches: [PAT.go, PAT.model, PAT.richExtra, 'D:/tmp/l3exp/arm-b1-ts-off.yml'] },
+        patches: [PAT.go, PAT.model, PAT.richNoHooks, 'D:/tmp/l3exp/arm-b1-ts-off.yml'] },
   B2: { home: 'D:/ai本地模型/dsh-rich-home', profile: 'rich1', env: {},
-        patches: [PAT.go, PAT.model, PAT.richExtra] },
+        patches: [PAT.go, PAT.model, PAT.richNoHooks] },
 }
 const cfg = ARMS[ARM]
 if (!cfg) { console.error('usage: node tmp/l3exp/run-arm.mjs A1|A2|B1|B2'); process.exit(2) }
