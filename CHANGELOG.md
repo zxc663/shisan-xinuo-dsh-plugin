@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批6 附（2026-10-16）：安装三形态实测＋「安装/peer 结论档」
+
+- **三形态全部实测**：①`file://` 开发态（叠加层挂 `src/*.ts`，裸/实战/预览三档均通）；②**目录 bundle**（`dsh plugin add <dir>`：无警告、`--dump-config` 含 `- id: shisanxinuo-core`）；③**tgz**（干净克隆打包＋装载：无警告、组合树含插件层，产物 78 KB）。附：`dsh.bundle` 缺失时的症状与 `prepack` 前置。
+- peer 口径定档：**不声明 `peerDependencies`**（零宿主硬依赖）——依据是宿主 0.2.x 的 fail-closed peer 检查（`dsh-outcome-loop` 被拒装实测）；代价转为由三档环境矩阵＋每批实机走查承担兼容检测。
+- 落档 `docs/design-specs/install-and-peer-conclusion-20261016.md`（含复跑命令与上游锁定清单）。
+
 ## 收口批2 附（复验，2026-10-16）：双线兼容 @ 当前 core
 
 - 批3–批5 大改后，在**预览线**（`dsh-cli-0.2.1-alpha.4` ＋ `dsh-prev-home/prev1`）复验**当前 core**（叠加层停用快照包、改挂工作树源）：`arm=C`、`self-check` 全绿（段指纹与主绑定线一致）、两步任务 `gate-tool pass` ＋ `gate-conclude marked`。判定：双线兼容@当前 core 成立（不构成对外兼容承诺）。落档 `docs/preview-line-compat-20261016.md`「复验」节。

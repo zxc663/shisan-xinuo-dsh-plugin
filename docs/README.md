@@ -43,6 +43,7 @@
 - `findings-20261016.md` — 宿主线普查发现（A/B/C/D 编号、分层修法、砍除清单、诚实边界）。
 - `design-specs/layer3-quantification-prereg-20261016.md` — 层3/D 量化实验预注册（四臂冻结判据）。
 - `design-specs/layer3-quantification-results-20261016.md` — 层3/D 量化实验结果（H1 支持/H2 代价量化/H3 成立）。
+- `design-specs/install-and-peer-conclusion-20261016.md` — 安装与 peer 结论（三形态实测、不声明 peer 的依据与代价、上游锁定）。
 
 ## 其余（评估 · 证据 · 交接）
 
