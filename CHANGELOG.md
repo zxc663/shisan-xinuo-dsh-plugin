@@ -2,6 +2,12 @@
 
 - **前提更正（四副本）**：上条「宿主已回传 `usage`」推翻了一处被反复引用的硬约束——「宿主不回传用量、报 token 即为编造」。逐处加日期化更正（保留原句）：`README.md`（`SHISANUO_COST_HINT` 行）、`docs/plugin-assessment-and-roadmap-20261013.md`、`docs/reuse-research-landing-options-20261015.md`、`docs/todo-next-20261013.md`。**成本提示实现未改版**（仍只报计数）——按「边际收益小则不推进」，改报真 token 留作可点名小项。
 
+## 批5 附（GUI 实机，2026-10-16）：D2 全权档验证通过（含切档路径实测）
+
+- **切档路径打通并实机验证**：`/permission` 命令 → 选择器「完全权限」→ 风险确认框（勾选＋启用）→ **机器判据** `exec-log: {"kind":"sandbox-mode","mode":"danger-full-access","enforcement":"suspended"}` ＋段指纹按设计重定基。落档 `gui-verification-protocol §5.1`（**并更正此前的错误定位**：顶栏「标准模式」与输入框 `@ 工作区内修改` 提示**都不是**档位控件）。
+- **D2 实机通过**：全权档下发"用 pwsh 执行 `Remove-Item …del-me.txt`"——`pre-execute` 判出 `l3="数据删除"` → **`l3-detected decision=allow-full-access`**（D2 短路生效）→ **无 `upstream-block(ask)`／无 `l3-intercept`／无假「用户拒绝」** → 文件**真删**（`Test-Path=False`）、回合 `gate-ok` 正常收口。对照旧形态（曾实测 5 条 asked→rejected）缺陷消除。
+- 未验证清单随之收敛到**一项**（三问质询的真实熔断端到端）。
+
 ## 层3 实验补测（2026-10-16）：`cached_tokens%` 由「不可测」转**真测**（H1 加固＋H2 新维度）
 
 - **发现**：宿主现已在会话日志回传 `usage`，**含 `cacheReadTokens`**（批2 跑分时该字段全为零，故当时按预注册记为「不可测/代理口径」）。实测样本：`{"inputTokens":284,"totalTokens":10285,"cacheReadTokens":9920}`。
