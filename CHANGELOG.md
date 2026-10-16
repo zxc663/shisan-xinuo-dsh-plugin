@@ -1,5 +1,10 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 公开面质量机检（2026-10-16）：markdown 死链门禁
+
+- 新增 `scripts/check-md-links.mjs`：扫描仓库内全部 `.md`（跳过 node_modules/.git/logs/tmp）的**本地链接**（`](target)`；跳过 http(s)/mailto/纯锚点；剥离 `#anchor` 后按文件所在目录解析）→ 有死链则 exit 1。接线 `tests/md-links.test.mjs` 进 `npm test`（28 套）。
+- **实测**：68 个文件 / 72 条本地链接 / **0 死链**。**负向控制已证**：临时放入一条死链 → 机检 exit 1 且精确报出 `docs/_dangling-probe.md → nonexistent-target-xyz.md`；删除后复绿。
+
 ## 公开面刷新（2026-10-16）：README 对齐 v5（工具裁剪退役）
 
 - 公众面陈旧更正：能力矩阵 #4（工具预算器）改为**已退役**并给依据（`docs/reuse-decision-toolface-20261016.md`＋rich 实测 7 件/3,374 chars）；数据层「三件」→「两件」（`content/budget.json` 已随退役移除）；环境变量表删除 `SHISANUO_BUDGET`／`SHISANUO_BUDGET_LEVEL`；拦截换芯段与目录段更新（披露让位上游）；版本史与「审计吸收 F-05」标注退役。改后全文仅剩**两处**提及移除项，且都在明确退役语境。
