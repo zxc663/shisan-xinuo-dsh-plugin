@@ -1,0 +1,66 @@
+{
+  "file": "D:\\ai本地模型\\dsh-exp-home\\sessions\\--D-ai~672C~5730~6A21~578B-dsh-exp-home-work-A2--\\session-adf206e6-dd34-4064-a0f9-9dcadf627f6c\\session.v4.jsonl.zstd",
+  "events": 415,
+  "counts": {
+    "session": 1,
+    "permission/preset": 1,
+    "sandbox/mode": 1,
+    "approval/policy": 1,
+    "agent/inbox/spliced": 40,
+    "turn/start": 20,
+    "step/start": 60,
+    "system/message": 1,
+    "user/message": 22,
+    "request/header": 20,
+    "request/context": 1,
+    "session/title": 1,
+    "session/title-llm-request": 1,
+    "assistant/message": 60,
+    "tool/call": 40,
+    "tool/result": 40,
+    "step/end": 60,
+    "turn/end": 20,
+    "session/end-seed": 19,
+    "assistant/attempt": 2,
+    "llm/retry": 2,
+    "llm/retry-started": 2
+  },
+  "systemEvents": 1,
+  "distinctSystem": 1,
+  "systemBytes": 4082,
+  "systemMessages": [
+    {
+      "seq": 7,
+      "bytes": 4082,
+      "sha1": "990110898558"
+    }
+  ],
+  "toolCalls": {
+    "write": 20,
+    "discipline_gate": 20
+  },
+  "steerCount": 0,
+  "stepOkCount": 20,
+  "stepOkList": [
+    "STEP-1-OK",
+    "STEP-10-OK",
+    "STEP-11-OK",
+    "STEP-12-OK",
+    "STEP-13-OK",
+    "STEP-14-OK",
+    "STEP-15-OK",
+    "STEP-16-OK",
+    "STEP-17-OK",
+    "STEP-18-OK",
+    "STEP-19-OK",
+    "STEP-2-OK",
+    "STEP-20-OK",
+    "STEP-3-OK",
+    "STEP-4-OK",
+    "STEP-5-OK",
+    "STEP-6-OK",
+    "STEP-7-OK",
+    "STEP-8-OK",
+    "STEP-9-OK"
+  ]
+}

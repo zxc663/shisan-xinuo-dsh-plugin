@@ -1,0 +1,260 @@
+{
+  "file": "D:\\ai本地模型\\dsh-rich-home\\sessions\\--D-ai~672C~5730~6A21~578B-dsh-rich-home-work-B2--\\session-30fa4c14-8ecd-4bdc-8784-98259f7b6785\\session.v4.jsonl.zstd",
+  "events": 592,
+  "counts": {
+    "session": 1,
+    "permission/preset": 1,
+    "sandbox/mode": 1,
+    "approval/policy": 1,
+    "agent/inbox/spliced": 40,
+    "turn/start": 20,
+    "step/start": 61,
+    "system/message": 40,
+    "user/message": 100,
+    "request/header": 40,
+    "request/context": 1,
+    "session/title": 1,
+    "session/title-llm-request": 1,
+    "assistant/message": 61,
+    "tool/call": 42,
+    "tool/result": 42,
+    "step/end": 61,
+    "developer/message": 39,
+    "turn/end": 20,
+    "session/end-seed": 19
+  },
+  "systemEvents": 40,
+  "distinctSystem": 2,
+  "systemBytes": 158240,
+  "systemMessages": [
+    {
+      "seq": 7,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 22,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 45,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 56,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 74,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 85,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 103,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 114,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 132,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 143,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 161,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 172,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 190,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 201,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 219,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 230,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 248,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 259,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 277,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 288,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 306,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 317,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 335,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 346,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 364,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 375,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 393,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 404,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 422,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 433,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 451,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 462,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 480,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 491,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 509,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 520,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 538,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 549,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    },
+    {
+      "seq": 567,
+      "bytes": 4198,
+      "sha1": "b29433ff4f28"
+    },
+    {
+      "seq": 578,
+      "bytes": 3714,
+      "sha1": "d27b895c1c90"
+    }
+  ],
+  "toolCalls": {
+    "write": 21,
+    "tool_search": 1,
+    "discipline_gate": 20
+  },
+  "steerCount": 0,
+  "stepOkCount": 20,
+  "stepOkList": [
+    "STEP-1-OK",
+    "STEP-10-OK",
+    "STEP-11-OK",
+    "STEP-12-OK",
+    "STEP-13-OK",
+    "STEP-14-OK",
+    "STEP-15-OK",
+    "STEP-16-OK",
+    "STEP-17-OK",
+    "STEP-18-OK",
+    "STEP-19-OK",
+    "STEP-2-OK",
+    "STEP-20-OK",
+    "STEP-3-OK",
+    "STEP-4-OK",
+    "STEP-5-OK",
+    "STEP-6-OK",
+    "STEP-7-OK",
+    "STEP-8-OK",
+    "STEP-9-OK"
+  ]
+}

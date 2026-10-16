@@ -1,0 +1,259 @@
+{
+  "file": "D:\\ai本地模型\\dsh-rich-home\\sessions\\--D-ai~672C~5730~6A21~578B-dsh-rich-home-work-B1--\\session-810bedc6-a8ca-4c93-a1d7-c185fac083e2\\session.v4.jsonl.zstd",
+  "events": 546,
+  "counts": {
+    "session": 1,
+    "permission/preset": 1,
+    "sandbox/mode": 1,
+    "approval/policy": 1,
+    "agent/inbox/spliced": 40,
+    "turn/start": 20,
+    "step/start": 60,
+    "system/message": 40,
+    "user/message": 61,
+    "request/header": 40,
+    "request/context": 1,
+    "session/title": 1,
+    "session/title-llm-request": 1,
+    "assistant/message": 60,
+    "tool/call": 40,
+    "tool/result": 40,
+    "step/end": 60,
+    "developer/message": 39,
+    "turn/end": 20,
+    "session/end-seed": 19
+  },
+  "systemEvents": 40,
+  "distinctSystem": 2,
+  "systemBytes": 158240,
+  "systemMessages": [
+    {
+      "seq": 7,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 20,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 37,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 47,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 64,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 74,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 91,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 101,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 118,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 128,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 145,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 155,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 172,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 182,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 199,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 209,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 226,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 236,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 253,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 263,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 280,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 290,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 307,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 317,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 334,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 344,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 361,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 371,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 388,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 398,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 415,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 425,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 442,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 452,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 469,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 479,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 496,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 506,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    },
+    {
+      "seq": 523,
+      "bytes": 4198,
+      "sha1": "6448d9dd7d30"
+    },
+    {
+      "seq": 533,
+      "bytes": 3714,
+      "sha1": "206694df79a0"
+    }
+  ],
+  "toolCalls": {
+    "write": 20,
+    "discipline_gate": 20
+  },
+  "steerCount": 0,
+  "stepOkCount": 20,
+  "stepOkList": [
+    "STEP-1-OK",
+    "STEP-10-OK",
+    "STEP-11-OK",
+    "STEP-12-OK",
+    "STEP-13-OK",
+    "STEP-14-OK",
+    "STEP-15-OK",
+    "STEP-16-OK",
+    "STEP-17-OK",
+    "STEP-18-OK",
+    "STEP-19-OK",
+    "STEP-2-OK",
+    "STEP-20-OK",
+    "STEP-3-OK",
+    "STEP-4-OK",
+    "STEP-5-OK",
+    "STEP-6-OK",
+    "STEP-7-OK",
+    "STEP-8-OK",
+    "STEP-9-OK"
+  ]
+}

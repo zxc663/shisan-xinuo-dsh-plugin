@@ -1,0 +1,358 @@
+{
+  "file": "D:\\ai本地模型\\dsh-exp-home\\sessions\\--D-ai~672C~5730~6A21~578B-dsh-exp-home-work-A1--\\session-a24b74f3-35db-41e5-b033-9459ac143878\\session.v4.jsonl.zstd",
+  "events": 508,
+  "counts": {
+    "session": 1,
+    "permission/preset": 1,
+    "sandbox/mode": 1,
+    "approval/policy": 1,
+    "agent/inbox/spliced": 40,
+    "turn/start": 20,
+    "step/start": 60,
+    "system/message": 60,
+    "user/message": 22,
+    "request/header": 60,
+    "request/context": 1,
+    "session/title": 1,
+    "session/title-llm-request": 1,
+    "assistant/message": 60,
+    "tool/call": 40,
+    "tool/result": 40,
+    "step/end": 60,
+    "turn/end": 20,
+    "session/end-seed": 19
+  },
+  "systemEvents": 60,
+  "distinctSystem": 3,
+  "systemBytes": 239340,
+  "systemMessages": [
+    {
+      "seq": 7,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 20,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 27,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 37,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 45,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 52,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 62,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 70,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 77,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 87,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 95,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 102,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 112,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 120,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 127,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 137,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 145,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 152,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 162,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 170,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 177,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 187,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 195,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 202,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 212,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 220,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 227,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 237,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 245,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 252,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 262,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 270,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 277,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 287,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 295,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 302,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 312,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 320,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 327,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 337,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 345,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 352,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 362,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 370,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 377,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 387,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 395,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 402,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 412,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 420,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 427,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 437,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 445,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 452,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 462,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 470,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 477,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    },
+    {
+      "seq": 487,
+      "bytes": 3988,
+      "sha1": "ad5b06569e28"
+    },
+    {
+      "seq": 495,
+      "bytes": 3989,
+      "sha1": "9eb1149dc3d0"
+    },
+    {
+      "seq": 502,
+      "bytes": 3990,
+      "sha1": "ed0884330d27"
+    }
+  ],
+  "toolCalls": {
+    "write": 20,
+    "discipline_gate": 20
+  },
+  "steerCount": 0,
+  "stepOkCount": 20,
+  "stepOkList": [
+    "STEP-1-OK",
+    "STEP-10-OK",
+    "STEP-11-OK",
+    "STEP-12-OK",
+    "STEP-13-OK",
+    "STEP-14-OK",
+    "STEP-15-OK",
+    "STEP-16-OK",
+    "STEP-17-OK",
+    "STEP-18-OK",
+    "STEP-19-OK",
+    "STEP-2-OK",
+    "STEP-20-OK",
+    "STEP-3-OK",
+    "STEP-4-OK",
+    "STEP-5-OK",
+    "STEP-6-OK",
+    "STEP-7-OK",
+    "STEP-8-OK",
+    "STEP-9-OK"
+  ]
+}

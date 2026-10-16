@@ -12,7 +12,7 @@
 
 - `validity-report-20261013.md` — 完成信号有效性报告（H1–H5 判定、阶梯、出题层五版通道、全电池总判定、两次真机抽检）。
 - `design-specs/completion-signal-validity-plan-20261013.md` — 预注册计划（含 R1–R20 修订记录；判据与阈值跑前冻结）。
-- `evidence/` — 实验原始数据入库（外部可复查部分）。
+- `evidence/` — 实验原始数据入库（外部可复查部分）；`evidence/layer3-20261016/README.md` 为层3/D 四臂实验证据（批2 门禁批）。
 - `audit-response-20261013.md` — 第三方审计处置报告（含洞 A／洞 B 拆分与判据锚点）。
 
 ## 设计与决策
