@@ -101,7 +101,7 @@ dsh plugin --profile <你的profile> add ./shisan-xinuo-dsh-plugin-<版本>.tgz
 | `SHISANUO_L3_OFF` / `SHISANUO_NO_ASSERT` | 研究旗标（实验用，默认关）：拦截退位为仅记录／关闭断言面（不推导、不注册登记工具）——用于对照实验 |
 | `SHISANUO_ZEROTOOL_GUARD` | F2 盲区护栏（默认关）：开启后，「零工具调用却声称完成」的回合会被记录（`zerotool-claim`）并轻量提示一次（每回合上限 1）——该类回合原本不进入任何收口检查 |
 | `SHISANUO_PROBE_TOOLS` | 工具注册语义探针（默认关，**仅探测会话使用**）：启动时尝试一次**同名工具注册**并打印结果（全局＝拒绝／per-agent＝接受），用于验证"改宿主工具"能力面。产物见 `docs/extension-design-20261014.md` §三.1 |
-| `SHISANUO_COST_HINT` | 成本提示（**实验，默认关**）：开启后每回合最多一次经 `inject()` 注入"轮数／累计工具调用数＋每步重发上下文"——**只报可观测的量，不报 token**（宿主不回传用量，报数字即为编造）。前缀 `[十三希诺成本提示]` 自曝来源 |
+| `SHISANUO_COST_HINT` | 成本提示（**实验，默认关**）：开启后每回合最多一次经 `inject()` 注入"轮数／累计工具调用数＋每步重发上下文"。**2026-10-16 更正**：宿主**现已回传 `usage`**（含 `cacheReadTokens`），故"宿主不回传用量、报 token 即为编造"这一前提**不再成立**（该提示当前仍只报可观测计数，未改版）。前缀 `[十三希诺成本提示]` 自曝来源 |
 | `SHISANUO_ARM=A\|B\|C` | 实验臂切换（优先于旗标文件；A=惰性观测，B=纯纪律文本，C=全量，默认 C） |
 | `SHISANUO_DSH_BIN` / `SHISANUO_DSH_HOME` / `SHISANUO_E1_TMP` | E1 批量实验的本机环境（DSH 入口/home/临时目录） |
 
