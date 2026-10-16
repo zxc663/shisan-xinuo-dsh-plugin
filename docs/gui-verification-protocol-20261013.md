@@ -58,3 +58,8 @@
 - 顶栏的「**标准模式**」**不是**档位控件（点它无菜单）。
 - 输入框区的 `@ 工作区内修改` 是**输入提示**（同类还有 `@ 1轮1步`），**不是**档位控件。
 - WinRT OCR 会把中文**逐字拆开**（`工 作 区 内 修 改`）⇒ **按单字/归一化后匹配**，别用连续子串；`Words.Count` 在投影下可能报错（先转数组/反向索引）；`BoundingRect` 别用 `[int]` 强转（用 `.ToString()`）。
+
+### 5.2 用环境变量驱动桌面档实验（2026-10-16 属实）
+
+- **桌面 App 的插件宿主继承 `Start-Process` 传入的环境变量**——实测：`Start-Process '…\DeepSeek Harness.exe' -Environment @{ SHISANUO_STEER_CAP='1'; SHISANUO_ASSERTIONS='exists:…' }` 启动后，exec-log 落 `{"kind":"pinned","count":1,…}` ⇒ 在 GUI 里也能跑"环境门控"的实验（熔断上限、钉死断言等），不必另写脚本。
+- **未完成**：借该能力在 GUI 触发「熔断跳过→notice＋三问质询」的尝试**未成功**（输入未能落到输入框；恢复会话页与欢迎页的 composer 坐标需先 OCR 取该行 rect）。该路径的 `skip-notice` 仍待补。
