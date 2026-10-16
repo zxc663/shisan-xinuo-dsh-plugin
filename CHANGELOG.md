@@ -1,5 +1,9 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 公开面刷新（2026-10-16）：README 对齐 v5（工具裁剪退役）
+
+- 公众面陈旧更正：能力矩阵 #4（工具预算器）改为**已退役**并给依据（`docs/reuse-decision-toolface-20261016.md`＋rich 实测 7 件/3,374 chars）；数据层「三件」→「两件」（`content/budget.json` 已随退役移除）；环境变量表删除 `SHISANUO_BUDGET`／`SHISANUO_BUDGET_LEVEL`；拦截换芯段与目录段更新（披露让位上游）；版本史与「审计吸收 F-05」标注退役。改后全文仅剩**两处**提及移除项，且都在明确退役语境。
+
 ## 收口批5 附（缺陷修复，2026-10-16）：pinned 判据可被 `assert=` 绕过（洞 A 家族）
 
 - **实机复现**：会话外钉死 `SHISANUO_ASSERTIONS=exists:<不存在的文件>`（登记为 `pinned`）后，模型用 **`assert=`** 收口 → 旧形态下该回合仍判 `ok-tool` 并闭环 ⇒ **「模型不可改写」的最强判据被静默绕过**。
