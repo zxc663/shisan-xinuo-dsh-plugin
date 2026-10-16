@@ -56,6 +56,24 @@ async function runExecute(args, runCmdImpl, verdicts = [], logs = []) {
   t('exec: 消息可读', true, typeof r.message === 'string' && r.message.includes('PASS'))
 }
 
+// 1b) 批5 方向 C·gate 降级：无机器判据 + exempt（未验证声明）→ unverified；无 exempt → error
+{
+  const { r, verdicts, logs } = await runExecute(
+    { level: 'L1', v: '只读观测任务', exempt: '本任务无文件/命令产物，未绑定机器判据' },
+    async () => ({ code: 0, stdout: '', stderr: '', timedOut: false }),
+  )
+  t('exec: 无判据+exempt → unverified', 'unverified', r.status)
+  t('exec: unverified 回调', ['unverified'], verdicts)
+  t('exec: unverified 落日志', 'unverified', logs[0]?.status)
+  t('exec: unverified 文案声明不计完成', true, r.message.includes('不计为完成'))
+  const { r: r2, verdicts: v2 } = await runExecute(
+    { level: 'L1', v: 'x' },
+    async () => ({ code: 0, stdout: '', stderr: '', timedOut: false }),
+  )
+  t('exec: 无判据无 exempt → error', 'error', r2.status)
+  t('exec: error 回调', ['error'], v2)
+}
+
 // 2) mismatch 路径：模型声称 0 实测 1
 {
   const { r, verdicts, logs } = await runExecute(

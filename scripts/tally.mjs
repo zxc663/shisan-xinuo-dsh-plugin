@@ -157,7 +157,7 @@ function checkWhitelist(lines) {
     for (const [f, cap] of Object.entries(CAPS)) {
       if (typeof l[f] === 'string' && l[f].length > cap) v.push(`line ${i + 1}: 字段 ${f} 超 ${cap} 字符截断帽（实际 ${l[f].length}）`)
     }
-    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'ok-auto', 'gate-unproven', 'gate-fail', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
+    if (l.kind === 'behavior' && !['ok', 'ok-tool', 'ok-auto', 'gate-unproven', 'unverified', 'gate-fail', 'missing', 'skip'].includes(l.gate)) v.push(`line ${i + 1}: behavior.gate 非法值 "${l.gate}"`)
   })
   return v
 }

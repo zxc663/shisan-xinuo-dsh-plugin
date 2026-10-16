@@ -754,7 +754,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         assert: { type: 'string', description: '算子判据（**插件内联求值、永不过 shell**，故不受沙箱/引号影响）：not_exists:<路径> | exists:<路径> | path_contains:<路径>::<子串>' },
         summary: { type: 'string', description: '任务交付摘要（≤500 字）：做了什么/改了哪些文件/验证结论。通过时随收口证据落档并回显，防收口后回合被收回导致交付文本丢失（A4）。' },
         files: { type: 'string', description: '变更文件清单（逗号分隔）' },
-        exempt: { type: 'string', description: '未验证事项声明（无则省略）' },
+        exempt: { type: 'string', description: '未验证事项声明（无则省略）。**无可机器判据的任务**（只读/语义型、交付物为会话内文本）在此如实声明——宿主按"诚实未验证"登记（非完成、非失败），不必硬凑命令。' },
       },
       required: ['level', 'v'],
     },
@@ -762,7 +762,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       schema: {
         type: 'object',
         properties: {
-          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error', 'assertion-fail', 'channel-unavailable'] },
+          status: { type: 'string', enum: ['pass', 'honest-fail', 'mismatch', 'refused', 'error', 'assertion-fail', 'channel-unavailable', 'unverified'] },
           claimedExit: { type: 'number' },
           realExit: { type: 'number' },
           match: { type: 'boolean' },
@@ -857,12 +857,26 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         return value
       }
       if (!cmd.trim()) {
+        // 批5 方向 C·gate 降级（2026-10-16）：无机器判据（无 cmd/assert）但给出了 exempt（未验证声明）——
+        // 记为**诚实未验证**（非 pass、非 error）：只读/语义型任务有合规的诚实收尾形态，不再逼出 error/打回循环。
+        // 边界：不计为完成、不算失败；回合以 gate:unverified 如实登记（可被 tally 分辨，不可冒充已验通过）。
+        if (exempt && exempt.trim()) {
+          deps.onStats?.('unverified', execCtx)
+          void deps.log({ kind: 'gate-tool', status: 'unverified', level, v, cmd: '', claimedExit, exempt: exempt.slice(0, 200), ...(summary ? { summary } : {}) })
+          return {
+            status: 'unverified' as const, verdict: 'unverified',
+            message:
+              'UNVERIFIED：本回合未提供机器判据（无 cmd / assert），你已声明未验证事项——宿主按**诚实未验证**登记（不计为完成、不判失败）。' +
+              '若任务确有可机器判定的目标，请补 assert（not_exists:/exists:/path_contains:）或 cmd+claimedExit 后再次调用；否则以"未验证"如实收尾。',
+          }
+        }
         deps.onStats?.('error', execCtx)
         void deps.log({ kind: 'gate-tool', status: 'error', level, v, cmd: '', claimedExit, error: 'empty-cmd' })
         return {
           status: 'error' as const, verdict: 'error',
           message: gateToolMessage('error', claimedExit, null, '既未给 cmd 也未给 assert') +
-            '\n提示：只需检查"某个路径/内容是否成立"时，用 **`assert`** 传算子即可（not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>）——它由插件内联求值，不需可执行命令。',
+            '\n提示：只需检查"某个路径/内容是否成立"时，用 **`assert`** 传算子即可（not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>）——它由插件内联求值，不需可执行命令。' +
+            '\n若本任务确实**没有可机器判定的目标**（只读观测/语义型、交付物为会话内文本），在 `exempt` 里如实声明，宿主按"诚实未验证"登记（非完成、非失败）——不要硬凑一条无关命令。',
         }
       }
 
@@ -1220,7 +1234,7 @@ export function apply(ctx: Context) {
   // ── 会话统计（宿主机判，数据直供 A/B「GATE 出现率」+ v0.2 gate-tool 真值计数 + v0.4 预算状态）──
   const stats = {
     checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
-    gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, last: '未调用' as string },
+    gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, unverified: 0, last: '未调用' as string },
     wireTools: 0, fullAccess: false,
     assertion: '未登记' as string,
   }
@@ -1621,6 +1635,7 @@ export function apply(ctx: Context) {
         else if (b.gateVerdict === 'pass' && b.gateClosed) verdict = 'ok-tool'
         else if (b.gateVerdict === 'pass') verdict = 'gate-unproven'
         else if (b.closedAuto) verdict = 'ok-auto'
+        else if (b.gateVerdict === 'unverified') verdict = 'unverified'
         else if (b.gateVerdict) verdict = 'gate-fail'
         else verdict = 'missing'
         // 行为指标行：每轮必落（复述/判级分母由 tally 按 hasText 过滤）
@@ -1724,7 +1739,7 @@ export function apply(ctx: Context) {
       }
       // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
       // A1：只有"闭环的 pass"才放行；弱证据 pass（gateClosed=false）继续走收口强制 #决策 2026-10-13 23:55
-      if (b.steered || (b.gateVerdict === 'pass' && b.gateClosed)) return
+      if (b.steered || (b.gateVerdict === 'pass' && b.gateClosed) || b.gateVerdict === 'unverified') return
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
       const assertionsOpen = pending.length > 0 && !(rec?.assertionsPassedAt)
@@ -1813,8 +1828,8 @@ export function apply(ctx: Context) {
     const toolsAny = ctx.tools as { register?: (def: unknown) => unknown } | undefined
     if (typeof toolsAny?.register === 'function') {
       try {
-        const verdictKey: Record<string, 'pass' | 'mismatch' | 'honestFail' | 'refused' | 'error'> = {
-          pass: 'pass', mismatch: 'mismatch', 'honest-fail': 'honestFail', refused: 'refused', error: 'error',
+        const verdictKey: Record<string, 'pass' | 'mismatch' | 'honestFail' | 'refused' | 'error' | 'unverified'> = {
+          pass: 'pass', mismatch: 'mismatch', 'honest-fail': 'honestFail', refused: 'refused', error: 'error', unverified: 'unverified',
         }
         const def = buildGateToolDefinition({
           log: (entry) => void log(entry),
