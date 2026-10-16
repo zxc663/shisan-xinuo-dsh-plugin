@@ -1,5 +1,13 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 熔断验证＋样本轮（2026-10-16）：skip-notice 端到端实机／effect 层指标实测／`ok-effect` 记账分列／tally 字段缺口修复
+
+- **三问质询熔断端到端——实机通过（未验证清单收敛至 0）**：`SHISANUO_STEER_CAP=1`＋pinned 恒假断言（`cmd_exit0:cmd /c exit 9`）→ 首次失败 `gate-steer` → 模型重试 → `gate-steer-capped{used:1,cap:1}` → **`skip-notice` 落账**＋`noticeMessage` 注入（会话日志 `user/message form=notice`＋摘要＋三问文案，seq=57）→ 模型**三句如实应答**（含「应提醒用户，而不是静默放行」）＋回合 `gate-missing`/`assertion-unresolved` 诚实收尾；双次命中只发一次（每任务守卫）。证据＝exec-log（`session-3a28ebe0-…`）＋会话日志解码＋运行输出。选型教训入 `踩坑经验库.md`（路径类恒假断言会诱发模型 `subst` 造盘；命令类恒假无此诱因）。
+- **effect 层样本轮（A/B 对照，n=10/臂）**：无注册断言的物理写任务上——E0（`SHISANUO_EFFECT_ASSERT=0`）`gate-steer` 10/10（1.0/轮、模型补调 gate）；E1（默认开）**`effect-closeout` 10/10、steer=0**（全部对应真实存在的文件，无误收口）；两臂目标级 `auto-closeout` 均 0（分列记账正例）；墙钟 244s→201s。装置＝`scripts/l3exp/run-effect-arm.mjs`（含 `EFFECT_RESUME` 断点续跑）。落档 `docs/design-specs/effect-layer-sample-round-20261016.md`；边界如实：相对路径写入不触发该层（`firstAbsolutePath` 口径）、弱模型「发言即止」时有效轮须按 pre-execute 证据判定。
+- **记账分列加固（`ok-effect`）**：effect 层收口在回合级 verdict 曾并入 `ok-auto` ⇒「auto-closeout 占比」存在把"动作落地"混入"目标达成"的口径缺口；新增 `ok-effect` verdict（`effectClosed` 标记）＋tally 七态计数/合法值/对应关系同步。
+- **tally 字段缺口修复**：`gate-tool.summary`（A4 引入、≤500 截断）未进 FIELD_WHITELIST／CAPS——对 live 日志跑 `--check` 暴露 62 处；已补白名单＋`summary: 500` 帽＋夹具回归。字段级漂移的机检空档记入 `踩坑经验库.md`。
+- **勾稽**：执行报告 §1 批5→✅、§2 指标补样本轮、§6 未验证→**0 项**；任务总表 #4 补熔断实证、#6→✅（宿主默认判据＋样本轮实测）；`验证库/已知边界与接受风险.md` 四项更新（发行例外消除、指标口径已决、未验证 0 项、模型抖动扩记）。
+
 ## C8 修复（2026-10-16）：干净克隆 `npm pack` 自动构建（`prepack`）
 
 - **问题**：`lib/` 被 `.gitignore` 忽略，干净克隆在**未构建**时直接 `npm pack`，产物不含 `lib/`（分发场景必炸；findings C8 在悬置解除后得以落地修复）。

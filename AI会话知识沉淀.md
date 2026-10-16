@@ -13,6 +13,8 @@
 | 2026-10-16 | 会话日志外来事件 | `ignorable` 标记、`repair-session-logs.mjs`、`session/end-seed` |
 | 2026-10-16 | GO 反代模型面真值 | 免费清单、`x-opencode-endpoint-id`、对照组 |
 | 2026-10-16 | 判据面（窄版默认判据） | `effect-closeout`、动作落地≠目标达成、`SHISANUO_EFFECT_ASSERT` |
+| 2026-10-16 | 熔断触发与批次装置 | `skip-notice`、`gate-steer-capped`、恒假判据选型、断点续跑 |
+| 2026-10-16 | 记账分列（ok-effect） | 回合级 verdict、tally 白名单、写入面/对账面同步 |
 
 ---
 
@@ -51,11 +53,25 @@
 3. **优先级｜已登记断言（pinned／用户原文派生／tool 自登记）恒在 `effect` 之上｜有任一登记断言时不触发该层**；开关 `SHISANUO_EFFECT_ASSERT=0` 关闭（默认开）。
 4. **采集面边界（如实）｜副作用在 pre-execute 侧采集、按"本回合出现过的工具名"对账取用（有界缓冲 16、用后即走）｜多 agent 同进程且工具名相同时存在误取可能**，已在档里标注为已知边界。
 
+## 2026-10-16 ｜ 主题：熔断触发与批次装置（skip-notice／样本轮）
+
+1. **要实机触发「熔断跳过」链｜`SHISANUO_STEER_CAP=1` ＋ 一条结构性不可满足的 pinned 断言 ＋ 任务含工具调用｜链路＝首次失败 `gate-steer` → 重试失败 → `gate-steer-capped` → `skip-notice` 落账＋`noticeMessage`（`form=notice`＋三问文案）注入**：`shouldSteerNow(used,cap)` 对 `cap<=0` 恒不熔断（非法配置保守放行），故不能拿 0 当"立即熔断"。
+2. **恒假判据选型｜选「模型无从下手」的形态｜命令类恒假（`cmd_exit0:cmd /c exit 9`）＞ 不可达盘符路径 ＞ 可造路径**：路径类（如 `exists:Q:/…`）会诱发模型"修断言"行为（实测：模型尝试 `subst` 造盘、装 ACL 诊断 skill 查沙箱）——测试轮被拉长且引入无关动作。命令类恒假无此诱因，全程无无效探索。
+3. **批次轮次有效性｜按 pre-execute（工具调用）证据判定｜`exit=0` 只表示进程正常结束**：弱模型「发言即止」会让整批"全绿"但零产出（实测十轮空口声称完成）；提示词显式加"必须实际调用工具"可修复。
+4. **被中断的长批量｜先确认子进程是否成为孤儿仍在跑｜批次装置默认带断点续跑**：命令的父进程被杀 ≠ 子进程退出；两个进程并发续写同一会话会被宿主写锁拒（`session … is already owned by an active write handle`，exit=1 不污染会话）——写锁是宿主侧的自证保护，但 turn 计数会重复，需人工核对。
+
+## 2026-10-16 ｜ 主题：记账分列（ok-effect）与写入面/对账面同步
+
+1. **「独立记账」要贯穿到回合级 verdict｜不能只有 kind 分列**：`effect-closeout`（动作级）与 `auto-closeout`（目标级）的 kind 本就分列，但回合级 verdict 曾合并为 `ok-auto` ⇒ 「auto-closeout 占比」会混入动作落地。**加固＝新增 `ok-effect` verdict**（effect 分支置 `effectClosed` 标记），tally 六态计数扩为七态。
+2. **写入面新增字段必须同批改对账面｜`tally` FIELD_WHITELIST ＋ CAPS**：A4 给 `gate-tool` 加 `summary`（≤500 截断）时未同步白名单 ⇒ 62 处 live 违规。**注意机检覆盖缺口**：`tally-whitelist` 单测只查 kind 级（源码 `log({kind})` ↔ 白名单键），**字段级**漂移只有对 live 日志跑 `--check` 才暴露——新增字段时两处都要动。
+3. **live 日志的历史遗留违规与现行违规要分开处置**：历史 kind（budget 类等）属"退役层留痕"，维持"清历史 vs 白名单兼容"未决项；**现行写入面的缺口（字段缺失）应当场补**。
+
 ## 本次变更索引（权威档，避免重复）
 
-- 完整变更/修复清单与证据：`CHANGELOG.md` 的「批5 续（2026-10-16）」节。
+- 完整变更/修复清单与证据：`CHANGELOG.md` 的「批5 续（2026-10-16）」与「熔断验证＋样本轮（2026-10-16）」节。
 - 会话拒载事故的处置规程与铁律：`docs/gui-verification-protocol-20261013.md §5.3`。
 - 桌面档 shell 被 ACL 阻断的成因与修法：同档 `§5.4`。
 - 四项裁决的落定与影响面：`docs/design-specs/v5-execution-report-20261016.md §4`。
 - 判据面的接受风险与不可混计口径：`验证库/已知边界与接受风险.md`。
+- 熔断端到端与 effect 样本轮结果：`docs/design-specs/effect-layer-sample-round-20261016.md`（含装置命令与边界）。
 - 证据留档：`docs/evidence/desktop-resume-error-20261016/`（红字前后截图；官方页面原件不入库，结论在此）。

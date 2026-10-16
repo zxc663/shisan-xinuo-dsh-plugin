@@ -11,7 +11,7 @@
 | 2 | 层3/D 四臂实验（门禁批）＋GUI 抽检 | ✅ | 四臂各 20/20、steer=0；H1 支持/H2 代价量化/H3 成立；结果档＋证据入库；**补测真缓存**（见 §2） |
 | 3 | 方向 A＋跳过治理 | ✅ | 段指纹/启动自检/判级仅观测/未知工具保守 L2/notice＋三问（通道探针实证） |
 | 4 | 方向 B（工具裁剪退役） | ✅ | 运行时裁剪层退役（−241 行）；rich 实测 `tools-wire` 7 件/3,374 chars；170 例回归 0 不一致；发现-解锁-调用闭环 |
-| 5 | 方向 C＋小件 | ◐ | gate 降级✅／D2 修复＋**GUI 实机通过**✅／闭环宿主终结缺口修复＋conclude 实机 4/4✅／outcome-loop 限时盒复测✅／**pinned 绕过洞修复**（实机复现→修复→验证）✅；**仅剩：宿主默认判据（待裁）** |
+| 5 | 方向 C＋小件 | ✅ | gate 降级✅／D2 修复＋**GUI 实机通过**✅／闭环宿主终结缺口修复＋conclude 实机 4/4✅／outcome-loop 限时盒复测✅／**pinned 绕过洞修复**（实机复现→修复→验证）✅；**宿主默认判据：已裁（严格为主＋物理副作用子集）＋已实现＋受控样本轮实测**（steer 1.0/轮→0、动作级收口 0→10/10；见 `effect-layer-sample-round-20261016.md`） |
 | 6 | 组装形态工程 | ◐ | **安装三形态 3/3 实测✅**（file://／目录 bundle／tgz）＋「安装/peer 结论档」✅；**切包未做**（须改 `package.json`，与"悬置不动"相抵） |
 | 7 | 层6 小批 | ◐ | C6 索引机检✅（缺口 27→0）／C7 证据入库✅／B6 上游共享合规向量登记✅／B8 对照 0 不一致✅；**B5 外部锚**缺 tag/release 与对外递交；**层标签口径**待确认 |
 | 8 | 发行就绪（准备） | ◐ | 「已知边界与接受风险」节✅／**干净克隆 pack＋装载实测通过✅**／外部锚物料✅；**C8 已修**（`prepack`，2026-10-16 删 `lib/` 复验＋干净克隆复验）；tag/Release 仍冻结待呈批 |
@@ -21,7 +21,7 @@
 
 - **H1（常量横幅 vs 动态横幅）**：系统段字节 −98.3%（239,340→4,082）；**真缓存命中 91.7%→97.3%（+5.6pt）、未缓存输入 −66%**。
 - **H2（tool-search 披露）**：墙钟 +47.5%（564s→832s）；**未缓存输入 +248%、总 token +105%、命中 94.6%→90.9%**；收口无损（20/20、steer=0）。
-- **收口基线**：`gate-steer=77`（计划所称基线）；`auto-closeout=12`（占比 5%）——**目标 ≥80% 需"宿主默认判据"，其口径待裁**。
+- **收口基线**：`gate-steer=77`（历史全量）；`auto-closeout=12`（占比 5%）。**受控样本轮（2026-10-16，n=10/臂）**：在无注册断言的物理写任务上，effect 层使 `gate-steer` 1.0/轮→0、动作级 `effect-closeout` 0→10/10（目标级列分列 0/0）——见 `effect-layer-sample-round-20261016.md`。
 - **D2**：旧形态 5 条 asked→rejected ⇒ 修复后全权档下危险命令**直接放行**（`l3-detected decision=allow-full-access`）、无假「用户拒绝」、文件真删。
 
 ## 3. 交付物索引
@@ -37,7 +37,7 @@
 | # | 裁决 | 落定动作 | 状态 |
 |---|---|---|---|
 | 1 | 本地 `package.json` WIP **丢弃** | `git restore package.json`（`dsh.bundle` 回提交态、版本回 `1.0.0-rc.1`）；WIP 副本留 `D:/tmp/probe/package.json.wip-20261016` | 已执行 |
-| 2 | 宿主判据＝**严格为主＋物理副作用子集** | 新增窄版默认判据（`observeEffect`／`deriveEffectAssertions`）＋独立记账 `effect-closeout`＋开关 `SHISANUO_EFFECT_ASSERT`；新增 `tests/effect-assert.test.mjs`（31 例），`npm test` 29 套 | 已实现；**指标变化待样本轮实测（未验证）** |
+| 2 | 宿主判据＝**严格为主＋物理副作用子集** | 新增窄版默认判据（`observeEffect`／`deriveEffectAssertions`）＋独立记账 `effect-closeout`＋开关 `SHISANUO_EFFECT_ASSERT`；新增 `tests/effect-assert.test.mjs`（31 例），`npm test` 29 套；**记账分列加固**：回合级 verdict 新增 `ok-effect`（不再并入 `ok-auto`）＋tally 同步 | 已实现＋**样本轮实测**（A/B 各 10 轮：steer 1.0/轮→0；动作级收口 0→10/10；目标级分列 0/0；见 `effect-layer-sample-round-20261016.md`） |
 | 3 | 「层标签」＝**矩阵 8/8 ＋ findings 一行口径** | 能力矩阵状态标签全覆盖（不新增逐条打标）；`findings-20261016.md` 顶部加口径声明 | 已执行 |
 | 4 | **不对外发布** | tag／Release／SHA256SUMS／外部收录 PR 全部搁置；`docs/external-anchor/` 物料留存不发 | 已执行（物料冻结） |
 
@@ -54,6 +54,8 @@ node scripts/check-docs-index.mjs && node scripts/check-md-links.mjs
 
 真机/宿主内证据（需宿主与额度，不可外部复跑，已如实标注）：`logs/exec-log.jsonl`、会话日志；四臂聚合已入库 `docs/evidence/layer3-20261016/`。
 
-## 6. 未验证（1 项）
+## 6. 未验证（0 项）
 
-- **三问质询的真实熔断端到端**：notice 通道与三问文案已由探针注入证实；cap 触发的 `skip-notice` 未落到（headless 会话未走到 caps、GUI 触发尝试输入未落框）。cap 判定函数 `shouldSteerNow` 有单测。
+- **三问质询的真实熔断端到端——已转已验证（2026-10-16 实机）**：`SHISANUO_STEER_CAP=1` ＋ pinned 恒假断言（`cmd_exit0:cmd /c exit 9`）实机跑任务——`gate-steer`（首次）→ 模型重试 → `gate-steer-capped{used:1,cap:1}` → **`skip-notice` 落账**＋notice 注入（会话日志 `form=notice`＋摘要＋三问文案）→ 模型**三句如实应答**（含「应提醒用户，而不是静默放行」）＋回合以 `gate-missing`/`assertion-unresolved` 诚实收尾；`skipNoticeTasks` 每任务一次守卫在双次命中下只发一次。证据＝exec-log（`session-3a28ebe0-…`）＋会话日志解码（`user/message form=notice` seq=57）＋运行输出。
+- effect 层指标变化——已转已验证（样本轮见 `effect-layer-sample-round-20261016.md`）。
+- 附带修正一项记账缺口：`tally` 白名单缺 `gate-tool.summary` 字段（A4 特性落地时未同步）——已补＋夹具回归；live 日志中旧版本遗留 kind（budget 类等）仍存历史违规，维持「白名单兼容 vs 清历史」未决项不动。

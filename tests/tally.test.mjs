@@ -27,7 +27,7 @@ const good = [
   { ts: '2026-10-13T01:00:03.000Z', kind: 'behavior', turn: 2, hasText: true, restated: false, levelDeclared: true, gate: 'missing', gateQuality: 'none' },
   { ts: '2026-10-13T01:00:03.100Z', kind: 'gate-missing', turn: 2, toolCalls: 3, tail: 'done' },
   { ts: '2026-10-13T01:00:04.000Z', kind: 'behavior', turn: 3, hasText: false, restated: false, levelDeclared: false, gate: 'skip', gateQuality: 'none' },
-  { ts: '2026-10-13T01:00:05.000Z', kind: 'gate-tool', status: 'pass', level: 'L1', v: '改名', cmd: 'echo ok', claimedExit: 0, realExit: 0, match: true, stdoutTail: 'ok', stderrTail: '' },
+  { ts: '2026-10-13T01:00:05.000Z', kind: 'gate-tool', status: 'pass', level: 'L1', v: '改名', cmd: 'echo ok', claimedExit: 0, realExit: 0, match: true, stdoutTail: 'ok', stderrTail: '', summary: '交付摘要：改名完成' },
   { ts: '2026-10-13T01:00:06.000Z', kind: 'gate-tool', status: 'mismatch', level: 'L2-S', v: '修bug', cmd: 'npm t', claimedExit: 0, realExit: 1, match: false },
 ]
 const goodFile = join(TD, 'good.jsonl')

@@ -1597,7 +1597,7 @@ export function apply(ctx: Context) {
   }
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean; costHinted?: boolean; toolNames: string[] }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; effectClosed: boolean; steered: boolean; costHinted?: boolean; toolNames: string[] }>()
   let inventoryLogged = false
   // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
   let lastWireNames: string[] = []
@@ -1804,7 +1804,7 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, declaredLevel: null, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false, toolNames: [] }
+        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, declaredLevel: null, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, effectClosed: false, steered: false, toolNames: [] }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
@@ -1843,6 +1843,9 @@ export function apply(ctx: Context) {
         // 依据：实测 gate「3/13」里有弱证据 pass 被记成 ok-tool，收口成功率被虚增（Goodhart 面）。
         else if (b.gateVerdict === 'pass' && b.gateClosed) verdict = 'ok-tool'
         else if (b.gateVerdict === 'pass') verdict = 'gate-unproven'
+        // 记账分列（ok-effect）：动作落地级（effect-closeout）与目标级（auto-closeout）在回合级判定分开——
+        // 二者的种类遥测本就分列，但回合 verdict 曾合并为 ok-auto ⇒「auto-closeout 占比」会把"动作落地"混入"目标达成"。 #决策 2026-10-16
+        else if (b.effectClosed) verdict = 'ok-effect'
         else if (b.closedAuto) verdict = 'ok-auto'
         else if (b.gateVerdict === 'unverified') verdict = 'unverified'
         else if (b.gateVerdict) verdict = 'gate-fail'
@@ -1860,9 +1863,9 @@ export function apply(ctx: Context) {
         }
         if (verdict !== 'skip') {
           stats.checked++
-          if (verdict === 'ok-tool' || verdict === 'ok-auto') {
+          if (verdict === 'ok-tool' || verdict === 'ok-auto' || verdict === 'ok-effect') {
             stats.gateOk++
-            stats.lastGate = verdict === 'ok-tool' ? '有(工具)' : '有(自动复核)'
+            stats.lastGate = verdict === 'ok-tool' ? '有(工具)' : verdict === 'ok-effect' ? '有(动作级复核)' : '有(自动复核)'
             void log({ kind: 'gate-ok', turn: ev.turn, via: verdict, tail: b.lastText.slice(-200) })
           } else {
             stats.gateMissing++
@@ -1966,6 +1969,7 @@ export function apply(ctx: Context) {
           const effFailed = effResults.filter((r) => !r.ok)
           if (effFailed.length === 0) {
             b.closedAuto = true
+            b.effectClosed = true
             void log({ kind: 'effect-closeout', turn: payload.turn, count: effResults.length, table: formatAssertionResults(effResults) })
             console.log(`[shisan-xinuo] effect-closeout (动作落地级) for turn ${payload.turn} (${effResults.length} effects)`)
             return
