@@ -695,9 +695,23 @@ export function hostLevelFromCmd(cmd: string | null, judge?: (c: string) => stri
 // C2/C3 修正：`extractCommand` 只取 shell 命令，**写类工具（write/edit/patch…）拿不到 cmd**—— #决策 2026-10-13 23:55
 // 若只看 cmd，写文件调用会被误判为只读 ⇒ C2 会**少强制**（安全方向的错）。故按**工具名＋命令**双通道推等级。
 export const MUTATING_TOOLS = /\b(write|edit|patch|apply_patch|create|delete|remove|move|rename|mkdir|touch)\b/i
+// 批3 方向 A：工具等级表（保守基线）——只有**明确只读**的工具落 L1；未在任一表内的"未知工具"按保守 L2。
+// 依据：富环境/新插件会带来宿主自带表之外的工具名，若按"未命中写类=只读"处理会漏判（该要求收口的回合被跳过）。
+export const KNOWN_READONLY_TOOLS = new Set([
+  'read', 'glob', 'grep', 'read_image', 'web_search', 'web_fetch', 'skill',
+  'list_agents', 'get_goal', 'job_list', 'job_output',
+  'discipline_gate', 'discipline_tools',
+])
+// 已知 shell/命令工具：等级由命令内容推导（写类→L2，只读→L1，L3 命中→L3）
+export const SHELL_TOOLS = new Set(['pwsh', 'shell', 'bash', 'exec', 'run_command', 'command'])
 export function hostLevelFromCall(name: string | null | undefined, cmd: string | null, judge?: (c: string) => string | null): 'L1' | 'L2' | 'L3' {
+  const n = String(name ?? '').toLowerCase()
   if (name && MUTATING_TOOLS.test(String(name))) return 'L2'
-  return hostLevelFromCmd(cmd, judge)
+  if (SHELL_TOOLS.has(n)) return hostLevelFromCmd(cmd, judge)
+  if (KNOWN_READONLY_TOOLS.has(n)) return 'L1'
+  // 未知工具（不在写类/shell/只读表内）：保守 L2——宁可多要求收口，不漏判（批3 方向 A）
+  if (!n) return hostLevelFromCmd(cmd, judge)
+  return 'L2'
 }
 
 // 等级序：L1 < L2-S ≈ L2-F < L3（用于比对"声明是否低于宿主视角"）
