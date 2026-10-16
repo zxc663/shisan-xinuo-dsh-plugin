@@ -1974,6 +1974,10 @@ export function apply(ctx: Context) {
     console.log('[shisan-xinuo] live status banner installed (constant-form)')
     statusDisposes.push(statusDispose)
     recordSectionFingerprint('boot')
+    // 启动自检（批3 方向 A）用的注册态标记
+    let gateToolRegistered = false
+    let taskToolRegistered = false
+    let catalogRegistered = false
 
     // ── T1 discipline_gate 工具注册（仅 C 臂；A 惰性/B 纯文本=不注册，保持分组定义纯净）──
     let gateToolDispose: (() => void) | undefined
@@ -2014,6 +2018,7 @@ export function apply(ctx: Context) {
         const d = toolsAny.register(def)
         if (typeof d === 'function') gateToolDispose = d as () => void
         console.log('[shisan-xinuo] discipline_gate tool registered (truth-verification closeout)')
+        gateToolRegistered = true
         // ── P1a-2 探针（默认关，仅探测会话）：concludeTurn 正确调用姿势直测——
         //    方法调用保 this（宿主实现 WeakSet.add(this)），直验宿主「工具级强制收口」语义。
         //    触发：SHISANUO_PROBE_TOOLS=conclude；产物=[probe-conclude] 日志行＋会话结果字段。
@@ -2067,6 +2072,7 @@ export function apply(ctx: Context) {
           const d3 = toolsAny.register(catalog as unknown)
           if (typeof d3 === 'function') statusDisposes.push(() => d3())
           console.log('[shisan-xinuo] discipline_tools tool registered (read-only tool catalog)')
+          catalogRegistered = true
         } catch (e) {
           console.error('[shisan-xinuo] tools catalog registration FAILED:', String(e).slice(0, 120))
         }
@@ -2077,6 +2083,7 @@ export function apply(ctx: Context) {
           const d2 = toolsAny.register(taskDef)
           if (typeof d2 === 'function') statusDisposes.push(() => d2())
           console.log('[shisan-xinuo] discipline_task tool registered (acceptance-assertion registry)')
+          taskToolRegistered = true
         } else {
           console.log('[shisan-xinuo] discipline_task skipped (SHISANUO_NO_ASSERT=1 research mode)')
         }
@@ -2088,6 +2095,28 @@ export function apply(ctx: Context) {
       console.warn('[shisan-xinuo] ctx.tools.register unavailable — gate tool skipped, text GATE fallback only')
     }
     statusDisposes.push(() => gateToolDispose?.())
+    // ── 启动自检（批3 方向 A）：一次落账——任一处未就绪都**显式可见**（不静默降级）；与"段指纹遥测"配对。 ──
+    {
+      const check = {
+        sections: statusDisposes.length,
+        disciplineValid: disciplineLoad.valid,
+        budgetValid: budgetLoad.valid,
+        gateTool: gateToolRegistered,
+        taskTool: taskToolRegistered,
+        catalog: catalogRegistered,
+        concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS !== '0',
+        fingerprint: sectionFingerprintLast.slice(0, 16),
+      }
+      const missing: string[] = []
+      if (!check.disciplineValid) missing.push('discipline')
+      if (!check.budgetValid) missing.push('budget')
+      if (!check.gateTool) missing.push('gate-tool')
+      if (!check.taskTool) missing.push('task-tool')
+      void log({ kind: 'self-check', ...check, missing: missing.join(',') })
+      console.log(
+        `[shisan-xinuo] self-check: sections=${check.sections} gate=${check.gateTool} task=${check.taskTool} catalog=${check.catalog} conclude=${check.concludeOnPass} fp=${check.fingerprint}${missing.length ? ' MISSING=' + missing.join(',') : ''}`,
+      )
+    }
   }
 
   return () => {

@@ -77,6 +77,8 @@ const FIELD_WHITELIST = {
   // 批3 方向 A：跳过治理（熔断跳过落 notice + 三问质询，不静默）
   'skip-notice': ['turn', 'mode', 'used', 'cap'],
   'probe-notice': ['status'],
+  // 批3 方向 A：启动自检（段/装载/收口链/段指纹）
+  'self-check': ['sections', 'disciplineValid', 'budgetValid', 'gateTool', 'taskTool', 'catalog', 'concludeOnPass', 'fingerprint', 'missing'],
   // B 组：任务级作用域
   'task-open': ['id', 'level', 'trigger'],
   'budget-upgrade-ignored': ['level', 'trigger', 'appliedRank'],
