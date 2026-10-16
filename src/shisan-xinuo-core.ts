@@ -259,62 +259,10 @@ export function loadTextWithFallback(path: string, fallback: string): { text: st
   }
 }
 
-// ── v0.4 T2 预算器：判级信号→工具面裁剪（机制=ctx.tools.restrict 掩码，asar 官方文档实证语义）──
-
-export interface BudgetMask { allow?: string[]; deny?: string[] }
-export interface BudgetConfig { version: 1; levels: Record<string, BudgetMask | '*'> }
-
-// 纪律必需工具：任何 allow 白名单强制并入——预算裁剪永不裁掉收口验证与基本读写（引擎固定，不开放 Config）。
-// C9：`discipline_tools`（只读工具目录）必须恒在可见面内——否则"查询被裁掉了什么"的工具自己会被裁掉 #决策 2026-10-13 23:55
-export const BUDGET_ALWAYS_ALLOW = ['discipline_gate', 'discipline_tools', 'read', 'pwsh', 'write', 'edit']
-
-// fail-open：任何无效（文件缺失/坏 JSON/结构错/无有效级）→ null=不裁剪。
-export function loadBudgetFile(path: string): { budget: BudgetConfig | null; source: string; valid: boolean; reason?: string } {
-  if (!existsSync(path)) return { budget: null, source: path, valid: false, reason: '文件不存在' }
-  let raw: unknown
-  try {
-    raw = JSON.parse(readFileSync(path, 'utf8'))
-  } catch (e) {
-    return { budget: null, source: path, valid: false, reason: `JSON 解析失败：${String(e).slice(0, 80)}` }
-  }
-  const r = raw as { version?: unknown; levels?: unknown } | null
-  if (!r || typeof r !== 'object' || r.version !== 1 || !r.levels || typeof r.levels !== 'object') {
-    return { budget: null, source: path, valid: false, reason: '结构无效（需 version=1 + levels 对象）' }
-  }
-  const levels: Record<string, BudgetMask | '*'> = {}
-  let validLevels = 0
-  for (const [k, v] of Object.entries(r.levels as Record<string, unknown>)) {
-    if (v === '*') { levels[k] = '*'; validLevels++; continue }
-    if (!v || typeof v !== 'object' || Array.isArray(v)) continue
-    const m = v as { allow?: unknown; deny?: unknown }
-    const allowRaw = Array.isArray(m.allow) ? m.allow.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : undefined
-    const denyRaw = Array.isArray(m.deny) ? m.deny.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : undefined
-    // 空数组（含过滤后为空）=无效条目：宁可不裁（fail-open），不因配置笔误把工具面裁没
-    const allow = allowRaw && allowRaw.length > 0 ? allowRaw : undefined
-    const deny = denyRaw && denyRaw.length > 0 ? denyRaw : undefined
-    if (!allow && !deny) continue
-    levels[k] = { ...(allow ? { allow } : {}), ...(deny ? { deny } : {}) }
-    validLevels++
-  }
-  if (validLevels === 0) return { budget: null, source: path, valid: false, reason: '无任何有效级定义' }
-  return { budget: { version: 1, levels }, source: path, valid: true }
-}
-
-// 白名单补全：always-allow 并入（去重）。
-export function completeAllowList(allow: string[] | undefined): string[] | undefined {
-  if (!allow) return undefined
-  return [...new Set([...allow, ...BUDGET_ALWAYS_ALLOW])]
-}
-
-// 掩码漏网核对（Step 0 实测的产物）：把**线缆真值**与本档**允许集**作差——
-// `ctx.tools.restrict` 并非在所有宿主形态下都收得住（实测：桌面档 L1 allow=9 → wire=10，
-// 多出的恒定是 `subagent`；同一份代码在 headless 档 allow=9 → wire=9，无多出）。
-// **不静默**：漏网即记录并报给模型与用户（报假面比不报更坏）。
-export function maskLeak(wire: string[], allow: string[] | undefined): string[] {
-  if (!allow || allow.length === 0) return []
-  const set = new Set(allow)
-  return [...new Set(wire.filter((n) => n && !set.has(n)))].sort()
-}
+// ── 运行时工具裁剪（budget/mask 层，原 v0.4 T2）**已退役**（批4 方向 B，2026-10-16）──
+// 披露减法让位上游 tool-search（Letter2025/dsh-tool-search 0.1.7，实测 wire 7 件 / 3,374 chars，−84.4%）；
+// 本插件保留治理面（gate／assert／断言桥／guard 接线／遥测对账）与目录工具如实上报。
+// 判级仅观测（批3），不再有自报或配置驱动的工具面裁剪。依据=`docs/reuse-decision-toolface-20261016.md` §2/§4。
 
 // 判级信号提取（审计 F-05 收窄）：**仅认显式状态行"L=…"键值形态**——正文随口提及不再触发预算裁剪。
 export function extractDeclaredLevel(text: string): 'L1' | 'L2-S' | 'L2-F' | 'L3' | null {
@@ -1072,19 +1020,17 @@ export interface TaskToolDeps {
   acceptance: AcceptanceBridge
 }
 
-// C9：只读工具目录——回答"我被裁掉了什么、怎么申请恢复"。**本身不含恢复能力**（恢复权在会话外）。 #决策 2026-10-13 23:55
+// C9：只读工具目录——如实报告工具面（可见面＋线缆真值）。**本身不含恢复能力**（披露由上游 tool-search 承担）。 #决策 2026-10-13 23:55
 export function buildToolsCatalogDefinition(deps: {
   level: () => string
   visible: () => string[]
-  allow: () => string[]
   wire: () => string[]
-  leak?: () => string[]
   log: (entry: Record<string, unknown>) => void
 }) {
   return {
     name: 'discipline_tools',
     description:
-      '工具面目录（只读）：列出当前可见工具、本档位被裁剪掉的工具名与恢复路径。本工具**不接受**任何"恢复／放开"请求——恢复只由人在会话外操作。',
+      '工具面目录（只读）：列出当前可见工具与线缆真值。披露（按需暴露）由上游 tool-search 承担；本插件的运行时工具裁剪（budget/mask）已退役，工具面不再由本插件裁剪。本工具**不接受**任何"恢复／放开"请求。',
     parameters: { type: 'object', properties: {}, required: [] },
     output: {
       schema: { type: 'object', properties: { status: { type: 'string' }, message: { type: 'string' } }, required: ['status', 'message'] },
@@ -1095,24 +1041,15 @@ export function buildToolsCatalogDefinition(deps: {
     async execute() {
       const level = deps.level()
       const visible = deps.visible()
-      const allow = deps.allow()
-      // P4：`deny` 恒 0 是"报假面"（L1 属 allow 型掩码，本就没有 deny 槽）——已删除该字段，改报**线缆真值**。
       const wire = deps.wire()
-      const leak = deps.leak?.() ?? []
-      deps.log({ kind: 'tools-catalog', level, visible: visible.length, denied: 0 })
+      deps.log({ kind: 'tools-catalog', level, visible: visible.length })
       return {
         status: 'ok',
         message: [
-          `当前预算档位：${level || '未裁剪'}`,
+          `当前判级/预算：${level || '未声明'}`,
           `可见工具（${visible.length}）：${visible.join(', ') || '（未采集）'}`,
           `线缆真值（宿主这次实际发给模型的 ${wire.length} 件）：${wire.join(', ') || '（尚未产生请求，故未知）'}`,
-          `本档位显式允许：${allow.join(', ') || '（未配置）'}`,
-          !level
-            ? '预算漏网核对：（本会话未裁剪，不适用）'
-            : leak.length > 0
-              ? `预算漏网核对：**⚠ ${leak.length} 件越出本档允许集 —— ${leak.join(', ')}**（宿主限制未收住；按实测如实上报，不静默）`
-              : '预算漏网核对：无（线缆真值全部落在本档允许集内）',
-          '恢复路径：**会话外**——由人修改预算配置或另启会话；本工具无恢复能力，也不接受放宽请求。',
+          '披露模式：上游 tool-search（按需暴露）；运行时裁剪（budget/mask）已退役——工具面不再由本插件裁剪。',
           '说明："可见工具"取自声明面；"线缆真值"取自最近一次 `request/header`（宿主真正发出去的那份）——两者不一致时**以线缆真值为准**。',
         ].join('\n'),
       }
@@ -1284,7 +1221,7 @@ export function apply(ctx: Context) {
   const stats = {
     checked: 0, intercepted: 0, gateOk: 0, gateMissing: 0, lastGate: '未检' as string,
     gateTool: { calls: 0, pass: 0, mismatch: 0, honestFail: 0, refused: 0, error: 0, last: '未调用' as string },
-    budget: '未裁剪' as string, wireTools: 0, wireLeak: 0, fullAccess: false,
+    wireTools: 0, fullAccess: false,
     assertion: '未登记' as string,
   }
 
@@ -1319,17 +1256,10 @@ export function apply(ctx: Context) {
     return null
   }
 
-  // ── v0.4 T2 预算器（A 臂观测=不裁剪保持对照纯净；fail-open：无效配置/宿主拒绝都不裁剪）──
-  // 对接真相（asar 官方文档+实跑）：ctx.tools.restrict 需要 agent 作用域 ctx（根 ctx 全局掩码被宿主拒绝）——
-  // 正确挂点=agent/created 监听拿 agent.ctx；per-agent 注册须包 agent.ctx.effect 并在插件卸载时自行清理。
-  const budgetLoad = loadBudgetFile(process.env.SHISANUO_BUDGET ?? contentDir + 'budget.json')
-  void log({ kind: 'budget', source: budgetLoad.source, valid: budgetLoad.valid, ...(budgetLoad.reason ? { reason: budgetLoad.reason } : {}) })
   // ── B 组：任务级作用域（T1/T2）──
   // 任务键：用户原文消息开任务；discipline_task register 可显式覆盖。任务切换即重置失败阶梯／熔断计数／断言残留。
   let taskSeq = 0
   let currentTaskId = ''
-  let appliedRank = -1 // 已生效档位的序（-1=未裁剪）；**只升不放宽**
-  const readOnlyResearchUpgrade = ['web_search', 'web_fetch', 'job_list', 'job_output', 'skill']
   // 开任务：切换即重置任务级计数（失败阶梯由 gate 侧按 taskId 分桶；断言与熔断计数在此清理）
   const openTask = (level: string | null, trigger: string, sessionKey?: string) => {
     taskSeq++
@@ -1341,64 +1271,9 @@ export function apply(ctx: Context) {
     void log({ kind: 'task-open', id: currentTaskId, level: level ?? '', trigger })
     return currentTaskId
   }
-  let pendingMask: BudgetMask | null = null
-  let pendingLevel = ''
-  const agentCtxLike = (o: unknown): { tools?: { restrict?: (m: BudgetMask) => unknown }; effect?: (fn: () => unknown) => unknown } | undefined =>
-    o && typeof o === 'object' ? (o as { tools?: { restrict?: (m: BudgetMask) => unknown }; effect?: (fn: () => unknown) => unknown }) : undefined
-  const agentsById = new Map<unknown, { ctx?: unknown; id?: unknown }>()
-  const agentRestrictDisposers = new Map<unknown, unknown>()
-  const restrictAgentTools = (actx: unknown, mask: BudgetMask, level: string, trigger: string, key: unknown): boolean => {
-    const c = agentCtxLike(actx)
-    if (!c?.tools || typeof c.tools.restrict !== 'function') return false
-    try {
-      // 语义：restrict 返回解除器；包一层 effect 绑定 agent 生命周期，插件侧另存一份自行清理（官方文档双保险）
-      const d = c.effect ? c.effect(() => c.tools!.restrict!(mask)) : c.tools.restrict(mask)
-      if (d !== undefined) agentRestrictDisposers.set(key, d)
-      stats.budget = level
-      void log({ kind: 'budget-applied', level, trigger, allow: mask.allow?.length ?? 0, deny: mask.deny?.length ?? 0 })
-      console.log(`[shisan-xinuo] tool budget applied: level=${level} trigger=${trigger} allow=${mask.allow?.length ?? '-'} deny=${mask.deny?.length ?? 0}`)
-      return true
-    } catch (e) {
-      console.error('[shisan-xinuo] tool budget restrict failed (fail-open, no restriction):', String(e).slice(0, 160))
-      return false
-    }
-  }
-  const applyBudget = (level: string, trigger: string, currentAgent?: unknown) => {
-    if (observeMode || armMode !== 'C' || !budgetLoad.budget) return
-    const spec = budgetLoad.budget.levels[level]
-    if (!spec) return
-    const newRank = levelRank(level)
-    // **只升不放宽**：低报或同档不重复应用（C3 红线：不得由被验方自行放宽）
-    if (newRank <= appliedRank) {
-      void log({ kind: 'budget-upgrade-ignored', level, trigger, appliedRank })
-      return
-    }
-    // 升档：先解除旧限制（宿主 restrict 返回解除器），再按新档应用——这是替换"一次性单向门"的关键
-    for (const d of agentRestrictDisposers.values()) {
-      try {
-        if (typeof d === 'function') (d as () => void)()
-      } catch {
-        /* 解除失败不阻塞（fail-open 语义与既有实现一致） */
-      }
-    }
-    agentRestrictDisposers.clear()
-    // **升档不给"全量"**：'*' 档按 L2-S 的显式白名单收窄，避免一次升级即无限制放宽
-    const cappedToL2S = spec === '*'
-    const allow = cappedToL2S ? ((budgetLoad.budget.levels['L2-S'] as BudgetMask | undefined)?.allow ?? []) : (spec as BudgetMask).allow
-    const mask: BudgetMask = cappedToL2S ? { allow: completeAllowList([...(allow as string[]), ...readOnlyResearchUpgrade]) } : { ...(spec as BudgetMask), allow: completeAllowList((spec as BudgetMask).allow) }
-    pendingMask = mask
-    pendingLevel = cappedToL2S ? `${level}(封顶 L2-S)` : level
-    appliedRank = newRank
-    if (cappedToL2S) void log({ kind: 'budget-upgrade-capped', level, trigger, allow: mask.allow?.length ?? 0 })
-    // 声明级触发时对现行 agent 立即生效（后续请求即用裁剪面）；新 agent 由 agent/created 统一应用
-    if (currentAgent !== undefined && pendingMask) restrictAgentTools(currentAgent, pendingMask, pendingLevel, trigger, currentAgent)
-  }
-  if (process.env.SHISANUO_BUDGET_LEVEL) applyBudget(process.env.SHISANUO_BUDGET_LEVEL, 'env')
   const agentCreatedDispose = ctx.on('agent/created', (payload: { agent?: { id?: unknown; ctx?: unknown } }) => {
     const agent = payload?.agent
     if (!agent) return
-    agentsById.set(agent.id, agent)
-    if (pendingMask) restrictAgentTools(agent.ctx, pendingMask, pendingLevel, 'agent-created', agent)
     // 探针（默认关闭）：宿主拒绝**全局**同名注册，但错误信息指向"per-agent variant"——验证 agent.ctx 上可否注册同名工具。
     // 这是"改宿主工具"能否成立的关键分支；仅在探测会话使用（SHISANUO_PROBE_TOOLS=1）。
     if (process.env.SHISANUO_PROBE_TOOLS === '1') {
@@ -1425,19 +1300,6 @@ export function apply(ctx: Context) {
       }
     }
   })
-  const agentDisposedDispose = ctx.on('agent/disposed', (payload: { agent?: { id?: unknown } }) => {
-    const id = payload?.agent?.id
-    if (id !== undefined) { agentsById.delete(id); agentRestrictDisposers.delete(id) }
-  })
-  const budgetDisposeWrap = () => {
-    agentCreatedDispose()
-    agentDisposedDispose()
-    for (const d of agentRestrictDisposers.values()) {
-      try { if (typeof d === 'function') d() } catch { /* 清理尽力而为 */ }
-    }
-    agentRestrictDisposers.clear()
-  }
-
   const toolDispose = ctx.on('tools/pre-execute', async (exec: { name?: string; arguments?: unknown }, next: () => Promise<unknown>) => {
     const cmd = extractCommand(exec)
     const hit = activeJudge(String(cmd))
@@ -1519,10 +1381,6 @@ export function apply(ctx: Context) {
   let inventoryLogged = false
   // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
   let lastWireNames: string[] = []
-  let maskProbePrinted = false
-  // 掩码漏网核对：最近一次实测的越出允许集的工具名（供目录工具与状态横幅如实上报）
-  let lastLeakNames: string[] = []
-  let lastLeakKey = ''
   // 批3 方向 A：最近一次自报等级（仅观测，供目录上限展示；不驱动裁剪）
   let lastDeclaredLevel: string | null = null
 
@@ -1684,42 +1542,13 @@ export function apply(ctx: Context) {
           stats.wireTools = wireTools.length
           lastWireNames = wireTools.map((t) => String((t as { name?: unknown })?.name ?? '')).filter(Boolean)
           void log({ kind: 'tools-wire', count: wireTools.length, chars: JSON.stringify(wireTools).length })
-          // 掩码漏网核对（Step 0 产物的常态化）：本档已生效时，核对线缆真值是否越出允许集。
-          // 实测依据：桌面档 L1（allow=9）线缆面 10 件，越出的恒定是 `subagent`；headless 档同档 9 件、无越出。
-          // 不静默——漏网即落账 + 上报（供模型与用户看见），避免"裁剪似乎生效"的假面。
-          const leakedNow = maskLeak(lastWireNames, pendingMask?.allow)
-          lastLeakNames = leakedNow
-          const leakKey = `${pendingLevel}|${leakedNow.join(',')}`
-          if (leakedNow.length > 0 && leakKey !== lastLeakKey) {
-            lastLeakKey = leakKey
-            stats.wireLeak = leakedNow.length
-            void log({ kind: 'budget-leak', level: pendingLevel, count: leakedNow.length, names: leakedNow.join(',').slice(0, 240) })
-            console.warn(`[shisan-xinuo] 预算漏网：线缆面上仍有 ${leakedNow.length} 件不在本档允许集内 —— ${leakedNow.join(',')}`)
-          }
-          // Step 0 探针（默认关）：声明面 vs 线缆真值 的差集 → 判定"restrict 掩码对哪些工具无效"。
-          // 用法：SHISANUO_PROBE_MASK=1 [SHISANUO_BUDGET_LEVEL=L1] dsh permtest "…"，看 stdout 的 [probe-mask] 行。
-          if (process.env.SHISANUO_PROBE_MASK === '1' && !maskProbePrinted) {
-            maskProbePrinted = true
-            try {
-              const declared = ((ctx.tools as { schemas?: () => Array<{ name?: string }> }).schemas?.() ?? [])
-                .map((s) => String(s.name ?? ''))
-                .filter(Boolean)
-              const onlyDeclared = declared.filter((n) => !lastWireNames.includes(n))
-              const onlyWire = lastWireNames.filter((n) => !declared.includes(n))
-              console.log(`[probe-mask] declared=${declared.length} wire=${lastWireNames.length}`)
-              console.log(`[probe-mask] 仅声明面（被掩码裁掉）=${onlyDeclared.join(',') || '—'}`)
-              console.log(`[probe-mask] 仅线缆面（掩码外仍可见）=${onlyWire.join(',') || '—'}`)
-            } catch (e) {
-              console.log('[probe-mask] error ' + String(e).slice(0, 120))
-            }
-          }
         }
         return
       }
       const ev = parseSessionEvent(event)
       const bucketKey = sidKeyOf(session, '')
       if (!ev || !bucketKey) return
-      // 工具面清单：每进程只落一次（首个会话事件时内置工具已注册；若预算已应用则反映裁剪后的可见面）
+      // 工具面清单：每进程只落一次（首个会话事件时内置工具已注册；披露减法由上游 tool-search 承担）
       if (!inventoryLogged) {
         inventoryLogged = true
         try {
@@ -2052,8 +1881,7 @@ export function apply(ctx: Context) {
           const catalog = buildToolsCatalogDefinition({
             level: () => {
               const obs = lastDeclaredLevel ? `自报=${lastDeclaredLevel}（仅观测）` : '自报=无（仅观测）'
-              const budget = pendingLevel ? `预算=${pendingLevel}（操作员 env）` : '预算=未裁剪（上限=全量）'
-              return `${obs}；${budget}`
+              return `${obs}；预算=不裁剪（披露=上游 tool-search）`
             },
             visible: () => {
               try {
@@ -2064,9 +1892,7 @@ export function apply(ctx: Context) {
                 return []
               }
             },
-            allow: () => (pendingMask?.allow ?? []).map(String),
             wire: () => lastWireNames,
-            leak: () => lastLeakNames,
             log: (entry) => void log(entry),
           })
           const d3 = toolsAny.register(catalog as unknown)
@@ -2100,7 +1926,6 @@ export function apply(ctx: Context) {
       const check = {
         sections: statusDisposes.length,
         disciplineValid: disciplineLoad.valid,
-        budgetValid: budgetLoad.valid,
         gateTool: gateToolRegistered,
         taskTool: taskToolRegistered,
         catalog: catalogRegistered,
@@ -2109,7 +1934,6 @@ export function apply(ctx: Context) {
       }
       const missing: string[] = []
       if (!check.disciplineValid) missing.push('discipline')
-      if (!check.budgetValid) missing.push('budget')
       if (!check.gateTool) missing.push('gate-tool')
       if (!check.taskTool) missing.push('task-tool')
       void log({ kind: 'self-check', ...check, missing: missing.join(',') })
@@ -2121,7 +1945,7 @@ export function apply(ctx: Context) {
 
   return () => {
     for (const d of statusDisposes) d()
-    budgetDisposeWrap()
+    agentCreatedDispose()
     toolDispose()
     guardDispose?.()
     sessionEventDispose()

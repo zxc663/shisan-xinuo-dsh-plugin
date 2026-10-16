@@ -14,7 +14,6 @@ import {
   judgeZeroToolClaim,
   buildGateToolDefinition,
   buildToolsCatalogDefinition,
-  maskLeak,
 } from '../src/shisan-xinuo-core.ts'
 
 const results = []
@@ -190,31 +189,27 @@ claim('N3', '判据自测：catalogOk 对"缺线缆真值行"的坏样本为 fal
   })
 }
 
-// K16：掩码漏网核对（Step 0 实测产物）——线缆面上越出允许集的工具必须被报出，而不是静默
+// K16：工具面披露移交上游——运行时裁剪（budget/mask）退役；目录如实报线缆真值且声明不再裁剪
 {
-  const desktop = maskLeak(['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools', 'subagent'], ['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools'])
-  const headless = maskLeak(['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools'], ['read', 'write', 'edit', 'pwsh', 'glob', 'grep', 'todo_write', 'discipline_gate', 'discipline_tools'])
   const catalog = buildToolsCatalogDefinition({
-    level: () => 'L1',
+    level: () => '自报=L1（仅观测）；预算=不裁剪（披露=上游 tool-search）',
     visible: () => ['read'],
-    allow: () => ['read'],
-    wire: () => ['read', 'subagent'],
-    leak: () => ['subagent'],
+    wire: () => ['read', 'write'],
     log: () => {},
   })
   const msg = String((await catalog.execute({}, {})).message ?? '')
-  const ok = desktop.join(',') === 'subagent' && headless.length === 0 && msg.includes('预算漏网核对') && msg.includes('subagent')
+  const ok = msg.includes('线缆真值') && msg.includes('不再由本插件裁剪') && !msg.includes('预算漏网核对')
   results.push({
     id: 'K16',
-    text: '掩码漏网核对：桌面实测样本（allow=9/wire=10）报出 `subagent`；headless 样本无漏网；目录工具如实上报该行',
+    text: '工具面：运行时裁剪退役、披露移交上游 tool-search；目录如实报线缆真值且不再自称裁剪',
     ok,
-    detail: ok ? '' : `desktop=${desktop.join(',')} headless=${headless.length} msgHasLine=${msg.includes('预算漏网核对')}`,
+    detail: ok ? '' : `hasWire=${msg.includes('线缆真值')} hasMode=${msg.includes('不再由本插件裁剪')} hasLeak=${msg.includes('预算漏网核对')}`,
   })
   results.push({
     id: 'N4',
-    text: '判据自测：maskLeak 对"线缆面全在允许集内"的样本为 []（不误报）',
-    ok: maskLeak(['read'], ['read', 'write']).length === 0,
-    detail: 'maskLeak 对干净样本误报',
+    text: '判据自测：目录工具输出不含已退役的"预算漏网核对"行（防退役不彻底）',
+    ok: !msg.includes('预算漏网核对'),
+    detail: '仍含退役字段',
   })
 }
 

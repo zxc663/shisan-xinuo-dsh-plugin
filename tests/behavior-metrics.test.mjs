@@ -1,6 +1,6 @@
 // A/B 行为指标机检单测：正则与预注册档 §5 逐字对齐（实现偏离=判分无效）
 // 跑法：npx tsx tests/behavior-metrics.test.mjs
-import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, BUDGET_ALWAYS_ALLOW, evidenceLine, costHintLine } from '../src/shisan-xinuo-core.ts'
+import { judgeRestated, judgeLevelDeclared, judgeGateQuality, judgeZeroToolClaim, gateRequirementBlock, classifyEvidence, shouldSteerNow, failLadderPrefix, STEER_ANTI_REPEAT, STEER_PREFIX, isVAnchored, hostLevelFromCmd, levelRank, extractCommand, hostLevelFromCall, buildToolsCatalogDefinition, evidenceLine, costHintLine } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0, fail = 0
 function check(name, actual, expected) {
@@ -116,16 +116,14 @@ check('C2e 写类工具名亦被识别', hostLevelFromCall('apply_patch', ''), '
   const def = buildToolsCatalogDefinition({
     level: () => 'L1',
     visible: () => ['read', 'write', 'discipline_gate'],
-    allow: () => ['read', 'write', 'discipline_gate'],
     wire: () => ['read', 'write', 'discipline_gate', 'discipline_tools'],
     log: (e) => logs.push(e),
   })
   const r = await def.execute({}, {})
-  check('C9a 列线缆真值（P4 改判：不再报恒零 deny）', r.message.includes('线缆真值') && r.message.includes('discipline_tools'), true)
-  check('C9b 声明恢复在会话外', r.message.includes('会话外'), true)
-  check('C9c 声明本工具无恢复能力', r.message.includes('无恢复能力'), true)
+  check('C9a 列线缆真值', r.message.includes('线缆真值') && r.message.includes('discipline_tools'), true)
+  check('C9b 声明披露移交上游', r.message.includes('披露模式'), true)
+  check('C9c 声明本插件不再裁剪', r.message.includes('不再由本插件裁剪'), true)
   check('C9d 落 tools-catalog', logs.some((e) => e.kind === 'tools-catalog'), true)
-  check('C9e 目录工具恒可见（always-allow）', BUDGET_ALWAYS_ALLOW.includes('discipline_tools'), true)
 }
 
 // ── C10 收口证据行 ──

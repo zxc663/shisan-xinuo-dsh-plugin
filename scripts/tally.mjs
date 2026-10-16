@@ -27,8 +27,6 @@ const FIELD_WHITELIST = {
   'gate-tool': ['status', 'domain', 'level', 'v', 'cmd', 'claimedExit', 'realExit', 'match', 'files', 'exempt', 'stdoutTail', 'stderrTail', 'error', 'assertions', 'evidence'],
   rules: ['source', 'valid', 'domains', 'reason'],
   discipline: ['source', 'valid', 'reason'],
-  budget: ['source', 'valid', 'reason'],
-  'budget-applied': ['level', 'trigger', 'mask', 'allow', 'deny'],
   'tools-inventory': ['count', 'names'],
   'tools-wire': ['count', 'chars'],
   'sandbox-mode': ['mode', 'enforcement'],
@@ -66,7 +64,7 @@ const FIELD_WHITELIST = {
   // C3 第二档 低报度量
   'level-divergence': ['turn', 'declared', 'host', 'toolCalls'],
   // C9 只读工具目录
-  'tools-catalog': ['level', 'visible', 'denied'],
+  'tools-catalog': ['level', 'visible'],
   // 批3 方向 A：段指纹（启动基线 + 每请求漂移核对）
   'section-fingerprint': ['sha256', 'bytes', 'changed'],
   'section-drift': ['expected', 'actual'],
@@ -78,13 +76,9 @@ const FIELD_WHITELIST = {
   'skip-notice': ['turn', 'mode', 'used', 'cap'],
   'probe-notice': ['status'],
   // 批3 方向 A：启动自检（段/装载/收口链/段指纹）
-  'self-check': ['sections', 'disciplineValid', 'budgetValid', 'gateTool', 'taskTool', 'catalog', 'concludeOnPass', 'fingerprint', 'missing'],
+  'self-check': ['sections', 'disciplineValid', 'gateTool', 'taskTool', 'catalog', 'concludeOnPass', 'fingerprint', 'missing'],
   // B 组：任务级作用域
   'task-open': ['id', 'level', 'trigger'],
-  'budget-upgrade-ignored': ['level', 'trigger', 'appliedRank'],
-  'budget-upgrade-capped': ['level', 'trigger', 'allow'],
-  // Step 0 实测产物：掩码漏网核对（线缆真值越出允许集）
-  'budget-leak': ['level', 'count', 'names'],
 }
 // names：`tools-inventory` 落的是全量工具名（代码侧已 slice 300）——帽取 320 容纳该既有字段；`budget-leak` 侧自带 240 截断
 const CAPS = { cmd: 200, v: 200, files: 300, exempt: 300, stdoutTail: 300, stderrTail: 300, tail: 300, names: 320 }
