@@ -1,5 +1,15 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批4（2026-10-16）：方向 B——运行时工具裁剪（budget/mask）退役，披露移交上游 tool-search
+
+- **退役**：删除预算器全部触点（`BudgetMask`／`loadBudgetFile`／`completeAllowList`／`maskLeak`／`BUDGET_ALWAYS_ALLOW`／`restrictAgentTools`／`applyBudget`／`pendingMask`／`pendingLevel`／`budget-leak`／`SHISANUO_BUDGET*` 等），并删 `content/budget.json`（净 −241 行）。依据=`docs/reuse-decision-toolface-20261016.md` §2/§4。
+- **披露移交上游**：`discipline_tools` 改为如实报"可见面＋线缆真值"，并声明披露由上游 tool-search 承担、本插件不再裁剪。
+- **线缆面实测（rich 档）**：`tools-wire count=7 chars=3374`（＝验收上限，与复用档实测一致）；治理闭环实证——模型 `tool_search{query:discipline_gate}` → 面 7→9 → `gate-tool pass realExit=0 evidence=strong` → `gate-ok via=ok-tool`；`discipline_*` 在注册表常驻（inventory=35）。
+- **正则层收尾退役**：`regression-permission-rules` 170 例（我方 vs 上游）**0 不一致**（阻断/域/注解三面）。
+- **测试套件改写**：`tests/budget.test.mjs` → `tests/toolface-retired.test.mjs`（断言退役符号不再导出＋目录新语义）；`behavior-metrics`／`claims-check` 同步（K16／N4 改为退役后语义）。
+- **tally 同步**：删除 budget 类 kind；`tools-catalog` 去 `denied`；`self-check` 去 `budgetValid`。
+- GUI 走查：桌面 DSH 重启载入退役 core → `self-check`（无 budgetValid、无 budget boot 行）→ 新会话调 `discipline_tools` → 目录 `自报=无（仅观测）；预算=不裁剪（披露=上游 tool-search） visible=30`。
+
 ## 收口批3（2026-10-16）：方向 A＋跳过治理（判级仅观测·段指纹·notice·未知工具 L2·启动自检）
 
 - **段指纹遥测**：`sectionFingerprint()`（对注入系统段取 SHA-256）；启动落基线 `section-fingerprint`，每次 `request/header` 重算核对，漂移落 `section-drift`（段变更率=0 底座）。
