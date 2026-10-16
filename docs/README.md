@@ -46,6 +46,7 @@
 - `design-specs/install-and-peer-conclusion-20261016.md` — 安装与 peer 结论（三形态实测、不声明 peer 的依据与代价、上游锁定）。
 - `design-specs/v5-execution-report-20261016.md` — 收口执行报告 v5（逐批状态、三指标真值、交付物索引、待裁四项、复跑命令）。
 - `design-specs/effect-layer-sample-round-20261016.md` — effect 层样本轮 A/B 对照（steer 1.0/轮→0、动作级 0→10/10、目标级分列 0/0；绝对路径边界与弱模型抖动事故如实记录）。
+- `design-specs/e1-v5-supplement-prereg-20261016.md` — E1-v5 有效性补样本轮**预注册**（n≥5 四臂当前版重跑；判据/排除规则/门槛冻结；执行待窗口）。
 
 ## 其余（评估 · 证据 · 交接）
 
