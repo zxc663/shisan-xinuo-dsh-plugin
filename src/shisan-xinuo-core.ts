@@ -703,16 +703,26 @@ export interface ObservedEffect {
   target: string
 }
 
-/** 抽字符串里的首个**绝对盘符路径**（去尾标点；带通配符的丢弃——它不是可验证的确定目标）。 */
+// 平台口径（2026-10-16）：Windows=仅认盘符绝对路径（保持原口径，防 `/f` 类参数串误判为目标）；
+// POSIX（Linux/macOS 宿主）=盘符与 `/…` 均认——该分支此前缺失 ⇒ Linux 上 effect 层静默失效、CI 套件红。 #决策 2026-10-16
+const IS_WIN_PLATFORM = process.platform === 'win32'
+// POSIX 绝对路径扫描：`/` 前不得是词字符/点/波浪号/斜杠（排除 `./a`、`~/a`、串内相对斜杠）
+const POSIX_ABS_TOKEN_RE = /(?<![\w.~\\/])\/[^\s"'`,;，。；（）()【】[\]<>|]+/g
+const POSIX_QUOTED_ABS_RE = /["'](\/[^\s"'][^"']*?)["']/g
+
+/** 抽字符串里的首个**绝对路径**（Windows 盘符；POSIX 平台另认 `/…`。去尾标点；带通配符的丢弃——它不是可验证的确定目标）。 */
 export function firstAbsolutePath(s: string): string | null {
   if (!s) return null
   const cands = [
     ...[...s.matchAll(QUOTED_PATH_RE)].map((m) => m[1]),
     ...[...s.matchAll(PATH_TOKEN_RE)].map((m) => m[0]),
+    ...(IS_WIN_PLATFORM ? [] : [...s.matchAll(POSIX_QUOTED_ABS_RE)].map((m) => m[1])),
+    ...(IS_WIN_PLATFORM ? [] : [...s.matchAll(POSIX_ABS_TOKEN_RE)].map((m) => m[0])),
   ]
   for (const c of cands) {
     const t = c.replace(/[.,;，。；：:]+$/, '').replace(/[\\/]+$/, '')
-    if (!/^[A-Za-z]:[\\/]/.test(t)) continue
+    const isAbs = /^[A-Za-z]:[\\/]/.test(t) || (!IS_WIN_PLATFORM && t.startsWith('/'))
+    if (!isAbs) continue
     if (/[*?]/.test(t)) continue
     if (t.length < 4) continue
     return t

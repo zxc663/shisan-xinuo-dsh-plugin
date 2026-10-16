@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## CI 转红修复（2026-10-16）：effect 套件平台口径 ＋ md-links 本机绝对路径链接
+
+- **背景（如实）**：CI 自 effect 层落地批次起持续红（Linux 两套件失败），后续推送只核了 `ls-remote` 哈希、未核 CI 结论，造成"入档全绿、远端实红"的记录缺口——本轮推送后核对发现。
+- **失败一（effect-assert，Linux）**：`firstAbsolutePath` 只认 Windows 盘符绝对路径 ⇒ POSIX（`/tmp/…` 等）不被识别、**effect 层在 Linux 宿主静默失效**、套件红。修复＝平台口径分支：Windows 保持盘符口径不变（防 `/f` 类参数串误判）；POSIX 另认 `/…`（含引号含空格形态；`./`、`~/`、通配仍拒绝）。预验＝`tmp/posix-sim.mjs`（stub `process.platform` 模拟 Linux，10/10 过）＋Windows 全量 29/29 不回退。
+- **失败二（md-links，Linux）**：`docs/design-specs/experience-optimization-20261014.md` 以**本机绝对路径**做链接（26 处指向 `src`、1 处指向 `logs/exec-log.jsonl`）——作者机"刚好可达"，其它平台/机器必死（CI dangling=27）。修复＝26 处改仓库相对链接 `../../src/…`；本机日志链接改纯文本（`logs/` 不入库）。**机检加固**：`check-md-links.mjs` 新增平台无关规则——盘符绝对路径一律判"不可移植"（此前 Windows 本地机检对此类链接"睁眼瞎"）。
+- **回执**：修复推送后 CI 转绿（`gh run list` 结论为准）；此后推送验收＝`ls-remote` 哈希＋CI 结论**双核**。
+
 ## 熔断验证＋样本轮（2026-10-16）：skip-notice 端到端实机／effect 层指标实测／`ok-effect` 记账分列／tally 字段缺口修复
 
 - **三问质询熔断端到端——实机通过（未验证清单收敛至 0）**：`SHISANUO_STEER_CAP=1`＋pinned 恒假断言（`cmd_exit0:cmd /c exit 9`）→ 首次失败 `gate-steer` → 模型重试 → `gate-steer-capped{used:1,cap:1}` → **`skip-notice` 落账**＋`noticeMessage` 注入（会话日志 `user/message form=notice`＋摘要＋三问文案，seq=57）→ 模型**三句如实应答**（含「应提醒用户，而不是静默放行」）＋回合 `gate-missing`/`assertion-unresolved` 诚实收尾；双次命中只发一次（每任务守卫）。证据＝exec-log（`session-3a28ebe0-…`）＋会话日志解码＋运行输出。选型教训入 `踩坑经验库.md`（路径类恒假断言会诱发模型 `subst` 造盘；命令类恒假无此诱因）。

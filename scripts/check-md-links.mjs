@@ -38,6 +38,12 @@ for (const f of files) {
     } catch {
       /* 保留原样 */
     }
+    // 可移植性规则（平台无关机检）：仓库内文档不得使用**本机绝对路径**链接（如 Windows 盘符）——
+    // 此类链接在作者机上"刚好可达"，到其它平台/机器必死（CI 曾因此红 27 处）。 #决策 2026-10-16
+    if (/^[A-Za-z]:[\\/]/.test(t)) {
+      dangling.push(`${f.slice(repo.length + 1)} → ${m[1]}（本机绝对路径，不可移植）`)
+      continue
+    }
     const abs = t.startsWith('/') ? join(repo, t) : resolve(dirname(f), t)
     checked++
     try {

@@ -66,6 +66,12 @@
 2. **写入面新增字段必须同批改对账面｜`tally` FIELD_WHITELIST ＋ CAPS**：A4 给 `gate-tool` 加 `summary`（≤500 截断）时未同步白名单 ⇒ 62 处 live 违规。**注意机检覆盖缺口**：`tally-whitelist` 单测只查 kind 级（源码 `log({kind})` ↔ 白名单键），**字段级**漂移只有对 live 日志跑 `--check` 才暴露——新增字段时两处都要动。
 3. **live 日志的历史遗留违规与现行违规要分开处置**：历史 kind（budget 类等）属"退役层留痕"，维持"清历史 vs 白名单兼容"未决项；**现行写入面的缺口（字段缺失）应当场补**。
 
+## 2026-10-16 ｜ 主题：跨平台口径与 CI 验收
+
+1. **路径类判据要平台分口径｜Windows 盘符与 POSIX `/…` 是两套绝对路径**：`firstAbsolutePath` 曾只认盘符 ⇒ Linux 宿主上 effect 层静默失效（CI 套件红两天）。平台分支写法＝`process.platform === 'win32'` 决定接受集；**本地预验**可用 `Object.defineProperty(process, 'platform', { value: 'linux' })`**先于模块导入**做 stub（`tmp/posix-sim.mjs` 10/10 过）。
+2. **文档链接不得用本机绝对路径**：机检规则＝盘符绝对路径一律判"不可移植"（`scripts/check-md-links.mjs`）；`logs/`、`tmp/` 等不入库目标也别做链接，改纯文本留档说明。
+3. **推送验收＝哈希 ＋ CI 结论双核**：`git ls-remote` 只证"推上去了"，`gh run list` 才证"过了"——只核前者会出现"入档全绿、远端实红"。
+
 ## 本次变更索引（权威档，避免重复）
 
 - 完整变更/修复清单与证据：`CHANGELOG.md` 的「批5 续（2026-10-16）」与「熔断验证＋样本轮（2026-10-16）」节。
