@@ -23,4 +23,29 @@
 - `positioning-and-reuse-strategy-20261013.md` · `implementation-batches-20261013.md` · `product-recalibration-20261013.md` — 定位、执行域与产品校准。
 - `reuse-decision-permission-rules.md` — 换芯决策表（含 `permtest` 实机发现）。
 - `gui-verification-protocol-20261013.md` — GUI 验证口径（默认验证通道、三路取证、边界）。
-- `e1-*.md` — E1 三臂／四臂桌面实验报告。
+- `e1-v1-report-20261013.md` · `e1-desktop-report-20261013.md` · `e1-v4-four-arm-report-20261013.md` — E1 三臂／桌面／四臂实验报告。
+- `design-specs/e1-v4-desktop-four-arm-20261013.md` — E1 v4 四臂预注册（桌面档）。
+
+## 研究 · 探针 · 复用（2026-10-15/16）
+
+- `probe-host-api-20261015.md` — 宿主 API 五证实（guard/concludeTurn/defineTool/workflowEngine/goals）。
+- `reuse-research-landing-options-20261015.md` — 复用调研落地选项。
+- `reuse-decision-outcome-loop.md` — outcome-loop 复用决策（源码实查＋真机装载；代际不兼容裁定）。
+- `reuse-decision-toolface-20261016.md` — 工具面复用决策（上游 tool-search 采纳；本插件运行时裁剪退役路线）。
+- `go-free-models-probe-20261016.md` — GO 免费模型探针与实测结案（反代链路与门禁）。
+
+## 收口执行（v5 · 2026-10-16）
+
+- `env-matrix-20261016.md` — 三档环境矩阵（裸/实战/预览线；构建配方与接缝发现）。
+- `preview-line-compat-20261016.md` — 预览线兼容矩阵（alpha.4 隔离档）。
+- `findings-20261016.md` — 宿主线普查发现（A/B/C/D 编号、分层修法、砍除清单、诚实边界）。
+- `design-specs/layer3-quantification-prereg-20261016.md` — 层3/D 量化实验预注册（四臂冻结判据）。
+- `design-specs/layer3-quantification-results-20261016.md` — 层3/D 量化实验结果（H1 支持/H2 代价量化/H3 成立）。
+
+## 其余（评估 · 证据 · 交接）
+
+- `extension-design-20261014.md` · `handoff-experience-optimization-20261014.md` — 扩展面设计与体验优化交接。
+- `validity-report-20261013.md` · `design-specs/dialogue-arc-research-20261013.md` · `design-specs/dsh-m3-ab-preregistration-20261012.md` · `design-specs/e1-prereg-v3-20261013.md` · `v1-acceptance-20261013.md` — 有效性/对话弧/M3/E1 预注册/V1 验收。
+- `external-briefing-20261013.md` · `external-review-absorption-20261013.md` · `findings-from-real-trajectory-20261013.md` · `feedback-candidate-rule-371-20261013.md` — 对外简报、外审吸收、真实轨迹发现、候选规则。
+- `todo-next-20261013.md` · `positioning-and-reuse-strategy-20261013.md` · `implementation-batches-20261013.md` · `product-recalibration-20261013.md` — 待办、定位、执行域、产品校准。
+- `design-specs/dsh-toolification-roadmap-20261013.md` · `design-specs/experience-optimization-20261014.md` · `design-specs/release-and-versioning-plan-20261013.md` — 工具化路线、体验缺口、发行与版本规划。
