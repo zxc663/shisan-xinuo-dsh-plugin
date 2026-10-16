@@ -2,12 +2,13 @@
 
 **DeepSeek Harness（DSH）运行时治理插件**——把工程纪律从提示词层下沉到执行层：模型尝试跳过前置条件、调用不该调的工具、或凭自述宣告完成时，由宿主扩展面上的确定性检查介入，而不是依赖模型回忆规则。源码单文件引擎（`src/shisan-xinuo-core.ts`）+ 数据层规则包（`content/`），一切行为面可用真实运行证据复查。
 
-> **状态：工程验收版（内部）· 未发行。** 有效性对照已完成机制验证轮（四臂×3 任务×3 轮，36 会话，A/B/C/D 含干净 DSH 基线）：运行时控制组的收口合规 5/9 vs 纪律文本组 0/9；行为有效性待 n≥5 补样本轮判定。
+> **状态：工程验收版（内部）· 未发行。** 有效性对照已完成机制验证轮（四臂×3 任务×3 轮，36 会话，A/B/C/D 含干净 DSH 基线）：运行时控制组的收口合规 5/9 vs 纪律文本组 0/9；行为有效性待 n≥5 补样本轮判定。收口执行 v5（判级仅观测／工具裁剪退役／判据新增窄版物理副作用档／多项缺陷修复）已落地，并已合并入 `main`。
 
 ## 状态与发行口径
 
 - **阶段**：工程验收版（内部）。机制面已验收，**有效性待补样本轮**（见下表主张 6）。
-- **发行态**：**无发行版**——0 tag、0 release、无打包产物（`package.json` 无 `dsh.bundle` 清单，当前仅 `file://` 开发态加载）。
+- **发行态**：**无发行版**——0 tag、0 release。**打包形态已具备**：`package.json` 声明 `dsh.bundle`（自 `1d00ffd`），干净克隆 `npm pack` 与装载实测通过（见 [验证库/已知边界与接受风险.md](验证库/已知边界与接受风险.md)）；**发行动作冻结**——tag／Release／SHA256SUMS／外部递交一律搁置，解冻需显式决定。
+- **分支**：全部开发工作已合并进 `main`。
 - **口径**：**只有打包好的公开发行版才算真实验证可用**。本仓现在**没有可用版本**，下表中的一切主张都只是开发态结论；发行暂不进行——先经过实际环境验证。
 
 ## 三库导航
@@ -20,7 +21,7 @@
 
 ## 希望社区帮助验证什么
 
-本仓已有 27 套单测与 20 条可外部重跑的主张，但它们都是**开发态**证据。下面这些问题只能靠真实使用回答，欢迎直接开 Issue 讨论：
+本仓已有 29 套单测与 20 条可外部重跑的主张，但它们都是**开发态**证据。下面这些问题只能靠真实使用回答，欢迎直接开 Issue 讨论：
 
 1. 在**非 Windows** 宿主（macOS／Linux）上，拦截与收口的形态是否与 Windows 一致？
 2. 换成**更小的模型**（8B 级本地模型）后，L3 拦截与收口强制是否仍成立，还是退化为纯摩擦？
@@ -41,7 +42,7 @@
 | # | 主张 | 状态 | 宿主面 vs 插件增量 | 证据 |
 |---|---|---|---|---|
 | 1 | L3 危险操作在工具执行管线内被程序性拦截（命中→审批询问），且被拒命令经**任何工具通道**的 TTL 内重试由宿主**单调守卫**（`ctx.tools.guard`，2026-10-15 探针实证）封闭——后续监听者不可翻回 | **已实现有测试**（正则覆盖 6 域+9 豁免+嵌套 shell 形态；guard 单调层=指纹重放拒绝） | 审批卡 UI 与 pre-execute 管线为宿主原生；插件供红线规则、误拦豁免、形态封堵、单调 deny | 单测 8正10负+23例+58误拦样本；真实宿主 16 次拦截+审批链 3 次全通 |
-| 2 | 收口验证依据真实退出码而非模型自述（discipline_gate 工具：宿主真跑 cmd，声明与实测不符=打回） | **已实现有测试**（四臂实验中 3 次打回无效验证——模型每次修正后重过） | 命令执行/退出码采集走宿主；判定语义（三态+拒跑）为插件自有 | tests/gate-tool 44 例；E1 报告 |
+| 2 | 收口验证依据真实退出码而非模型自述（discipline_gate 工具：宿主真跑 cmd，声明与实测不符=打回）；判据来源分档：会话外锚（pinned）＞用户原文派生＞工具自登记＞**动作落地级（`effect`，2026-10-16 新增，独立记账 `effect-closeout`）** | **已实现有测试**（四臂实验中 3 次打回无效验证——模型每次修正后重过；动作落地级已在真宿主上跑通） | 命令执行/退出码采集走宿主；判定语义（三态+拒跑）与判据分档为插件自有 | tests/gate-tool 44 例；tests/effect-assert 35 例；E1 报告 |
 | 3 | 规则包可替换：改 `content/rules.json` 即改红线，不动引擎代码；无效配置 fail-closed 回退内置默认 | **已实现有测试**（真实宿主自定义域拦截实证） | 插件自有 | tests/config-rules 24 例 |
 | 4 | ~~工具预算器：按任务判级裁剪工具面（restrict 掩码）~~ | **已退役（2026-10-16 收口 v5 批4）**——运行时裁剪让位上游披露插件（`dsh-tool-search`）；本插件零裁剪，`discipline_tools` 只如实报线缆真值 | — | 退役依据 `docs/reuse-decision-toolface-20261016.md`；rich 档实测 `tools-wire` 7 件/3,374 chars |
 | 5 | 行为遥测与对账：exec-log 全落账，tally `--report/--check` 出数+对账（白名单/不变量/快照，抓植入差错） | **已实现有测试** | 插件自有（日志为插件所写，非宿主审计面） | tests/tally 16 例（5 类攻击样本全被抓） |
@@ -55,6 +56,7 @@
 
 - **收口验证是一条新的执行通道**：`discipline_gate`（及 `cmd_exit0` 断言、宿主收口复核）会在插件侧直接执行你声明的验证命令——护栏=危险域清单＋被拒命令指纹（10 分钟），**不是安全沙箱**；清单覆盖面之外（目标替代、重定向覆写、脚本清空等）不拦，与 pwsh 通道同一天花板；仅存在于上游 `.dsh/rules.yaml` 的自定义规则也不覆盖此通道。2026-10-13 加固：`discipline_task` 的 replace 仅作用于工具自登记断言——**用户原文推导断言恒保留，模型不可移除/改写**；并支持**判据锚点（pinned）**：`SHISANUO_ASSERTIONS` 可在会话外钉死断言（模型侧不可见），形成三级判据「pinned > auto（默认关）> tool」——**2026-10-13 起启发式推导默认退位**（SHISANUO_ASSERT_LAYER=1 可重新启用）。
 - **一致性≠有效性**：`claimedExit` 比对只抓「谎报退出码」；`echo ok; exit 0` 类与目标无关的命令会通过（命令与目标的相关性无机器校验；资源断言仅覆盖可枚举路径）。
+- **动作落地级判据 ≠ 目标级判定（2026-10-16 新增档，如实标注）**：当一回合**没有**任何已登记断言（pinned／用户原文派生／工具自登记）时，宿主会从**亲见的工具副作用**派生断言（写类→`exists`、删除类→`not_exists`）并据此收口，记为 `effect-closeout`——它证明「动作确实落地」，**不证明「目标已达成」**；该档与目标级 `auto-closeout` **分列记账，复核指标时不可混计**。命令类不派生 `cmd_exit0`（与"禁跑一条无关命令凑 exit 0"同一口径）；关闭方式 `SHISANUO_EFFECT_ASSERT=0`。
 - **收口强制：成功侧=concludeTurn（默认启用），失败侧=steer 打回**：gate 闭环 pass 时经宿主 `ToolExecution.concludeTurn()` 标记回合终态（2026-10-15 探针+对照实验证实：工具结果后回合立即终止；此前 b2「不可用」结论系我方解构裸调丢 `this` 的调用姿势 bug）；`SHISANUO_CONCLUDE_ON_PASS=0` 可退位。未过收口的 steer 打回仍经 `steer` 注入（信封 `source=user` 为宿主接口约束），文本以固定前缀 `[十三希诺收口强制]` 显式标注来源；插件按该前缀排除自身注入，避免自我循环。**在界面上它呈现为一条"用户发言"**——请勿把它当作你自己说过的话：宿主投递 API（`send`／`followup`／`steer`／`inject`）的参数类型均为 `UserMessage`，故"显示为用户"是接口约束而非本插件选择；成功侧改道 concludeTurn 后，伪装用户发言的频次只剩失败路径。
 - **「可用但禁用」的能力面（如实披露）**：宿主另外开放了两条更强通道，本插件**主动不用**——① `ctx.sessions.registerMessageProjection()` 可在**消息被接受前改写内容**；② `agent.ctx` 上可注册**同名的 per-agent 工具变体**（改写宿主工具在该会话内的语义）。理由：前者改的是**会话记录本身**，而会话日志是本项目的证据底座；后者若用于放宽/美化判定，等于把治理机制变成新的攻击面。**本插件的红线：这两条只允许用于"加强"方向（加审计／加证据／加来源标注），不得用于放宽或改写证据。**
 - **遥测日志默认明文落盘**：`<repo>/logs/exec-log.jsonl`（命令截断 200 字符、stdout/stderr 尾 300 字符；写入前对常见密钥形态自动脱敏——非穷尽）。可用 `SHISANUO_LOG_DIR` 指到私密目录；`SHISANUO_LOG_DISABLE=1` 可整体关闭落盘（不留痕环境；启动以 stdout 一行声明，代价=放弃审计底座）；日志不入库（.gitignore）。
@@ -109,7 +111,7 @@ dsh plugin --profile <你的profile> add ./shisan-xinuo-dsh-plugin-<版本>.tgz
 ## 测试与测量
 
 ```bash
-npm test   # 27 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
+npm test   # 29 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # headless 三臂实验（环境经上表变量注入）
@@ -148,15 +150,16 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 ## 目录
 
 - `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/披露接线/遥测）
-- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify / check-docs-index）｜ `tests/` 27 套单测
+- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify / check-docs-index）｜ `tests/` 29 套单测
 - `想法库/` 未验证想法 ｜ `推进库/` 在推进事项的入口索引 ｜ `验证库/` 可复跑证据与结论口径
 - `.github/` Issue 与 PR 模板＋CI ｜ `SECURITY.md` 安全披露（含「不是安全边界」声明）｜ `LICENSE` MIT
 - `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告/GUI 验证规程 ｜ `CHANGELOG.md` 版本记录（内部）
 - `CONTRIBUTING.md` 公开文本规范（提交/注释/文档＋机检）
+- `AI会话知识沉淀.md` 会话知识沉淀（AI 版：宿主接缝／沙箱 ACL／会话日志标记／反代真值／判据分档）｜ `踩坑经验库.md` 踩坑记录（症状→根因→解决→预防）
 
 ## 版本史与路线（详见 CHANGELOG.md）
 
-v0.1 机制雏形 → v0.2 真值闭环（gate 工具）→ v0.3 可修改性（Config 化）→ v0.4 上下文控制（预算器，**已于 2026-10-16 退役**）→ v0.5 判定制度+E1 → **v1.0 工程验收（内部）** → **2026-10-15 探针批+施工批**（宿主 API 五项实证／concludeTurn 根因改判+收口改道默认启用／guard 单调层／发行形态 bundle 化实测）→ **2026-10-16 收口 v5**（判级仅观测／段指纹／启动自检／gate 降级／闭环宿主终结／**工具裁剪退役**／pinned 绕过洞修复——见 CHANGELOG 与 docs/design-specs/layer3-quantification-results-20261016.md）。
+v0.1 机制雏形 → v0.2 真值闭环（gate 工具）→ v0.3 可修改性（Config 化）→ v0.4 上下文控制（预算器，**已于 2026-10-16 退役**）→ v0.5 判定制度+E1 → **v1.0 工程验收（内部）** → **2026-10-15 探针批+施工批**（宿主 API 五项实证／concludeTurn 根因改判+收口改道默认启用／guard 单调层／发行形态 bundle 化实测）→ **2026-10-16 收口 v5**（判级仅观测／段指纹／启动自检／gate 降级／闭环宿主终结／**工具裁剪退役**／pinned 绕过洞修复——见 CHANGELOG 与 docs/design-specs/layer3-quantification-results-20261016.md）→ **2026-10-16 决策批**（判据新增窄版 `effect` 档＋独立记账／四项裁决落地／会话拒载事故修复／**对外发布冻结**／知识沉淀落档）。
 
 下一程（方向校准报告提出，待批准）：v2 任务控制器（状态机+验收条件持有+收口强制——本插件核心缺口的正解）→ v3 能力路由（分层注入+Skill 按需）→ v4 错误模型+持久化 → v5 有效性终判（n≥5 四臂+脱敏对照）。路线=docs/product-recalibration-20261013.md。
 
