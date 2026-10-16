@@ -6,6 +6,7 @@
 - 公开文本机检对齐政策：`ai-tool-name` 规则补「端点字面量」豁免（`openai/v1`）＋3 枚回归用例（含豁免不放水对照）；修复上一提交遗留的 1 处违规；工作树 128 受控文件 0 违规。全量 `npm test` **22/22**。
 - 新增 `推进库/2026-10-16-收口任务总表.md`（v5 活表：任务×可计算收益×状态，滚动勾稽）。
 - **预览线档（v0.2.1-alpha.4）首轮兼容实证**：隔离 CLI＋home＋headless 模板档案建成；我方插件 file:// 挂载与本地 bundle 安装均可装；运行时全量注册零失败；GO 反代链路（免费档）回复 `PREVOK` exit 0；系统段两段到达（会话日志解码）；遥测落账。矩阵与装置档见 `docs/preview-line-compat-20261016.md`、`docs/env-matrix-20261016.md`。
+- **三档环境矩阵收口（实战档）**：`rich1` 默认集＝本插件＋permission-rules@0.7.15＋tool-search@0.1.7＋hooks 桥＋tool-cordis；最终冒烟 exit 0（`RICHOK`）；大目录下披露件生效（**tools-wire 7 件/3,374 chars**，对照裸档 28 件/22,668 chars）。接缝发现：官方伴随包亦触 fail-closed 版本门（`allow-version --accept-risk` 流程实测）；无 `dsh.bundle` 包需挂载层；hooks 桥 `configPath` 必填。**dsh-outcome-loop beta.8 与绑定线 0.2.0-rc.2 代际不兼容**（自述仅验至 0.1.0-rc.8；boot 宿主侧崩溃，补 storage 前置仍崩）→ 必查项 #1 未过：默认集移除、留档待上游适配。
 
 ## 探针批＋施工批（2026-10-15）：宿主 API 五证实／concludeTurn 改道／guard 单调层／发行形态打通
 
