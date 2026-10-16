@@ -22,7 +22,12 @@ const files = walk(repo)
 const dangling = []
 let checked = 0
 for (const f of files) {
-  const text = readFileSync(f, 'utf8')
+  const raw = readFileSync(f, 'utf8')
+  // 先剥**围栏代码块**与**行内码**——其中的 `](x)` 是示例/字面量，不是链接（自测曾误报 CHANGELOG 的说明文字）。
+  const text = raw
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/~~~[\s\S]*?~~~/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
   for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) {
     let t = m[1].trim()
     if (/^(https?:|mailto:|#)/i.test(t)) continue
