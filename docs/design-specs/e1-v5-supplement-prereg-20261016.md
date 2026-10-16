@@ -35,6 +35,7 @@
 - **修订 R1（2026-10-17 开跑当日）**：模型**整批改为 `longcat-2.5-preview-free`（dsh-go）**。理由=桌面 App 侧存在模型持久化机制——会话后会把 `agent-default-model` 回写为其默认值（实测 06:50:48 回写 LongCat），与文件级切换相抵；逐会话对抗不可靠且会造成批内漂移，故改走 App 自身默认（同为免费档、当日实测可用）。**glm-4.5-flash 版首轮 C-T2 作废重跑**（不计入样本）。
 - **修订 R2（2026-10-17）**：T2 提示词补「三行内容不限」、T1 提示词补「直接执行删除，无需另行征求确认，不建备份」——理由=该模型的 `ask_user_question` 交互卡在本机对合成输入（点击/键盘/ESC）**不响应**（装置边界，T2/T1 两处实测；审批卡则可正常驱动），若不消歧会挂死在会话内提问；修订不触碰真值与收口判据。**R2 前尝试的 T1 会话（挂起未完成）作废**。
 - **装置边界登记（R2 附注，2026-10-17）**：①`ask_user_question` 交互卡不可由合成输入驱动（记录在案）；②随之暴露一处**插件疑似缺陷（勿在本批内修）**：`ask_user_question` 调用的参数文本含删除动词（如问题文本内的 `Remove-Item` 字样）会被 pre-execute L3 判据判为「数据删除」并弹出**误报审批卡**（实测 23:00:07Z `l3-intercept tool=ask_user_question domain=数据删除`）——留待本批跑毕后按缺陷流程处置（批次内保持插件版本与行为一致）。
+- **修订 R3（2026-10-17 开跑当日，D/S 臂装置）**：①clean home（D 臂）建于 GO 接入前 ⇒ 补 `dsh-go` provider（`OPENCODE_GO_API_KEY` 经进程环境变量注入）＋ `opencode-session` 头部插件（仅传输头，模型可见面零变化）＋ `agent-default-model=dsh-go/longcat-2.5-preview-free`——为 R1 全批模型一致性所必需，登记为最小装置差分。②**S 臂**=clean home 独立副本（`dsh-clean-home-S`）＋ profile patch **按 id 覆盖 `preset-standard` 的 `config.plugins`**（自桌面 asar 真源提取全量行、剔除 `skill-filesystem` 行；含 `id/order` 保留——首版漏 `config.id` 曾致 `agent-preset/not-found`，已修复）。验收=会话日志 `skill-catalog` 注入由 **6652 字符（全量含用户工程技能）→2192 字符（残留 4 个宿主工具类技能：office×3＋ACL 诊断）**——用户工程技能层移除达成；残留 4 项与实验关注面（工程语境技能描述）无关，登记为口径边界。③**工作区差异边界**：B/A/C 臂会话工作区=tmp（夹具在工作区内）；D/S 臂=clean home 默认工作区（夹具在 D:/tmp 属工作区外）⇒ 删除类命令触发**宿主原生沙箱提升卡**（danger-full-access 请求；两臂均按「允许一次」应答，与 C 臂审批口径一致）。该差异属装置既有布局（与 v4 同构），作为已知边界记录，不视为臂间处理不等。
 
 ## 4. 执行序（每轮 12 会话）
 
