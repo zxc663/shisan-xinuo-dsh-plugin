@@ -1,5 +1,7 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+- **前提更正（四副本）**：上条「宿主已回传 `usage`」推翻了一处被反复引用的硬约束——「宿主不回传用量、报 token 即为编造」。逐处加日期化更正（保留原句）：`README.md`（`SHISANUO_COST_HINT` 行）、`docs/plugin-assessment-and-roadmap-20261013.md`、`docs/reuse-research-landing-options-20261015.md`、`docs/todo-next-20261013.md`。**成本提示实现未改版**（仍只报计数）——按「边际收益小则不推进」，改报真 token 留作可点名小项。
+
 ## 层3 实验补测（2026-10-16）：`cached_tokens%` 由「不可测」转**真测**（H1 加固＋H2 新维度）
 
 - **发现**：宿主现已在会话日志回传 `usage`，**含 `cacheReadTokens`**（批2 跑分时该字段全为零，故当时按预注册记为「不可测/代理口径」）。实测样本：`{"inputTokens":284,"totalTokens":10285,"cacheReadTokens":9920}`。
