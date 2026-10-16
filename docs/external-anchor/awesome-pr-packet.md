@@ -1,7 +1,8 @@
 # 外部锚物料 · awesome-dsh-plugin PR 包（内部准备 · 未提交）
 
 > 状态：**内部准备就绪／未提交**。发布/PR/清单收录属**对外动作**，须逐项批。
-> ⚠ **前置阻塞（提交前必须解除）**：本仓当前 `package.json` 无 `dsh.bundle` 清单 —— `dsh plugin --profile <p> add <tgz>` 会提示 `declares no dsh.bundle — installed as a plain dependency, not a profile layer`，即**包装上了也不挂层**。awesome 收录的硬要求正是「可安装 bundle」⇒ PR 应在恢复 `dsh.bundle`（并补 `prepack: npm run build`）之后提交。依据见 [`验证库/已知边界与接受风险.md`](../../验证库/已知边界与接受风险.md) §二.1。
+> ✅ **形态已就绪（实测）**：仓库（HEAD）`package.json` 声明 `dsh.bundle`，且**干净克隆 → `npm install` → `npm run build` → `npm pack` → `dsh plugin add <tgz>` 实测通过**（无 "declares no dsh.bundle" 警告；组合树含本插件层 `id: shisanxinuo-core`）。依据见 [`验证库/已知边界与接受风险.md`](../../验证库/已知边界与接受风险.md) §二.1。
+> ⚠ **递交前仍缺**：①`prepack: npm run build`（否则干净克隆未构建时 pack 不含 `lib/`）；②tag／Release 与 SHA256SUMS 物料；③**本地工作树有一处未提交改动删除了 `dsh.bundle`——递交前须确认从提交态出包**。
 
 ## 1. 收录条目（目标路径 `data/plugins/zxc663__shisan-xinuo-dsh-plugin.yml`）
 
@@ -31,7 +32,7 @@ description:
 
 ## 3. 提交前 checklist
 
-- [ ] `dsh.bundle` 清单已恢复，`prepack` 已加（使干净克隆 `npm pack` 可用）。
+- [ ] 确认从**提交态**出包（本地未提交改动已处理）；`prepack: npm run build` 已加（使干净克隆未构建时 `npm pack` 仍含 `lib/`）。
 - [ ] `npm pack` 产物含 `lib/`＋`content/`＋`cordis.patch.yml`；隔离 profile `dsh plugin add <tgz>` **无** "declares no dsh.bundle" 警告。
 - [ ] 文档机检 0 违规（`node scripts/check-voice.mjs`）。
 - [ ] category 取自清单现有分类。

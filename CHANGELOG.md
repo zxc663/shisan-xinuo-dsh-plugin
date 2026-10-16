@@ -19,6 +19,8 @@
 
 ## 收口批6（探路，2026-10-16）：组装形态——tgz 形态实测暴露 `dsh.bundle` 缺失（冻结阻塞）
 
+> **更正（同日晚）：** 上条把「`dsh.bundle` 缺失」记成了**仓库问题**——实为**本地未提交改动**所致。`git show HEAD:package.json` 有 `dsh.bundle`（自 `1d00ffd` 2026-10-15 起）；**干净克隆 pack 与装载已实测通过**（无警告＋组合树含插件层，见 `验证库/已知边界与接受风险.md` §二.1）。故批8 验收「干净克隆 npm pack 可用」**通过**；阻断面收窄为「本地 WIP 与提交态不一致」。
+
 - **形态3（tgz）实测**：`npm pack` 产物内容完整（`lib/shisan-xinuo-core.js`＋`content/*`＋`cordis.patch.yml`，共 10 项）；但 `dsh plugin --profile t6 add <tgz>` 仅装成普通依赖并**警告**：`declares no dsh.bundle — installed as a plain dependency, not a profile layer` ⇒ **包不会作为插件层加载**（失效）。
 - **根因**：悬置（未提交）的 `package.json` 删除了 `dsh.bundle` 清单并把版本由 `1.0.0-rc.1` 改为 `1.0.0`；而 `dsh.bundle` 是 `dsh plugin add` 识别可安装 bundle 的硬要求（见 `release-and-versioning-plan` §二）。
 - **阻塞面**：批6（切包/切形/引导/三形态）与批8（tag/Release/打包就绪）都必须改 `package.json`，与批2 立下的「悬置态 package.json 不动」相抵 ⇒ **两批在此冻结下无法收口**。
