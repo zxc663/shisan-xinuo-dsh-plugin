@@ -74,6 +74,9 @@ const FIELD_WHITELIST = {
   'skill-catalog-cost': ['sourceKind', 'chars'],
   // C16 成本提示（实验）
   'cost-hint': ['turn', 'toolCalls'],
+  // 批3 方向 A：跳过治理（熔断跳过落 notice + 三问质询，不静默）
+  'skip-notice': ['turn', 'mode', 'used', 'cap'],
+  'probe-notice': ['status'],
   // B 组：任务级作用域
   'task-open': ['id', 'level', 'trigger'],
   'budget-upgrade-ignored': ['level', 'trigger', 'appliedRank'],

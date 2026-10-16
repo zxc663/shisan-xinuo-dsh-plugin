@@ -87,6 +87,14 @@ export function userMessage(text: string): { id: string; role: 'user'; content: 
   return { id: randomUUID(), role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' } }
 }
 
+// 跳过治理（批3 方向 A）：宿主 notice 通道探针结论（dsh-llm `ContextFormed`）——`source.form='notice'` 须带一行 `summary`，
+// UI 折叠显示为"通知"而非普通用户发言；宿主自身 `modelSwitchNotice` 即此形态。kind 由产出方自声明（未知 kind 消费端回落）。
+export const SKIP_INTERROGATION =
+  '宿主本次跳过了收口强制（熔断上限已用尽）。请用三句话说明，不要重复已有答案：① 你当前的任务目标是什么？② 为什么本回合不需要或不能调用 discipline_gate 收口？③ 是否应当提醒用户，而不是静默放行？'
+export function noticeMessage(summary: string, text: string): { id: string; role: 'user'; content: Array<{ type: 'text'; text: string }>; source: { kind: string; form: 'notice'; summary: string } } {
+  return { id: randomUUID(), role: 'user', content: [{ type: 'text', text }], source: { kind: 'shisan-xinuo', form: 'notice', summary } }
+}
+
 // 段指纹：对注入系统段（名称+正文）取 SHA-256——启动自检 + 每请求核对段漂移（段变更率=0 的遥测底座）。
 export function sectionFingerprint(sections: Array<{ name: string; text: string }>): string {
   const h = createHash('sha256')
@@ -1609,6 +1617,9 @@ export function apply(ctx: Context) {
   // 由"如实未收口"承担后果（宿主记 unverified/assertion-unresolved），而不是无限打断。
   const steerCounts = new Map<string, number>()
   const STEER_CAP = Number(process.env.SHISANUO_STEER_CAP ?? 3)
+  // 跳过治理（批3 方向 A）：每任务≤1 次 notice——熔断跳过时向用户落行 + 向模型发三问质询（不静默）
+  const skipNoticeTasks = new Set<string>()
+  let noticeProbeDone = false
 
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
@@ -1840,6 +1851,23 @@ export function apply(ctx: Context) {
       if (!bucketKey || typeof payload?.turn !== 'number') return
       const b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== payload.turn) return
+      // 探针（默认关）：注入探针证实 notice 通道 form/source（SHISANUO_PROBE_NOTICE=1）
+      if (process.env.SHISANUO_PROBE_NOTICE === '1' && !noticeProbeDone) {
+        noticeProbeDone = true
+        void log({ kind: 'probe-notice', status: 'injected' })
+        console.log('[shisan-xinuo] probe notice injected (form=notice)')
+        ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('探针：notice 通道验证（form=notice）', SKIP_INTERROGATION))
+      }
+      // 跳过治理（批3 方向 A）：熔断跳过不再静默——落 notice（用户可见）＋向模型发三问质询（每任务≤1）
+      const skipSurface = (capMode: string, used: number) => {
+        const key = currentTaskId || bucketKey
+        if (skipNoticeTasks.has(key)) return
+        skipNoticeTasks.add(key)
+        const summary = `收口强制已跳过：熔断上限 ${STEER_CAP} 次用尽（mode=${capMode}）——本回合按"未收口"放行`
+        void log({ kind: 'skip-notice', turn: payload.turn, mode: capMode, used, cap: STEER_CAP })
+        console.log(`[shisan-xinuo] skip surfaced (${capMode}) → notice + interrogation`)
+        ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage(summary, SKIP_INTERROGATION))
+      }
       // C16（实验，默认关）：成本提示——inject 非唤醒通道，每回合最多一次，且从第 2 轮起才发（避免开场噪声）
       if (process.env.SHISANUO_COST_HINT === '1' && !b.costHinted && b.turn >= 2) {
         b.costHinted = true
@@ -1891,6 +1919,7 @@ export function apply(ctx: Context) {
         if (!shouldSteerNow(usedA, STEER_CAP)) {
           void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedA, cap: STEER_CAP, mode: 'auto-fail' })
           console.log(`[shisan-xinuo] steer capped for session (used=${usedA}, cap=${STEER_CAP}) → 放行并记为未收口`)
+          skipSurface('auto-fail', usedA)
           return
         }
         steerCounts.set(steerKeyA, usedA + 1)
@@ -1907,6 +1936,7 @@ export function apply(ctx: Context) {
       if (!shouldSteerNow(usedB, STEER_CAP)) {
         void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedB, cap: STEER_CAP, mode: 'no-assertions' })
         console.log(`[shisan-xinuo] steer capped for session (used=${usedB}, cap=${STEER_CAP}) → 放行并记为未收口`)
+        skipSurface('no-assertions', usedB)
         return
       }
       steerCounts.set(steerKeyB, usedB + 1)
