@@ -43,7 +43,7 @@
 | 1 | L3 危险操作在工具执行管线内被程序性拦截（命中→审批询问），且被拒命令经**任何工具通道**的 TTL 内重试由宿主**单调守卫**（`ctx.tools.guard`，2026-10-15 探针实证）封闭——后续监听者不可翻回 | **已实现有测试**（正则覆盖 6 域+9 豁免+嵌套 shell 形态；guard 单调层=指纹重放拒绝） | 审批卡 UI 与 pre-execute 管线为宿主原生；插件供红线规则、误拦豁免、形态封堵、单调 deny | 单测 8正10负+23例+58误拦样本；真实宿主 16 次拦截+审批链 3 次全通 |
 | 2 | 收口验证依据真实退出码而非模型自述（discipline_gate 工具：宿主真跑 cmd，声明与实测不符=打回） | **已实现有测试**（四臂实验中 3 次打回无效验证——模型每次修正后重过） | 命令执行/退出码采集走宿主；判定语义（三态+拒跑）为插件自有 | tests/gate-tool 44 例；E1 报告 |
 | 3 | 规则包可替换：改 `content/rules.json` 即改红线，不动引擎代码；无效配置 fail-closed 回退内置默认 | **已实现有测试**（真实宿主自定义域拦截实证） | 插件自有 | tests/config-rules 24 例 |
-| 4 | 工具预算器：按任务判级裁剪工具面（restrict 掩码），测量以每请求线缆真值为准 | **已实现有测试**（25→8 工具，-58.6%；同 agent 会话中途收窄实证） | restrict/request 事件为宿主扩展面；策略与 always-allow 为插件自有 | tests/budget 21 例 |
+| 4 | ~~工具预算器：按任务判级裁剪工具面（restrict 掩码）~~ | **已退役（2026-10-16 收口 v5 批4）**——运行时裁剪让位上游披露插件（`dsh-tool-search`）；本插件零裁剪，`discipline_tools` 只如实报线缆真值 | — | 退役依据 `docs/reuse-decision-toolface-20261016.md`；rich 档实测 `tools-wire` 7 件/3,374 chars |
 | 5 | 行为遥测与对账：exec-log 全落账，tally `--report/--check` 出数+对账（白名单/不变量/快照，抓植入差错） | **已实现有测试** | 插件自有（日志为插件所写，非宿主审计面） | tests/tally 16 例（5 类攻击样本全被抓） |
 | 6 | 有效性（改善任务结果） | **未证**——机制验证轮 n=3 区分力不足（裸基线行为方差大），按预注册矩阵不判有效/无效 | — | docs/e1-v4-four-arm-report §三 |
 | 7 | 拦截覆盖完备性 | **已知边界**——枚举型正则有天花板；「目标替代」（用 write 清空代替删除+对偷换目标做真验证）不可在正则层修，指向 v2 任务状态机 | — | docs/e1-v1-report §3、e1-v4 §三 |
@@ -85,17 +85,16 @@ dsh plugin --profile <你的profile> add ./shisan-xinuo-dsh-plugin-<版本>.tgz
 
 ## 配置（契约详见 docs/config-contract.md）
 
-数据层三件：
+数据层两件（原第三件 `content/budget.json` 随**工具裁剪层退役**移除，见「能力矩阵」#4 与 CHANGELOG 批4）：
 
 - `content/rules.json`：L3 危险域+只读豁免（**fail-closed**：无效回退内置默认，防护不静默解除）
 - `content/discipline.md`：注入的纪律文本
-- `content/budget.json`：判级→工具掩码（**fail-open**：无效不裁剪；纪律五件工具永不裁）
 
 环境变量（全部可选，未设时用随仓默认值）：
 
 | 变量 | 作用 |
 |---|---|
-| `SHISANUO_RULES` / `SHISANUO_DISCIPLINE` / `SHISANUO_BUDGET` | 覆盖规则包/纪律文本/预算策略文件路径 |
+| `SHISANUO_RULES` / `SHISANUO_DISCIPLINE` | 覆盖规则包/纪律文本路径 |
 | `SHISANUO_LOG_DIR` | 覆盖遥测日志目录（默认 `<仓库>/logs`）；`SHISANUO_LOG_DISABLE=1` 关闭落盘 |
 | `SHISANUO_ASSERTIONS` | 会话外钉死验收断言（pinned；格式同 `discipline_task`：`kind:payload; …`）——模型不可移除/改写，clear/replace 均无效 |
 | `SHISANUO_ASSERT_LAYER` | 启用**启发式断言推导**（默认关）：判据来源默认以会话外锚（pinned）与工具自登记为一线，推导仅作可选辅助——依据=电池实测误推导 3/13 且关闭后步数 8→6、每任务累计上下文 −41% |
@@ -104,7 +103,6 @@ dsh plugin --profile <你的profile> add ./shisan-xinuo-dsh-plugin-<版本>.tgz
 | `SHISANUO_PROBE_TOOLS` | 工具注册语义探针（默认关，**仅探测会话使用**）：启动时尝试一次**同名工具注册**并打印结果（全局＝拒绝／per-agent＝接受），用于验证"改宿主工具"能力面。产物见 `docs/extension-design-20261014.md` §三.1 |
 | `SHISANUO_COST_HINT` | 成本提示（**实验，默认关**）：开启后每回合最多一次经 `inject()` 注入"轮数／累计工具调用数＋每步重发上下文"——**只报可观测的量，不报 token**（宿主不回传用量，报数字即为编造）。前缀 `[十三希诺成本提示]` 自曝来源 |
 | `SHISANUO_ARM=A\|B\|C` | 实验臂切换（优先于旗标文件；A=惰性观测，B=纯纪律文本，C=全量，默认 C） |
-| `SHISANUO_BUDGET_LEVEL` | 启动即按该判级裁剪工具面（测试钩子） |
 | `SHISANUO_DSH_BIN` / `SHISANUO_DSH_HOME` / `SHISANUO_E1_TMP` | E1 批量实验的本机环境（DSH 入口/home/临时目录） |
 
 ## 测试与测量
@@ -120,7 +118,7 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 
 ## 拦截换芯：外置拦截引擎（可选 · B3 落地）
 
-拦截层可外置给社区成熟引擎 [dsh-permission-rules](https://github.com/PerryLink/dsh-permission-rules)（Apache-2.0；本项目实测 v0.7.15）：危险域拦截由其规则引擎承载，本插件保留「判级→规则」「收口真值」「steer 强制」「工具预算」「遥测对账」全部净增量。
+拦截层可外置给社区成熟引擎 [dsh-permission-rules](https://github.com/PerryLink/dsh-permission-rules)（Apache-2.0；本项目实测 v0.7.15）：危险域拦截由其规则引擎承载，本插件保留「判级→规则」「收口真值」「steer 强制」「遥测对账」净增量；**工具面披露**亦让位上游 [dsh-tool-search](https://github.com/Letter2025/dsh-tool-search)（0.1.7，实测 wire 7 件/3,374 chars）——插件的运行时裁剪层已退役（见「能力矩阵」#4）。
 
 - 生成规则文件（唯一规则源=`content/rules.json`）：`node scripts/gen-permission-rules.mjs --out <工作区>/.dsh/rules.yaml`
 - profile 配置行（regex 模式为生成文件前提；v0.7.15 内置基线为 glob 写法、regex 模式下会致条目失活，故须关闭）：
@@ -148,7 +146,7 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 
 ## 目录
 
-- `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/预算/遥测）
+- `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/披露接线/遥测）
 - `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 20 套单测
 - `想法库/` 未验证想法 ｜ `推进库/` 在推进事项的入口索引 ｜ `验证库/` 可复跑证据与结论口径
 - `.github/` Issue 与 PR 模板＋CI ｜ `SECURITY.md` 安全披露（含「不是安全边界」声明）｜ `LICENSE` MIT
@@ -157,7 +155,7 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 
 ## 版本史与路线（详见 CHANGELOG.md）
 
-v0.1 机制雏形 → v0.2 真值闭环（gate 工具）→ v0.3 可修改性（Config 化）→ v0.4 上下文控制（预算器）→ v0.5 判定制度+E1 → **v1.0 工程验收（内部）** → **2026-10-15 探针批+施工批**（宿主 API 五项实证／concludeTurn 根因改判+收口改道默认启用／guard 单调层／发行形态 bundle 化实测——见 docs/probe-host-api-20261015.md 与 CHANGELOG）。
+v0.1 机制雏形 → v0.2 真值闭环（gate 工具）→ v0.3 可修改性（Config 化）→ v0.4 上下文控制（预算器，**已于 2026-10-16 退役**）→ v0.5 判定制度+E1 → **v1.0 工程验收（内部）** → **2026-10-15 探针批+施工批**（宿主 API 五项实证／concludeTurn 根因改判+收口改道默认启用／guard 单调层／发行形态 bundle 化实测）→ **2026-10-16 收口 v5**（判级仅观测／段指纹／启动自检／gate 降级／闭环宿主终结／**工具裁剪退役**／pinned 绕过洞修复——见 CHANGELOG 与 docs/design-specs/layer3-quantification-results-20261016.md）。
 
 下一程（方向校准报告提出，待批准）：v2 任务控制器（状态机+验收条件持有+收口强制——本插件核心缺口的正解）→ v3 能力路由（分层注入+Skill 按需）→ v4 错误模型+持久化 → v5 有效性终判（n≥5 四臂+脱敏对照）。路线=docs/product-recalibration-20261013.md。
 
@@ -165,7 +163,7 @@ v0.1 机制雏形 → v0.2 真值闭环（gate 工具）→ v0.3 可修改性（
 
 - **F-01 收口防假**：文本 GATE 不再计入合规；断言任务由**宿主在回合收尾自动复核**（全过=收口成立 `ok-auto`；未过=steer 打回）；无断言任务必须真调 `discipline_gate`，不可验证如实记 `unverified`。
 - **F-02 完全权限**：`discipline_gate` 的 L3 拒跑**不再被 full-access 豁免**（全权只免审批卡交互）。
-- **F-05 预算**：裁剪仅认显式 `L=…` 状态行；`pwsh` 常驻白名单——该机制定位=**token 收敛，非安全边界**（主张 4 按此理解）。
+- **F-05 预算（已退役）**：原机制=裁剪仅认显式 `L=…` 状态行、`pwsh` 常驻白名单，定位=**token 收敛，非安全边界**；该层已于 2026-10-16 收口 v5 批4 退役（披露让位上游 `dsh-tool-search`），主张 4 相应改判为「已退役」。
 - **F-04/F-06/F-08/F-09**：对账白名单与写入面同步（24/24，新增机检测试）｜补 5 例漏拦样本（含 `base64 -d | sh` 新域）＋复核脚本修复入测｜指纹匹配加词边界｜devDeps/去硬编码/`npm test`/CI（Node 22/24）。
 - **如实边界**：分回合跳过、推导覆盖面（F-03/F-07）、重定向覆写类语义样本——均已声明；宿主层实验日志不入库，第三方不可独立复现（审计 §3.2），单测与检查脚本可独立复现。
 - 完整处置清单：`docs/audit-response-20261013.md`。
