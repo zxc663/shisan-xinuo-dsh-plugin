@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批5（进行中，2026-10-16）：方向 C＋小件——gate 降级＋outcome-loop 复测＋基线度量
+
+- **gate 降级（本批已落）**：`discipline_gate` 在"无 cmd/assert"时——若给了 `exempt`（未验证声明）→ 返回 **`unverified`**（诚实未验证：非 pass、非 error、不计完成），回合以 `behavior.gate=unverified` 如实登记且不再打回；无 `exempt` 仍为 `error`（提示补 assert 或如实声明）。修掉"只读/语义型任务无合规收口形态"的真缺口（GUI 批4 会话实测 `error:empty-cmd`）。单测 `tests/gate-tool.test.mjs` +6；tally `behavior.gate` 白名单同步。
+- **outcome-loop 必查（限时盒）**：`gh api` 复测——最新 Release 仍为 `v0.1.0-beta.8`（2026-08-20；仓库 2026-09-20 有推送但无新发行）⇒ **无 0.2.x 适配版**，批1「未过/移除」裁定维持。
+- **基线度量（exec-log 全量）**：`gate-steer=77`（＝计划所称基线）、`auto-closeout=12`、`ok-auto=12` vs `ok-tool=224`（**auto-closeout 占比 5%**）。
+- **待决**：`宿主默认判据`／`auto 派生扩容`（auto-closeout ≥80%／steer↓≥50% 的机制）涉及把"目标校验"降级为"动作落地校验"，与项目 T2/T8/T10 与 A1 的严格性条款冲突——按分歧铁律**待裁决**；D2（换芯链路 ask 假拒）与 conclude 回归（实战档含审批应答）仍在列。
+
 ## 收口批4（2026-10-16）：方向 B——运行时工具裁剪（budget/mask）退役，披露移交上游 tool-search
 
 - **退役**：删除预算器全部触点（`BudgetMask`／`loadBudgetFile`／`completeAllowList`／`maskLeak`／`BUDGET_ALWAYS_ALLOW`／`restrictAgentTools`／`applyBudget`／`pendingMask`／`pendingLevel`／`budget-leak`／`SHISANUO_BUDGET*` 等），并删 `content/budget.json`（净 −241 行）。依据=`docs/reuse-decision-toolface-20261016.md` §2/§4。
