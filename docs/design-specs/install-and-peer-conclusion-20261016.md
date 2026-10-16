@@ -29,7 +29,7 @@
 
 ## 四、已知前置与边界
 
-- **`prepack` 未加**：干净克隆若**未构建**就直接 `npm pack`，产物不含 `lib/` ⇒ 补 `prepack: npm run build` 可解（受 `package.json` 悬置态冻结，未改）。
+- **`prepack` 已加（2026-10-16）**：干净克隆若**未构建**就直接 `npm pack`，产物不含 `lib/`；已补 `prepack: npm run build`（删 `lib/` 后 `npm pack` 复验：构建自动触发、tarball 含 `lib/shisan-xinuo-core.js`；干净克隆复验见 CHANGELOG）。
 - **本地工作树有一处未提交改动**删除了 `dsh.bundle`（**不影响提交态**；本地直接打包会产出非 bundle 包）。
 - 兼容性口径：见 [`env-matrix-20261016.md`](../env-matrix-20261016.md) 与 [`preview-line-compat-20261016.md`](../preview-line-compat-20261016.md)（预览线@当前 core 复验通过）。
 

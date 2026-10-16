@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## C8 修复（2026-10-16）：干净克隆 `npm pack` 自动构建（`prepack`）
+
+- **问题**：`lib/` 被 `.gitignore` 忽略，干净克隆在**未构建**时直接 `npm pack`，产物不含 `lib/`（分发场景必炸；findings C8 在悬置解除后得以落地修复）。
+- **修复**：`package.json` 增加 `prepack: npm run build`——`npm pack` / `npm publish` 前自动构建，不再依赖手工 build。
+- **复验（三路）**：①删 `lib/` 后仓内 `npm pack` → 构建自动触发、tarball 含 `lib/shisan-xinuo-core.js`；②**干净克隆**（`git archive` 提交态＋本修复）→ `npm install` → `npm pack`（**不手动构建**）→ 10 件产物含 `lib/`＋`content/`＋`cordis.patch.yml`；③隔离 profile `dsh plugin add <tgz>` → 写入 `dsh.profile.bundles`（bundle 层待遇，非 "plain dependency"）、`--dump-config` 组合树含 `# == shisan-xinuo-dsh-plugin` 层、无 "declares no dsh.bundle" 警告。
+- **同步更正**：findings C8 行、安装/peer 结论档、外部锚 packet（`prepack` 与悬置两项标结）、任务总表 #9、执行报告批8 行；`package.json` description 移除已退役「工具预算」字样（公开面陈旧收敛）。
+
 - **前提更正（四副本）**：上条「宿主已回传 `usage`」推翻了一处被反复引用的硬约束——「宿主不回传用量、报 token 即为编造」。逐处加日期化更正（保留原句）：`README.md`（`SHISANUO_COST_HINT` 行）、`docs/plugin-assessment-and-roadmap-20261013.md`、`docs/reuse-research-landing-options-20261015.md`、`docs/todo-next-20261013.md`。**成本提示实现未改版**（仍只报计数）——按「边际收益小则不推进」，改报真 token 留作可点名小项。
 
 ## 批5 续（2026-10-16）：窄版宿主默认判据 + 会话拒载修复 + 四项决策落定
