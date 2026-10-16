@@ -107,5 +107,27 @@ const mk = (runCmdImpl, evaluateImpl) => {
   t('CJ3 落 gate-conclude marked', true, logs.some((e) => e.kind === 'gate-conclude' && e.status === 'marked'))
 }
 
+// ⑦ 洞修复：assert-only pass 也必须复核**已登记断言（含 pinned）**——登记断言未过 ⇒ assertion-fail（不闭环）
+{
+  const mkDef = (registeredOk) =>
+    buildGateToolDefinition({
+      runCmd: async () => ({ code: 0, stdout: '', stderr: '', timedOut: false }),
+      log: () => {},
+      onStats: () => {},
+      acceptance: {
+        list: () => [{ assertion: { kind: 'exists', path: 'D:\\tmp\\never.txt' }, source: 'pinned' }],
+        register: () => ({ count: 0 }),
+        clear: () => {},
+        markPassed: () => {},
+        evaluate: async (a) => (a.path === 'D:\\tmp\\never.txt' ? { ok: registeredOk, detail: registeredOk ? '' : 'pinned 未满足' } : { ok: true, detail: '' }),
+      },
+    })
+  const r1 = await mkDef(false).execute({ level: 'L1', v: 'x', assert: 'exists:D:\\tmp\\a.txt' }, {})
+  t('P2a 已登记断言未过 ⇒ assertion-fail（assert-only 不再绕过）', 'assertion-fail', r1.status)
+  t('P2b 该路径不闭环', false, r1.closed === true)
+  const r2 = await mkDef(true).execute({ level: 'L1', v: 'x', assert: 'exists:D:\\tmp\\a.txt' }, {})
+  t('P2c 登记断言全过 ⇒ 仍 pass', 'pass', r2.status)
+}
+
 console.log(`gate-assert: ${pass} pass, ${fail} fail`)
 process.exit(fail > 0 ? 1 : 0)

@@ -833,6 +833,41 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
           }
         }
         if (!cmd.trim()) {
+          // 洞修复（2026-10-16 实机复现）：assert-only pass 必须先复核**已登记断言（含会话外 pinned）**——
+          // 旧形态只评给定 assert 规格就置 onClosed(true) ⇒ 回合早退、宿主侧 pinned 复核被跳过 ⇒
+          // 用 `assert=` 收口即可绕开「模型不可改写」的钉死判据（实测：pinned exists:<不存在文件> 仍判 ok-tool）。
+          if (deps.acceptance?.list) {
+            const registered = deps.acceptance.list(execCtx)
+            if (registered.length > 0) {
+              const regResults: AssertionResult[] = []
+              for (const rec of registered) {
+                try {
+                  const res = await deps.acceptance.evaluate(rec.assertion, execCtx)
+                  regResults.push({ assertion: rec.assertion, ok: !!res?.ok, detail: String(res?.detail ?? '') })
+                } catch (e) {
+                  regResults.push({ assertion: rec.assertion, ok: false, detail: '求值器异常：' + String(e).slice(0, 80) })
+                }
+              }
+              const regFailed = regResults.filter((x) => !x.ok)
+              if (regFailed.length > 0) {
+                const failLine = regFailed.map((f) => `${explainAssertion(f.assertion)} — ${f.detail}`).join('；')
+                void deps.log({
+                  kind: 'gate-tool', status: 'assertion-fail', level, v, cmd: `assert:${assertSpec.slice(0, 120)}`, claimedExit: 0,
+                  realExit: 1, evidence: 'strong', error: failLine.slice(0, 160), assertions: formatAssertionResults(regResults),
+                })
+                deps.onStats?.('assertion-fail', execCtx)
+                return {
+                  status: 'assertion-fail' as const, verdict: 'assertion-fail', claimedExit: 0, realExit: 1,
+                  closed: false, evidence: 'strong' as const, assertions: regResults,
+                  message:
+                    'ASSERTION-FAIL：你给的 assert 判据通过了，但**已登记验收断言**未过（含会话外钉死的 pinned，模型不可改写）——任务不得宣告完成。✘ ' +
+                    failLine.slice(0, 160) +
+                    '。请完成真实目标后重新收口；断言本身有误可经 discipline_task 改正（pinned 不受其影响）。',
+                }
+              }
+              deps.acceptance.markPassed(execCtx)
+            }
+          }
           // assert-only pass 同样接线 onClosed——旧形态漏调 ⇒ 回合桶 gateClosed 恒 false，收口成功仍被 steer 打回
           ;(deps as { onClosed?: (c: boolean, x: unknown) => void }).onClosed?.(true, execCtx)
           void deps.log({
@@ -1758,12 +1793,14 @@ export function apply(ctx: Context) {
         }
         return
       }
-      // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
-      // A1：只有"闭环的 pass"才放行；弱证据 pass（gateClosed=false）继续走收口强制 #决策 2026-10-13 23:55
-      if (b.steered || (b.gateVerdict === 'pass' && b.gateClosed) || b.gateVerdict === 'unverified') return
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
       const assertionsOpen = pending.length > 0 && !(rec?.assertionsPassedAt)
+      // 只强制实质工作回合（≥1 工具调用）；已 steer 过 → 放行（防循环）；gate 已 pass → 闭合
+      // A1：只有"闭环的 pass"才放行；弱证据 pass（gateClosed=false）继续走收口强制 #决策 2026-10-13 23:55
+      // 洞修复（2026-10-16）：**有未复核的已登记断言（含 pinned）时不早退**——否则 pass／unverified 的回合
+      // 会绕过宿主侧复核（模型可用 `assert=` 或 `exempt` 绕开"模型不可改写"的钉死判据）。
+      if (!assertionsOpen && (b.steered || (b.gateVerdict === 'pass' && b.gateClosed) || b.gateVerdict === 'unverified')) return
       // ── 审计 F-01 修复：宿主自动收口——断言开启时宿主直接复核（不等模型记得调 gate）──
       if (assertionsOpen) {
         const results: AssertionResult[] = []
