@@ -51,3 +51,4 @@
 - **真正的档位控件=输入框区的权限预设指示器**（文本形如 `@ 工作区内修改`）：三选一「**仅可查看**（readOnly）／**工作区内修改**（workspaceWrite）／**完全权限**（fullAccess）」；切到**完全权限**会先弹**确认对话框**（「确认启用完全权限？」→「启用完全权限」按钮）。
 - 依据：宿主包 `@deepseek-ai/dsh-client-ui-permission-presets`（i18n 键 `preset.readOnly/workspaceWrite/fullAccess` 与 `confirm.title/description/enable`）。
 - **未完成**：以坐标点击触发该指示器菜单的可行坐标未定（新会话欢迎页与已开会话页布局不同，需先抓当页 OCR 取 `@ 工作区内修改` 行的 bounding rect 再点）。→ **全权档 GUI 实机验证（D2）仍待补**。
+- **取坐标配方（含两个已踩的坑）**：①`capture-window.ps1` 抓当页 → ②WinRT OCR 遍历 `Lines`，**按整行文本归一化后匹配**（OCR 会把中文逐字拆开成 `工 作 区 内 修 改`，**别用连续子串 `工作区` 过滤**——会全空）；③取该行 `Words[0].BoundingRect` 与末词 rect 的**中点**（或整行右端）→ 加窗口偏移 (110,68) 得屏幕坐标；④`send-input.ps1 -Op click` 该点 → 全屏抓取确认菜单。**注意**：`Words.Count` 在 WinRT 投影下可能报错，取末词用**反向索引**或先转数组；`BoundingRect` 避免 `[int]` 强转（投影返回对象数组，用 `.ToString()`）。
