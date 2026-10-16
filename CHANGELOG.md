@@ -2,6 +2,10 @@
 
 - **前提更正（四副本）**：上条「宿主已回传 `usage`」推翻了一处被反复引用的硬约束——「宿主不回传用量、报 token 即为编造」。逐处加日期化更正（保留原句）：`README.md`（`SHISANUO_COST_HINT` 行）、`docs/plugin-assessment-and-roadmap-20261013.md`、`docs/reuse-research-landing-options-20261015.md`、`docs/todo-next-20261013.md`。**成本提示实现未改版**（仍只报计数）——按「边际收益小则不推进」，改报真 token 留作可点名小项。
 
+## 收口批9（2026-10-16）：收口执行报告 v5
+
+- 新增 `docs/design-specs/v5-execution-report-20261016.md`：逐批状态（批1–4 全清；批5/6/7/8 除待裁项外落地）＋三个可计算指标真值（H1/H2 含真缓存、收口基线 steer77/ok-auto12、D2 5→0）＋交付物索引＋**待裁四项与影响面**＋复跑命令（信任可传递）＋未验证清单（仅 1 项）。对外发送仍逐项呈批。
+
 ## 批5 附（GUI 实机，2026-10-16）：D2 全权档验证通过（含切档路径实测）
 
 - **切档路径打通并实机验证**：`/permission` 命令 → 选择器「完全权限」→ 风险确认框（勾选＋启用）→ **机器判据** `exec-log: {"kind":"sandbox-mode","mode":"danger-full-access","enforcement":"suspended"}` ＋段指纹按设计重定基。落档 `gui-verification-protocol §5.1`（**并更正此前的错误定位**：顶栏「标准模式」与输入框 `@ 工作区内修改` 提示**都不是**档位控件）。
