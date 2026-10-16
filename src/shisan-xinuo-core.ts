@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { exec } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { randomUUID } from 'node:crypto'
 
 export const name = 'shisan-xinuo-core'
 
@@ -78,6 +79,13 @@ export const STEER_PREFIX = '[十三希诺收口强制]'
 // F7/C11：强制收口时**必须显式禁止重述**——实测中模型接到强制后会把自己那份完整答案再说一遍（164K tok 的一大部分在此）。 #决策 2026-10-13 23:55
 // 统一常量：三处 steer（断言未过／无断言未收口／零工具调用声称完成）共用同一措辞，避免逐处漂移。
 export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出的答案或分析；判断依据以系统侧的收口证据为准。'
+
+// 宿主会话恢复校验（dsh-session assertMessageEventShape）要求 user/message 携带 id（非空字符串）+ role + source.kind + content 数组；
+// 我方 steer/inject 直接把消息塞入 inbox（宿主不补身份字段），缺 id/role 会在下次会话恢复时被判 corrupt（B1 实测）。
+// 统一出口：所有投递进 inbox 的用户消息走此函数，杜绝四处字面量漂移。 #决策 2026-10-16
+export function userMessage(text: string): { id: string; role: 'user'; content: Array<{ type: 'text'; text: string }>; source: { kind: 'user' } } {
+  return { id: randomUUID(), role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' } }
+}
 
 // A9（2026-10-16）：只读管线**前置豁免**——真机误报实证（exec-log 8428：`Get-Content … |
 // Select-String 'Remove-Item'` 仅因文本含字面量被判「数据删除」）。判据：剥离引号字面量后，
@@ -1782,10 +1790,7 @@ export function apply(ctx: Context) {
       // C16（实验，默认关）：成本提示——inject 非唤醒通道，每回合最多一次，且从第 2 轮起才发（避免开场噪声）
       if (process.env.SHISANUO_COST_HINT === '1' && !b.costHinted && b.turn >= 2) {
         b.costHinted = true
-        ;(agent as { inject?: (m: unknown) => void })?.inject?.({
-          content: [{ type: 'text', text: costHintLine(b.turn, b.toolCalls) }],
-          source: { kind: 'user' },
-        })
+        ;(agent as { inject?: (m: unknown) => void })?.inject?.(userMessage(costHintLine(b.turn, b.toolCalls)))
         void log({ kind: 'cost-hint', turn: b.turn, toolCalls: b.toolCalls })
       }
       // F2 盲区（默认关闭）：零工具调用却声称完成——本轮不经任何收口检查，故单列记录并按需轻量提示一次
@@ -1793,15 +1798,7 @@ export function apply(ctx: Context) {
         if (ZEROTOOL_GUARD && !b.steered && judgeZeroToolClaim(b.lastText)) {
           b.steered = true
           void log({ kind: 'zerotool-claim', turn: b.turn, tail: b.lastText.slice(-200) })
-          agent.steer?.({
-            content: [
-              {
-                type: 'text',
-                text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`,
-              },
-            ],
-            source: { kind: 'user' },
-          })
+          agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`))
           console.log(`[shisan-xinuo] zero-tool completion claim → steer for turn ${b.turn}`)
         }
         return
@@ -1846,13 +1843,7 @@ export function apply(ctx: Context) {
         steerCounts.set(steerKeyA, usedA + 1)
         void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'auto-fail', assertions: pending.length })
         const failLine = failed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
-        agent.steer?.({
-          content: [{
-            type: 'text',
-            text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`,
-          }],
-          source: { kind: 'user' },
-        })
+        agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`))
         console.log(`[shisan-xinuo] auto-closeout FAIL → steer for turn ${payload.turn} (${failed.length}/${results.length} failed)`)
         return
       }
@@ -1867,13 +1858,7 @@ export function apply(ctx: Context) {
       }
       steerCounts.set(steerKeyB, usedB + 1)
       void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'no-assertions', assertions: 0 })
-      agent.steer?.({
-        content: [{
-          type: 'text',
-            text: `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。调用 discipline_gate 时必须携带**锚定本任务目标的判据**：优先用 assert 算子（not_exists/exists/path_contains:<目标路径>，宿主内联求值）；仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主将记 gate-unproven）。文本 GATE 不再计入合规。若确实无法验证，请如实声明「未验证」与原因（宿主将记为 unverified）。`,
-        }],
-        source: { kind: 'user' },
-      })
+      agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。调用 discipline_gate 时必须携带**锚定本任务目标的判据**：优先用 assert 算子（not_exists/exists/path_contains:<目标路径>，宿主内联求值）；仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主将记 gate-unproven）。文本 GATE 不再计入合规。若确实无法验证，请如实声明「未验证」与原因（宿主将记为 unverified）。`))
       console.log(`[shisan-xinuo] gate steer injected for turn ${payload.turn} (toolCalls=${b.toolCalls})`)
     } catch (e) {
       console.error('[shisan-xinuo] turn-stopping check failed (non-fatal):', String(e).slice(0, 120))
