@@ -36,6 +36,8 @@
 
 ## 收口执行（v5 · 2026-10-16）
 
+- `external-anchor/awesome-pr-packet.md` · `external-anchor/trial-guide.md` · `external-anchor/feedback-template.md` — 外部锚物料（awesome PR 包／试用指引／反馈模板；内部准备，对外动作逐项批）。
+
 - `env-matrix-20261016.md` — 三档环境矩阵（裸/实战/预览线；构建配方与接缝发现）。
 - `preview-line-compat-20261016.md` — 预览线兼容矩阵（alpha.4 隔离档）。
 - `findings-20261016.md` — 宿主线普查发现（A/B/C/D 编号、分层修法、砍除清单、诚实边界）。
