@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批2（2026-10-16）：层3/D 量化实验（门禁批）＋两个真 bug 修复＋GUI 实机
+
+- **steer/inject 消息身份修复**：新增 `userMessage()` 统一补 `id`＋`role`＋`source.kind`——宿主 `assertMessageEventShape` 要求 user/message 带身份字段，缺失会在下次会话恢复时判 corrupt（B1 实测）。回归套件 `tests/steer-message.test.mjs` 常驻。
+- **hooks 桥排除**：`dsh-hooks-claude-code@0.0.1-rc.5` 在绑定线 0.2.0-rc.2 上使工具链崩溃（`agent.session.events is not iterable`，spread undefined）；二分探针定位（仅 cordis exit0／仅 hooks 崩）；B1/B2 装置改用 `rich-no-hooks.yml`（仅 tool-cordis）。
+- **四臂实验（各 20 轮 × step-5-preview-free）**：A1/A2/B1/B2 全 20/20 收口、steer=0。**H1（常量横幅）支持**：系统段字节 −98.3%（239,340→4,082）、distinct 3→1；**H2（tool-search 披露）代价量化**：开启后每轮注入 runtime-context 快照（全程 1→40）与 tool-search 披露（20），墙钟 +47.5%（564s→832s）、实际检索仅 1 次、收口无损；**H3（收口旁证）成立**。结果档=`docs/design-specs/layer3-quantification-results-20261016.md`。
+- **GUI 实机走查**：桌面 DSH 启动→新会话（标准模式·step-5-preview-free）→真实任务 write→read→`discipline_gate`（assert exists 内联求值通过）→模型回 `GUI-SELFCHECK-DONE`。三路取证：截图（gui-01/02/03/04）＋exec-log（gate-tool pass realExit=0 evidence=strong）＋dsh-usage.log（provider=dsh-go model=step-5-preview-free、x-opencode-session 注入）。证据目录 `D:\tmp\gui-batch2\`。
+
 ## 收口批1（进行中，2026-10-16）：测试基建去假绿＋词表口径对齐＋收口任务总表
 
 - 测试基建两处失信修复（审计登记在案）：`test/l3-patterns.test.mjs` 去掉本地旧正则、**直连真引擎 `judgeL3`**；`tests/review-claims-check.mjs` 补退出码＋`--expect-fail` 负向控制；新增接线套件 `tests/review-claims-wiring.test.mjs` 常驻把关（normal exit 0 / expect-fail exit 1）。**负向控制实测**：改坏 `L3_PATTERNS`→套件变红（2 MISS／exit 1），还原复绿。
