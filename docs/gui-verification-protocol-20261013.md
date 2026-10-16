@@ -16,6 +16,7 @@
 2. 重启 App 挂载；挂载旁证=应用进程新增本地监听端口（插件内置代理）＋exec-log 落 `arm=C`/`rules valid=true`。
 3. 会话须**标准模式**（完全权限会话 L3 按设计退位、不出审批卡）；工作区任意（可用绝对 `rulesFile` 指向夹具规则文件）。
 4. 撤除：删 insert → 重启 → 旁证端口消失。
+5. **临时 insert 必须登记撤除项**（撤除条件／撤除动作／撤除后复验判据），三件写在同一处；撤除后按 §5.3 验收。历史事故（未撤除 → 会话拒载）见 §5.3。
 
 ```yaml
 - insert:
@@ -63,3 +64,29 @@
 
 - **桌面 App 的插件宿主继承 `Start-Process` 传入的环境变量**——实测：`Start-Process '…\DeepSeek Harness.exe' -Environment @{ SHISANUO_STEER_CAP='1'; SHISANUO_ASSERTIONS='exists:…' }` 启动后，exec-log 落 `{"kind":"pinned","count":1,…}` ⇒ 在 GUI 里也能跑"环境门控"的实验（熔断上限、钉死断言等），不必另写脚本。
 - **未完成**：借该能力在 GUI 触发「熔断跳过→notice＋三问质询」的尝试**未成功**（输入未能落到输入框；恢复会话页与欢迎页的 composer 坐标需先 OCR 取该行 rect）。该路径的 `skip-notice` 仍待补。
+### 5.3 会话拒载事故与修复（2026-10-16）
+
+**症状**：桌面 App 选中某会话即红字 `resume failed for session "session-9f9569ae-…": SessionQueryError … contains event type "permissionRules/decision" (seq 26) unknown to this harness and not marked ignorable; refusing to interpret the log … (gateway/internal)`。
+
+**根因（三段，均有原文/实测）**：
+
+1. §2 的 dev-mount 把 `permission-rules` 临时直挂进**桌面档**；该类插件会向会话日志追加审计行 `permissionRules/decision`。
+2. 桌面宿主**无法为新事件类型打 `ignorable` 标记**——宿主 asar 内自带说明原文：“Readers accept an unknown stored event only when its envelope carries `ignorable: true`, and live `Session.append()` cannot set that marker”；插件侧对宿主能力有探测（`probeAuditResult`），探测到不支持后**自行停用会话日志审计** ⇒ 每个受影响会话恰好只留 **1 行**未标记审计行（18 会话 × 1 行 ＝ 扫描命中 18 行，数目自洽）。
+3. 宿主读路径对“未知类型 ＋ 无 `ignorable` 标记”的行**拒载整条日志** ⇒ 该会话不可 resume（不是显示层问题，删 insert 也不会自动复原已写坏的历史）。
+
+**修复（三步，可重跑）**：
+
+```powershell
+# ① 撤除临时直挂（先备份），只删 insert 中的 permission-rules 项，原地留历史注释
+Copy-Item <DSH_HOME>\profiles\desktop\cordis.patch.yml <DSH_HOME>\profiles\desktop\cordis.patch.yml.bak-YYYYmmdd-<用途>
+# ② 给历史日志补标记（上游自带脚本；逐文件 .bak-<epoch> 备份，只给目标行加 ignorable:true）
+node <上游包>\scripts\repair-session-logs.mjs scan   --home <DSH_HOME>   # 只读体检（实测：130 档 / 18 受影响 / 18 行）
+node <上游包>\scripts\repair-session-logs.mjs repair --home <DSH_HOME>   # 实修（18/18，复扫 0）
+# ③ 重启 App 后按下方判据验收
+```
+
+**验收判据（三源，缺一不可）**：①`scan` 复跑 `0 affected`；②GUI 截图该会话正常渲染、无红字；③**机器证据**＝该会话日志 mtime 在重启后前进并追加宿主原生行 `session/end-seed`（实测 `12:51:33`）⇒ 证明“被真加载并续写”，而非界面假象。
+
+**新增铁律 · 临时 insert 撤除清单**：任何 dev-mount / 临时 insert 落地时，**同一处**必须写全三件——①撤除条件（何时算测完）②撤除动作（删哪几行）③撤除后复验判据（重启 ＋ 取哪条机证）。事故复盘：本次①写在注释里、②从未执行；且红字在早期 OCR 截图中出现过，被误判为“与本次无关”而放过——**截图里出现的告警默认按缺陷回溯，不得凭关联性判断放过**。
+
+**副作用记录**：修好重启后，App 在 `12:52:11` 把桌面档 `agent-default-model` 写成 `dsh-go / longcat-2.5-preview-free`（文件 mtime ＋ composer 显示双证；非本次手工改动，未查明写入方，疑为 App 侧模型选择持久化）。该值符合“免费档优先”口径，故保留。**注意：桌面档 patch 会被 App 侧改写，验证类改动前先备份、改后核对 diff。**
