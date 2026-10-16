@@ -1,13 +1,25 @@
 #!/usr/bin/env node
 // 层3 会话日志分析器：从 session.v4.jsonl.zstd 提取实验指标（系统段稳定性/工具面/收口计数）。
 // 用法：node scripts/l3exp/analyze-arm.mjs <session.v4.jsonl.zstd> [out.json]
-import { readFileSync, writeFileSync } from 'node:fs'
-import { zstdDecompressSync } from 'node:zlib'
+import { writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 
 const file = process.argv[2]
+// 会话日志是 zstd 多帧流：Node 的 zstd 解码只吃首帧（实测），改用 python zstandard 流式读全。
+const PY = [
+  'import sys, io, zstandard',
+  'd = zstandard.ZstdDecompressor()',
+  'with open(sys.argv[1], "rb") as fh:',
+  '    with d.stream_reader(fh) as r:',
+  '        sys.stdout.write(io.TextIOWrapper(r, encoding="utf-8").read())',
+].join('\n')
 let text
-try { text = zstdDecompressSync(readFileSync(file)).toString('utf8') } catch (e) { console.error('DECODE-FAIL', e.message); process.exit(2) }
+try {
+  const r = spawnSync('python', ['-c', PY, file], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  if (r.status !== 0) throw new Error(String(r.stderr).slice(0, 300))
+  text = String(r.stdout)
+} catch (e) { console.error('DECODE-FAIL', e.message); process.exit(2) }
 const lines = text.split('\n').filter(Boolean)
 const counts = {}
 const sys = []
