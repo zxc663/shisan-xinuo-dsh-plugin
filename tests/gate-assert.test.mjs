@@ -90,5 +90,22 @@ const mk = (runCmdImpl, evaluateImpl) => {
   t('T2c 换任务后不再有阶梯前缀', false, r3.message.includes('阶梯'))
 }
 
+// ⑥ 批5·assert-only pass 也触发 concludeTurn（闭环宿主终结；旧形态仅 cmd 路径有 conclude 块）
+{
+  let ctCalled = 0
+  const logs = []
+  const def = buildGateToolDefinition({
+    runCmd: async () => ({ code: 0, stdout: '', stderr: '', timedOut: false }),
+    log: (e) => logs.push(e),
+    onStats: () => {},
+    concludeOnPass: true,
+    acceptance: { list: () => [], register: () => ({ count: 0 }), clear: () => {}, markPassed: () => {}, evaluate: async () => ({ ok: true, detail: '' }) },
+  })
+  const r = await def.execute({ level: 'L1', v: 'x', assert: 'exists:D:\\tmp\\a.txt' }, { concludeTurn: () => { ctCalled++ } })
+  t('CJ1 assert-only pass ⇒ concludeTurn 被调', 1, ctCalled)
+  t('CJ2 返回值标记 concludedTurn', true, r.concludedTurn === true)
+  t('CJ3 落 gate-conclude marked', true, logs.some((e) => e.kind === 'gate-conclude' && e.status === 'marked'))
+}
+
 console.log(`gate-assert: ${pass} pass, ${fail} fail`)
 process.exit(fail > 0 ? 1 : 0)

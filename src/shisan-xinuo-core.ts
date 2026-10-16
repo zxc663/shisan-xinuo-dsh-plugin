@@ -840,9 +840,27 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
             realExit: 0, evidence: 'strong', assertions: formatAssertionResults(assertResults), ...(summary ? { summary } : {}),
           })
           deps.onStats?.('pass', execCtx)
+          // 批5 方向 C·闭环宿主终结（2026-10-16 修复）：assert-only pass 也必须标记 concludeTurn——
+          // 旧形态只有 cmd 路径有 conclude 块 ⇒ assert 路径（最常用）从不终结回合，闭环宿主终结不完整。
+          let concludedTurnA = false
+          if (deps.concludeOnPass) {
+            const ct = (execCtx as { concludeTurn?: () => void }).concludeTurn
+            if (typeof ct === 'function') {
+              try {
+                ct.call(execCtx)
+                concludedTurnA = true
+                void deps.log({ kind: 'gate-conclude', status: 'marked', cmd: `assert:${assertSpec.slice(0, 100)}` })
+              } catch (e) {
+                void deps.log({ kind: 'gate-conclude', status: 'call-error', error: String(e).slice(0, 140) })
+              }
+            } else {
+              void deps.log({ kind: 'gate-conclude', status: 'no-method', ctType: typeof ct })
+            }
+          }
           return {
             status: 'pass' as const, verdict: 'pass', claimedExit: 0, realExit: 0,
             closed: true, evidence: 'strong' as const, assertions: assertResults, ...(summary ? { summary } : {}),
+            ...(concludedTurnA ? { concludedTurn: true } : {}),
             message: `【收口证据】判据=assert(${assertSpec.slice(0, 100)}) ｜ 结果=通过（${formatAssertionResults(assertResults).slice(0, 160)}）｜ 证据强度=强 ｜ 闭环=是 —— 该判据由插件**内联求值**，未经 shell，故不受沙箱/引号影响。${summary ? `\n【交付摘要】${summary.slice(0, 200)}` : ''}`,
           }
         }
