@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批5 附（缺陷修复，2026-10-16）：pinned 判据可被 `assert=` 绕过（洞 A 家族）
+
+- **实机复现**：会话外钉死 `SHISANUO_ASSERTIONS=exists:<不存在的文件>`（登记为 `pinned`）后，模型用 **`assert=`** 收口 → 旧形态下该回合仍判 `ok-tool` 并闭环 ⇒ **「模型不可改写」的最强判据被静默绕过**。
+- **根因（两处）**：①`discipline_gate` 的 **assert-only pass 分支**只评给定 `assert` 规格就返回，**不评已登记断言（含 pinned）**，并置 `onClosed(true)`；②turn-stopping 的早退条件在 `gateClosed`／`unverified` 时直接放行，**跳过了宿主侧断言复核**。
+- **修复**：①assert-only pass 先复核 `acceptance.list()`（含 pinned）——不过即 `assertion-fail`、不闭环、不 markPassed；②早退改为「**有未复核的已登记断言时不早退**」，把复核权交回宿主侧。
+- **验证**：单测 `tests/gate-assert.test.mjs` +3（断言未过⇒assertion-fail／不闭环／全过⇒pass）；**实机**：同一触发下 pinned 成功拦截（`gate-tool status=assertion-fail` → `gate-steer mode=auto-fail`），模型改为**如实报阻塞**（以 `exempt` 走 `unverified`，拒绝为凑 exit 0 伪造目标）。
+
 ## 收口批6 附（2026-10-16）：安装三形态实测＋「安装/peer 结论档」
 
 - **三形态全部实测**：①`file://` 开发态（叠加层挂 `src/*.ts`，裸/实战/预览三档均通）；②**目录 bundle**（`dsh plugin add <dir>`：无警告、`--dump-config` 含 `- id: shisanxinuo-core`）；③**tgz**（干净克隆打包＋装载：无警告、组合树含插件层，产物 78 KB）。附：`dsh.bundle` 缺失时的症状与 `prepack` 前置。
