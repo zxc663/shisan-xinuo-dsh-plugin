@@ -1,5 +1,13 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 层3 实验补测（2026-10-16）：`cached_tokens%` 由「不可测」转**真测**（H1 加固＋H2 新维度）
+
+- **发现**：宿主现已在会话日志回传 `usage`，**含 `cacheReadTokens`**（批2 跑分时该字段全为零，故当时按预注册记为「不可测/代理口径」）。实测样本：`{"inputTokens":284,"totalTokens":10285,"cacheReadTokens":9920}`。
+- **四臂真测**（`scripts/l3exp/analyze-arm.mjs` 扩展 usage 聚合；证据 `docs/evidence/layer3-20261016/*-analysis.json` 已刷新）：缓存命中 **A1 91.7%／A2 97.3%／B1 94.6%／B2 90.9%**。
+  - **H1 加固**：常量横幅把**未缓存输入砍 −66%**（69,001→23,385）、命中率 +5.6pt——动态横幅的 token 税从「代理口径」变成真数字。
+  - **H2 新维度**：披露开启把未缓存输入推高 **+248%**（115,436→401,556）、总 token **+105%**、命中率 −3.7pt——披露的代价不止墙钟，还有**缓存税**。
+- 落档：结果档 §2b（新）＋§6 边界改判；`completion-signal-validity-plan-20261013.md` 追加 **R21**（R7 的「不可测」裁定不再成立，本电池不重跑）。
+
 ## 公开面质量机检（2026-10-16）：markdown 死链门禁
 
 - 新增 `scripts/check-md-links.mjs`：扫描仓库内全部 `.md`（跳过 node_modules/.git/logs/tmp）的**本地链接**（`](target)`；跳过 http(s)/mailto/纯锚点；剥离 `#anchor` 后按文件所在目录解析）→ 有死链则 exit 1。接线 `tests/md-links.test.mjs` 进 `npm test`（28 套）。
