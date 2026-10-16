@@ -38,6 +38,7 @@ node scripts/tally.mjs --check            # 对账；exit 1 = 发现违规
 | 第三方审计处置 | [docs/audit-response-20261013.md](../docs/audit-response-20261013.md) |
 | 原始数据（可入库部分） | [docs/evidence/](../docs/evidence/) |
 | 真机验证协议 | [docs/gui-verification-protocol-20261013.md](../docs/gui-verification-protocol-20261013.md) |
+| GO 反代免费模型实测（Tier2 验证基建，2026-10-16） | [docs/go-free-models-probe-20261016.md](../docs/go-free-models-probe-20261016.md) |
 
 ## 结论口径：三命题分立
 

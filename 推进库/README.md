@@ -22,6 +22,7 @@
 | 定位与复用策略 | [docs/positioning-and-reuse-strategy-20261013.md](../docs/positioning-and-reuse-strategy-20261013.md) |
 | 变更历史（内部工程版记） | [CHANGELOG.md](../CHANGELOG.md) |
 | 文档总索引 | [docs/README.md](../docs/README.md) |
+| 验证运行口径（默认模型/付费审批，2026-10-16） | [2026-10-16-验证运行口径.md](./2026-10-16-验证运行口径.md) |
 
 ## 本库的硬约束：发行口径
 
