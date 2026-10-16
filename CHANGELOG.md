@@ -5,6 +5,7 @@
 - 测试基建两处失信修复（审计登记在案）：`test/l3-patterns.test.mjs` 去掉本地旧正则、**直连真引擎 `judgeL3`**；`tests/review-claims-check.mjs` 补退出码＋`--expect-fail` 负向控制；新增接线套件 `tests/review-claims-wiring.test.mjs` 常驻把关（normal exit 0 / expect-fail exit 1）。**负向控制实测**：改坏 `L3_PATTERNS`→套件变红（2 MISS／exit 1），还原复绿。
 - 公开文本机检对齐政策：`ai-tool-name` 规则补「端点字面量」豁免（`openai/v1`）＋3 枚回归用例（含豁免不放水对照）；修复上一提交遗留的 1 处违规；工作树 128 受控文件 0 违规。全量 `npm test` **22/22**。
 - 新增 `推进库/2026-10-16-收口任务总表.md`（v5 活表：任务×可计算收益×状态，滚动勾稽）。
+- **预览线档（v0.2.1-alpha.4）首轮兼容实证**：隔离 CLI＋home＋headless 模板档案建成；我方插件 file:// 挂载与本地 bundle 安装均可装；运行时全量注册零失败；GO 反代链路（免费档）回复 `PREVOK` exit 0；系统段两段到达（会话日志解码）；遥测落账。矩阵与装置档见 `docs/preview-line-compat-20261016.md`、`docs/env-matrix-20261016.md`。
 
 ## 探针批＋施工批（2026-10-15）：宿主 API 五证实／concludeTurn 改道／guard 单调层／发行形态打通
 
