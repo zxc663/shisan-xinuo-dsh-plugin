@@ -67,6 +67,9 @@ const FIELD_WHITELIST = {
   'level-divergence': ['turn', 'declared', 'host', 'toolCalls'],
   // C9 只读工具目录
   'tools-catalog': ['level', 'visible', 'denied'],
+  // 批3 方向 A：段指纹（启动基线 + 每请求漂移核对）
+  'section-fingerprint': ['sha256', 'bytes', 'changed'],
+  'section-drift': ['expected', 'actual'],
   // C14 skill 类注入体积（度量；裁剪不在插件面）
   'skill-catalog-cost': ['sourceKind', 'chars'],
   // C16 成本提示（实验）

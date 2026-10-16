@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { exec } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 export const name = 'shisan-xinuo-core'
 
@@ -85,6 +85,13 @@ export const STEER_ANTI_REPEAT = '只做收口动作，不要重复已经给出�
 // 统一出口：所有投递进 inbox 的用户消息走此函数，杜绝四处字面量漂移。 #决策 2026-10-16
 export function userMessage(text: string): { id: string; role: 'user'; content: Array<{ type: 'text'; text: string }>; source: { kind: 'user' } } {
   return { id: randomUUID(), role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' } }
+}
+
+// 段指纹：对注入系统段（名称+正文）取 SHA-256——启动自检 + 每请求核对段漂移（段变更率=0 的遥测底座）。
+export function sectionFingerprint(sections: Array<{ name: string; text: string }>): string {
+  const h = createHash('sha256')
+  for (const s of sections) { h.update(s.name); h.update('\u0000'); h.update(s.text); h.update('\u0001') }
+  return h.digest('hex')
 }
 
 // A9（2026-10-16）：只读管线**前置豁免**——真机误报实证（exec-log 8428：`Get-Content … |
@@ -1558,6 +1565,31 @@ export function apply(ctx: Context) {
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
   let fullAccess = false
 
+  // 段指纹（批3 方向 A）：注入系统段的启动基线 + 每请求漂移核对。
+  // 段=核心纪律（disciplineLoad.text）＋状态横幅（live-status）；横幅仅随 sandbox-mode 切换变化（预期变更，不判漂移）。
+  const liveStatusText = () =>
+    [
+      '## 纪律状态（宿主侧规则·常量）',
+      '- 收口必须真值：调用 discipline_gate 收口（须带**锚定本任务目标**的判据：assert 算子 not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>，宿主内联求值、不过 shell；或 cmd+claimedExit 真实执行）。仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主记 gate-unproven）。文本 GATE 不计入合规（审计 F-01）。',
+      '- 通过时建议携带 summary（交付摘要）：宿主据此保留交付物，防收口后回合文本丢失。',
+      '- 已登记验收判据（discipline_task 登记或用户原文推导）由宿主在回合收尾**自动复核**：全过=收口成立，未过=打回——即使你不调 gate，宿主也会复核。',
+      stats.fullAccess
+        ? '- ⚠完全权限模式：L3 审批卡已按用户全局授权暂停（gate 危险命令仍拒跑）；收口强制/零工具护栏保持生效。'
+        : '- 审批模式：L3 危险域命中会请求确认；只读豁免以规则包为准。',
+    ].join('\n')
+  const renderSections = () => [
+    { name: 'shisanxinuo:core-discipline', text: disciplineLoad.text },
+    { name: 'shisanxinuo:live-status', text: liveStatusText() },
+  ]
+  let sectionFingerprintLast = ''
+  const recordSectionFingerprint = (changed: string) => {
+    if (armMode !== 'C') return
+    const cur = sectionFingerprint(renderSections())
+    const bytes = renderSections().reduce((a, s) => a + s.text.length, 0)
+    sectionFingerprintLast = cur
+    void log({ kind: 'section-fingerprint', sha256: cur.slice(0, 16), bytes, changed })
+  }
+
   // F8 跨回合熔断：每回合上限 1 次（b.steered）之外，再加**整会话**上限—— #决策 2026-10-13 23:55
   // 依据：本电池出现 29 步离群会话，单次失控成本高于十次正常任务。触顶后放行（改为只记录），
   // 由"如实未收口"承担后果（宿主记 unverified/assertion-unresolved），而不是无限打断。
@@ -1607,12 +1639,21 @@ export function apply(ctx: Context) {
           stats.fullAccess = fullAccess
           void log({ kind: 'sandbox-mode', mode: String(rawMode.data?.mode), enforcement: fullAccess ? 'suspended' : 'active' })
           console.log(`[shisan-xinuo] sandbox mode=${String(rawMode.data?.mode)} → L3 enforcement ${fullAccess ? 'SUSPENDED (user full authorization)' : 'active'}`)
+          recordSectionFingerprint('sandbox-mode')
         }
         return
       }
       // v0.4 真值测量：request/header=发给模型的实际工具面（预算裁剪效果以此为准，非根 ctx schemas）
       const rawHeader = event as { type?: unknown; data?: { header?: { tools?: unknown } } }
       if (rawHeader?.type === 'request/header') {
+        // 段指纹核对：每次请求装配重算注入段哈希，漂移即落账（段变更率=0 的遥测）
+        if (armMode === 'C' && sectionFingerprintLast) {
+          const curFp = sectionFingerprint(renderSections())
+          if (curFp !== sectionFingerprintLast) {
+            void log({ kind: 'section-drift', expected: sectionFingerprintLast.slice(0, 16), actual: curFp.slice(0, 16) })
+            sectionFingerprintLast = curFp
+          }
+        }
         const wireTools = rawHeader.data?.header?.tools
         if (Array.isArray(wireTools)) {
           stats.wireTools = wireTools.length
@@ -1886,19 +1927,11 @@ export function apply(ctx: Context) {
     const statusDispose = ctx.systemPrompt.section({
       name: 'shisanxinuo:live-status',
       order: 301,
-      text: () =>
-        [
-          '## 纪律状态（宿主侧规则·常量）',
-          '- 收口必须真值：调用 discipline_gate 收口（须带**锚定本任务目标**的判据：assert 算子 not_exists:<路径> / exists:<路径> / path_contains:<路径>::<子串>，宿主内联求值、不过 shell；或 cmd+claimedExit 真实执行）。仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主记 gate-unproven）。文本 GATE 不计入合规（审计 F-01）。',
-          '- 通过时建议携带 summary（交付摘要）：宿主据此保留交付物，防收口后回合文本丢失。',
-          '- 已登记验收判据（discipline_task 登记或用户原文推导）由宿主在回合收尾**自动复核**：全过=收口成立，未过=打回——即使你不调 gate，宿主也会复核。',
-          stats.fullAccess
-            ? '- ⚠完全权限模式：L3 审批卡已按用户全局授权暂停（gate 危险命令仍拒跑）；收口强制/零工具护栏保持生效。'
-            : '- 审批模式：L3 危险域命中会请求确认；只读豁免以规则包为准。',
-        ].join('\n'),
+      text: liveStatusText,
     })
     console.log('[shisan-xinuo] live status banner installed (constant-form)')
     statusDisposes.push(statusDispose)
+    recordSectionFingerprint('boot')
 
     // ── T1 discipline_gate 工具注册（仅 C 臂；A 惰性/B 纯文本=不注册，保持分组定义纯净）──
     let gateToolDispose: (() => void) | undefined
