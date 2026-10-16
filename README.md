@@ -20,7 +20,7 @@
 
 ## 希望社区帮助验证什么
 
-本仓已有 20 套单测与 20 条可外部重跑的主张，但它们都是**开发态**证据。下面这些问题只能靠真实使用回答，欢迎直接开 Issue 讨论：
+本仓已有 27 套单测与 20 条可外部重跑的主张，但它们都是**开发态**证据。下面这些问题只能靠真实使用回答，欢迎直接开 Issue 讨论：
 
 1. 在**非 Windows** 宿主（macOS／Linux）上，拦截与收口的形态是否与 Windows 一致？
 2. 换成**更小的模型**（8B 级本地模型）后，L3 拦截与收口强制是否仍成立，还是退化为纯摩擦？
@@ -108,7 +108,7 @@ dsh plugin --profile <你的profile> add ./shisan-xinuo-dsh-plugin-<版本>.tgz
 ## 测试与测量
 
 ```bash
-npm test   # 20 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
+npm test   # 27 套单测（scripts/run-all-tests.mjs 跨平台入口；无需构建，Node ≥22.18 默认 type stripping 即可）
 node scripts/tally.mjs --report --freeze   # 出数+冻结快照
 node scripts/tally.mjs --check             # 对账（exit 1=发现违规）
 node scripts/e1-run.mjs                    # headless 三臂实验（环境经上表变量注入）
@@ -147,7 +147,7 @@ node scripts/e1-run.mjs                    # headless 三臂实验（环境经�
 ## 目录
 
 - `src/shisan-xinuo-core.ts` 引擎（单文件：拦截/收口真值/机判/披露接线/遥测）
-- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify）｜ `tests/` 20 套单测
+- `content/` 规则包（Config 面）｜ `scripts/` 测试与工具链（run-all-tests / tally / e1-run / gen-permission-rules / regression-permission-rules / gui-verify / check-docs-index）｜ `tests/` 27 套单测
 - `想法库/` 未验证想法 ｜ `推进库/` 在推进事项的入口索引 ｜ `验证库/` 可复跑证据与结论口径
 - `.github/` Issue 与 PR 模板＋CI ｜ `SECURITY.md` 安全披露（含「不是安全边界」声明）｜ `LICENSE` MIT
 - `docs/` Config 契约/实验预注册与报告/路线图/方向校准报告/GUI 验证规程 ｜ `CHANGELOG.md` 版本记录（内部）

@@ -637,7 +637,7 @@ export function isVAnchored(v: string | null | undefined): boolean {
   )
 }
 
-// C3（第一档：只记录不改判定）：判级当前由**模型自填**（args.level），而它同时决定工具预算掩码与强制强度—— #决策 2026-10-13 23:55
+// C3（第一档：只记录不改判定）：判级当前由**模型自填**（args.level），而它同时决定工具预算掩码与强制强度（**注：工具预算掩码已于 2026-10-16 退役，判级现为仅观测**）—— #决策 2026-10-13 23:55
 // 等于把安全开关交给被验方。本档先从**命令本身**推一个"宿主视角"的等级用于**比对与落账**，暂不覆盖模型声明。
 // 依据（真实轨迹）：模型把"删除整棵目录树"填成 L1，把"只读仓库识别"也填成 L1。
 export function hostLevelFromCmd(cmd: string | null, judge?: (c: string) => string | null): 'L1' | 'L2' | 'L3' {
@@ -1683,7 +1683,7 @@ export function apply(ctx: Context) {
           if (!b.firstText) b.firstText = t
           b.lastText = t
           // 批3 方向 A（2026-10-16）：判级**仅观测**——自报等级不再驱动工具面裁剪（消除锁级体感/upgrade-ignored→0）。
-          // 仍记录供低报度量（level-divergence）；工具预算只由操作员 env（SHISANUO_BUDGET_LEVEL）受控设定/降档。
+          // 仍记录供低报度量（level-divergence）；2026-10-16 起**不再有工具预算**（运行时裁剪层退役，见 CHANGELOG 批4）。
           const lvl = extractDeclaredLevel(t)
           if (lvl) {
             if (!b.declaredLevel) b.declaredLevel = lvl // C3 第二档：记录自报等级用于"低报度量"
@@ -1710,7 +1710,7 @@ export function apply(ctx: Context) {
           gate: verdict, gateQuality: b.gateTool ? 'qualified' : judgeGateQuality(b.lastText), textClaim,
         })
         // C3 第二档：**只度量、不覆盖**——收口判据已移宿主侧（A1/C2），此处记录"自报低于宿主视角"用于观察。 #决策 2026-10-13 23:55
-        // 不覆盖的理由：等级同时决定**工具预算**；任务实际更大却被按低档削工具，是更危险而非更安全。
+        // 不覆盖的历史理由：等级曾同时决定**工具预算**；任务实际更大却被按低档削工具，是更危险而非更安全。（预算掩码已退役，判级仅观测。）
         if (b.declaredLevel && levelRank(b.declaredLevel) < b.hostLevel) {
           void log({ kind: 'level-divergence', turn: ev.turn, declared: b.declaredLevel, host: b.hostLevel, toolCalls: b.toolCalls })
         }
