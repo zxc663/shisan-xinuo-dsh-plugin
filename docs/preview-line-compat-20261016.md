@@ -28,3 +28,11 @@
 - 本次只做「装得上、跑得动」级；不构成对外兼容承诺（对外宣称待批8 文档终审）。
 - 探索使用免费档模型，未消耗付费额度。
 
+## 复验（2026-10-16 · 收口执行 v5 批3–批5 之后 · 当前 core）
+
+批3（判级仅观测/段指纹/启动自检）、批4（工具裁剪退役）、批5（gate 降级/闭环宿主终结/D2）大改后，**重新在预览线上复验当前 core**：
+
+- 装置：`DSH_HOME=dsh-prev-home`；CLI `dsh-cli-0.2.1-alpha.4`；`--profile prev1` ＋ 叠加层停用快照包 core、改挂工作树当前源（`file://…/src/shisan-xinuo-core.ts`）＋ GO 反代两层。
+- 结果：`arm=C`；`self-check sections=5 gate=true task=true catalog=true conclude=true fp=646b…`（与主绑定线同一段指纹）；两步任务 → `gate-tool status=pass realExit=0 evidence=strong`、`behavior gate=ok-tool qualified`、**`gate-conclude marked`**（assert-only 通道的闭环宿主终结修复在 alpha 线同样生效）。
+- 判定：**双线兼容@当前 core 成立**（装得上、跑得动、收口链完整）。边界同前：不构成对外兼容承诺；零额度消耗（免费档）。
+

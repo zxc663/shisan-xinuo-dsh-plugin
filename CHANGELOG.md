@@ -1,5 +1,9 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批2 附（复验，2026-10-16）：双线兼容 @ 当前 core
+
+- 批3–批5 大改后，在**预览线**（`dsh-cli-0.2.1-alpha.4` ＋ `dsh-prev-home/prev1`）复验**当前 core**（叠加层停用快照包、改挂工作树源）：`arm=C`、`self-check` 全绿（段指纹与主绑定线一致）、两步任务 `gate-tool pass` ＋ `gate-conclude marked`。判定：双线兼容@当前 core 成立（不构成对外兼容承诺）。落档 `docs/preview-line-compat-20261016.md`「复验」节。
+
 ## 收口任务#0（内部准备，2026-10-16）：首个真实外部锚——物料就绪（未提交）
 
 - 新增 `docs/external-anchor/`：`awesome-pr-packet.md`（收录条目 yml＋PR 文案＋**提交前 checklist**）、`trial-guide.md`（外部使用者试用路径与自证三步）、`feedback-template.md`（可复算的反馈字段）。由 `docs/README.md` 索引（索引机检 0/0）。
