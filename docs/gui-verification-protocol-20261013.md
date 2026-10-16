@@ -44,3 +44,10 @@
 - 完全权限会话：L3 退位（既定设计）——**验证必用标准模式**。
 - 审批 seam 事件（`asked/decided`）是 GUI 面最强机证；headless 的 fail-closed **不等价**于 GUI 应答链（无真实应答者）。
 - 本机兜底 ≠ computer-use 正式通道；正式通道可用后可平移（口径不变）。
+
+### 5.1 档位控件定位（2026-10-16 三次尝试的发现；供后续走查省时）
+
+- **顶栏的「标准模式」不是权限/沙箱档位控件**——点它不弹菜单（实测三次：PrintWindow 与全屏抓取都无下拉）。
+- **真正的档位控件=输入框区的权限预设指示器**（文本形如 `@ 工作区内修改`）：三选一「**仅可查看**（readOnly）／**工作区内修改**（workspaceWrite）／**完全权限**（fullAccess）」；切到**完全权限**会先弹**确认对话框**（「确认启用完全权限？」→「启用完全权限」按钮）。
+- 依据：宿主包 `@deepseek-ai/dsh-client-ui-permission-presets`（i18n 键 `preset.readOnly/workspaceWrite/fullAccess` 与 `confirm.title/description/enable`）。
+- **未完成**：以坐标点击触发该指示器菜单的可行坐标未定（新会话欢迎页与已开会话页布局不同，需先抓当页 OCR 取 `@ 工作区内修改` 行的 bounding rect 再点）。→ **全权档 GUI 实机验证（D2）仍待补**。
