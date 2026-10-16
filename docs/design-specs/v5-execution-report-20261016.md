@@ -52,6 +52,8 @@ node scripts/regression-permission-rules.mjs   # 170 例我方↔上游语义对
 node scripts/check-docs-index.mjs && node scripts/check-md-links.mjs
 ```
 
+CI（Linux）：同一套 `npm test` 在 GitHub Actions 双 Node 版本上重跑——推送后以 `gh run list` 结论为准（2026-10-16 曾暴露并修复两处平台盲区：effect 路径判据 POSIX 口径、文档本机绝对路径链接；修复后双绿，见 CHANGELOG「CI 转红修复」节）。
+
 真机/宿主内证据（需宿主与额度，不可外部复跑，已如实标注）：`logs/exec-log.jsonl`、会话日志；四臂聚合已入库 `docs/evidence/layer3-20261016/`。
 
 ## 6. 未验证（0 项）
