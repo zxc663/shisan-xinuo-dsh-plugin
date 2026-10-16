@@ -1,5 +1,15 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批3（2026-10-16）：方向 A＋跳过治理（判级仅观测·段指纹·notice·未知工具 L2·启动自检）
+
+- **段指纹遥测**：`sectionFingerprint()`（对注入系统段取 SHA-256）；启动落基线 `section-fingerprint`，每次 `request/header` 重算核对，漂移落 `section-drift`（段变更率=0 底座）。
+- **判级仅观测**：自报等级**不再驱动工具面裁剪**（消除锁级体感/`upgrade-ignored→0`）；仍记录供低报度量（`level-divergence`）；工具预算只由操作员 `SHISANUO_BUDGET_LEVEL` 受控设定。
+- **`discipline_tools` 上限展示**：目录"当前预算档位"改为 `自报=X（仅观测）；预算=未裁剪（上限=全量）`（GUI 实测 `visible=30`，自报 L1 不裁剪）。
+- **未知工具保守 L2**：新增只读表 `KNOWN_READONLY_TOOLS`＋shell 表 `SHELL_TOOLS`——表外（含宿主自带表之外的新工具）一律按保守 L2，防富环境漏判；单测 `tests/tool-level.test.mjs`。
+- **跳过治理（不静默＋三问质询）**：探针证实宿主 notice 通道（`source.form='notice'` 须带 `summary`，宿主 `modelSwitchNotice` 同形态）；熔断跳过时注入 notice（用户可见）＋三问质询（每任务≤1）；`tests/notice-message.test.mjs`。
+- **启动自检**：一次落账 `self-check`（段数/纪律/预算/收口链开关/段指纹/缺失项），任一处未就绪显式可见（不静默降级）。
+- GUI 实机走查：桌面 DSH 重启载入新 core → `self-check sections=5 gate/task/catalog=true conclude=true fp=646b…` → 新会话三步任务 → `tools-catalog` 上限展示 → write→gate 收口 `gate-ok via=ok-tool`；证据 `D:\tmp\gui-batch3\`。
+
 ## 收口批2（2026-10-16）：层3/D 量化实验（门禁批）＋两个真 bug 修复＋GUI 实机
 
 - **steer/inject 消息身份修复**：新增 `userMessage()` 统一补 `id`＋`role`＋`source.kind`——宿主 `assertMessageEventShape` 要求 user/message 带身份字段，缺失会在下次会话恢复时判 corrupt（B1 实测）。回归套件 `tests/steer-message.test.mjs` 常驻。
