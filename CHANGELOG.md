@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批1（进行中，2026-10-16）：测试基建去假绿＋词表口径对齐＋收口任务总表
+
+- 测试基建两处失信修复（审计登记在案）：`test/l3-patterns.test.mjs` 去掉本地旧正则、**直连真引擎 `judgeL3`**；`tests/review-claims-check.mjs` 补退出码＋`--expect-fail` 负向控制；新增接线套件 `tests/review-claims-wiring.test.mjs` 常驻把关（normal exit 0 / expect-fail exit 1）。**负向控制实测**：改坏 `L3_PATTERNS`→套件变红（2 MISS／exit 1），还原复绿。
+- 公开文本机检对齐政策：`ai-tool-name` 规则补「端点字面量」豁免（`openai/v1`）＋3 枚回归用例（含豁免不放水对照）；修复上一提交遗留的 1 处违规；工作树 128 受控文件 0 违规。全量 `npm test` **22/22**。
+- 新增 `推进库/2026-10-16-收口任务总表.md`（v5 活表：任务×可计算收益×状态，滚动勾稽）。
+
 ## 探针批＋施工批（2026-10-15）：宿主 API 五证实／concludeTurn 改道／guard 单调层／发行形态打通
 
 - **探针批（docs/probe-host-api-20261015.md）**：对实际绑定线 0.2.0-rc.2 宿主包静态取证——`ctx.tools.guard`（单调缝，源码注释确认）、`concludeTurn`、`defineTool`、`workflowEngine`、`ctx.goals` **五个 API 全部存在**；第三方评审 P0-1/P0-3 的「能力普查缺口」成立。

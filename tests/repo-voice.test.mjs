@@ -32,6 +32,9 @@ t('放行：产品语义「用户明确确认」', 0, scanText('需要用户明�
 t('放行：产品语义「用户明示目标」', 0, scanText('用户明示目标/无人值守时按计划自主推进。').length)
 t('放行：技术语「agent/turn-stopping」', 0, scanText('监听 agent/turn-stopping 事件。').length)
 t('放行：竞品机制对照引用', 0, hits('对照 Claude Code 的 Stop hook 机制做语义细分。', 'ai-tool-name'))
+t('放行：技术协议名 openai-completions', 0, hits('请求头按 openai-completions 约定组装。', 'ai-tool-name'))
+t('放行：API 端点字面量 openai/v1', 0, hits('BASE_INF = https://opencode.ai/inference/openai/v1', 'ai-tool-name'))
+t('命中：AI 工具具名（豁免不影响归因形态）', 1, hits('由 OpenAI 完成。', 'ai-tool-name'))
 
 // 全仓工作树：必须零违规（防复发门禁）
 const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'check-voice.mjs')], { cwd: REPO, encoding: 'utf8' })
