@@ -256,5 +256,12 @@
     "STEP-7-OK",
     "STEP-8-OK",
     "STEP-9-OK"
-  ]
+  ],
+  "usage": {
+    "requests": 61,
+    "inputTokens": 401556,
+    "cacheReadTokens": 4010176,
+    "totalTokens": 4420539,
+    "cacheHitPct": 90.9
+  }
 }
