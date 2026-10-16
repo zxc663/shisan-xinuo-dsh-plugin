@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 收口批6（探路，2026-10-16）：组装形态——tgz 形态实测暴露 `dsh.bundle` 缺失（冻结阻塞）
+
+- **形态3（tgz）实测**：`npm pack` 产物内容完整（`lib/shisan-xinuo-core.js`＋`content/*`＋`cordis.patch.yml`，共 10 项）；但 `dsh plugin --profile t6 add <tgz>` 仅装成普通依赖并**警告**：`declares no dsh.bundle — installed as a plain dependency, not a profile layer` ⇒ **包不会作为插件层加载**（失效）。
+- **根因**：悬置（未提交）的 `package.json` 删除了 `dsh.bundle` 清单并把版本由 `1.0.0-rc.1` 改为 `1.0.0`；而 `dsh.bundle` 是 `dsh plugin add` 识别可安装 bundle 的硬要求（见 `release-and-versioning-plan` §二）。
+- **阻塞面**：批6（切包/切形/引导/三形态）与批8（tag/Release/打包就绪）都必须改 `package.json`，与批2 立下的「悬置态 package.json 不动」相抵 ⇒ **两批在此冻结下无法收口**。
+- **待决**：①冻结是否解除（含 `dsh.bundle` 恢复/重定与 `prepack`）；②`dsh.bundle` 缺失系有意过渡还是事故；③批5「宿主默认判据」保严格 vs 要指标。
+
 ## 收口批5（进行中，2026-10-16）：方向 C＋小件——gate 降级＋outcome-loop 复测＋基线度量
 
 - **gate 降级（本批已落）**：`discipline_gate` 在"无 cmd/assert"时——若给了 `exempt`（未验证声明）→ 返回 **`unverified`**（诚实未验证：非 pass、非 error、不计完成），回合以 `behavior.gate=unverified` 如实登记且不再打回；无 `exempt` 仍为 `error`（提示补 assert 或如实声明）。修掉"只读/语义型任务无合规收口形态"的真缺口（GUI 批4 会话实测 `error:empty-cmd`）。单测 `tests/gate-tool.test.mjs` +6；tally `behavior.gate` 白名单同步。
