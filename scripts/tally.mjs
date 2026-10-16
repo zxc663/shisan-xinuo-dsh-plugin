@@ -43,6 +43,8 @@ const FIELD_WHITELIST = {
   'probe-conclude': ['status', 'error'],
   'guard-deny': ['tool', 'cmd', 'reason'],
   'auto-closeout': ['turn', 'count', 'result', 'table'],
+  // 决策 2（2026-10-16）：窄版宿主默认判据的独立记账（动作落地级，不与 goal 级 auto-closeout 混计）
+  'effect-closeout': ['turn', 'count', 'table'],
   // F2 零工具调用盲区（SHISANUO_ZEROTOOL_GUARD=1 时落账）
   'zerotool-claim': ['turn', 'tail'],
   // F8 跨回合熔断

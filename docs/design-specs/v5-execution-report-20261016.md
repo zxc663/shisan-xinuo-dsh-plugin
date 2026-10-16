@@ -32,19 +32,21 @@
 - 对外面：`README.md`（v5 对齐）、`验证库/已知边界与接受风险.md`、`验证库/外部语料-上游合规向量.md`、`docs/external-anchor/`（PR 包/试用指引/反馈模板）、`docs/design-specs/install-and-peer-conclusion-20261016.md`。
 - 机检门禁：`scripts/{check-voice,claims-check,tally,check-docs-index,check-md-links}.mjs` 与 28 套 `tests/`；证据 `docs/evidence/layer3-20261016/`。
 
-## 4. 待裁四项（挡住批5/6/7/8 收口）
+## 4. 四项已裁与落定（2026-10-16）
 
-| # | 决策 | 影响面 |
-|---|---|---|
-| 1 | 本地未提交 `package.json`（删了 `dsh.bundle`）**丢弃/保留/并入切包** | 批6 切包、批8 C8(=`prepack`)、任务#0 PR 递交 |
-| 2 | **宿主默认判据**：保严格（仅用户原文派生）／要指标（加自副作用默认判据） | 批5 指标（auto-closeout ≥80%／steer↓≥50%）是否达成 |
-| 3 | 「层标签 100%」口径：能力矩阵状态标签（已 8/8）／findings 层1-6 逐条打标 | 批7 判据 |
-| 4 | **B5 对外动作**：tag/Release/SHA256SUMS＋awesome PR 递交 | 批7 B5、批8 对外面 |
+| # | 裁决 | 落定动作 | 状态 |
+|---|---|---|---|
+| 1 | 本地 `package.json` WIP **丢弃** | `git restore package.json`（`dsh.bundle` 回提交态、版本回 `1.0.0-rc.1`）；WIP 副本留 `D:/tmp/probe/package.json.wip-20261016` | 已执行 |
+| 2 | 宿主判据＝**严格为主＋物理副作用子集** | 新增窄版默认判据（`observeEffect`／`deriveEffectAssertions`）＋独立记账 `effect-closeout`＋开关 `SHISANUO_EFFECT_ASSERT`；新增 `tests/effect-assert.test.mjs`（31 例），`npm test` 29 套 | 已实现；**指标变化待样本轮实测（未验证）** |
+| 3 | 「层标签」＝**矩阵 8/8 ＋ findings 一行口径** | 能力矩阵状态标签全覆盖（不新增逐条打标）；`findings-20261016.md` 顶部加口径声明 | 已执行 |
+| 4 | **不对外发布** | tag／Release／SHA256SUMS／外部收录 PR 全部搁置；`docs/external-anchor/` 物料留存不发 | 已执行（物料冻结） |
+
+**与裁决 2 相关的记账纪律**：目标级 `auto-closeout`（有已登记断言才跑）与动作级 `effect-closeout`（仅物理副作用）**分列上报**——批5 的「auto-closeout ≥80%／steer ↓≥50%」目标须指明对哪一列成立；两列相加即是把"动作落地"冒充"目标达成"。
 
 ## 5. 复跑（信任可传递）
 
 ```bash
-npm test                          # 28 套：单测＋公开文本机检＋docs 索引机检＋md 死链机检
+npm test                          # 29 套：单测＋公开文本机检＋docs 索引机检＋md 死链机检
 node scripts/claims-check.mjs     # 机制级主张（外部可重跑）
 node scripts/regression-permission-rules.mjs   # 170 例我方↔上游语义对照，期望 0 不一致
 node scripts/check-docs-index.mjs && node scripts/check-md-links.mjs

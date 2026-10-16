@@ -90,3 +90,26 @@ node <上游包>\scripts\repair-session-logs.mjs repair --home <DSH_HOME>   # �
 **新增铁律 · 临时 insert 撤除清单**：任何 dev-mount / 临时 insert 落地时，**同一处**必须写全三件——①撤除条件（何时算测完）②撤除动作（删哪几行）③撤除后复验判据（重启 ＋ 取哪条机证）。事故复盘：本次①写在注释里、②从未执行；且红字在早期 OCR 截图中出现过，被误判为“与本次无关”而放过——**截图里出现的告警默认按缺陷回溯，不得凭关联性判断放过**。
 
 **副作用记录**：修好重启后，App 在 `12:52:11` 把桌面档 `agent-default-model` 写成 `dsh-go / longcat-2.5-preview-free`（文件 mtime ＋ composer 显示双证；非本次手工改动，未查明写入方，疑为 App 侧模型选择持久化）。该值符合“免费档优先”口径，故保留。**注意：桌面档 patch 会被 App 侧改写，验证类改动前先备份、改后核对 diff。**
+### 5.4 桌面档 shell 通道被 Windows ACL 阻断的成因与修法（2026-10-16 实测）
+
+**症状**：桌面档会话里的 shell（pwsh）通道**所有**命令起不来，报
+`SetNamedSecurityInfoW failed (Win32 5): grantWrite(<工作区根>)`；`read/glob/grep` 不受影响（只有 shell 通道要过沙箱授权）。
+
+**根因（宿主自带文档原文 ＋ 本机 ACL 取证）**：
+
+- 沙箱后端建「工作区能力」时，要在**同一次** `SetNamedSecurityInfoW` 里写三件——路径派生的**能力 ACE**、Everyone 的 `FILE_DELETE_CHILD` **拒绝**、目录的 **Low 完整性标签**；
+- 标签在 **SACL** 里，而"所有者隐含权"只覆盖 `READ_CONTROL`／`WRITE_DAC` ⇒ 这次组合写还要 **`WRITE_OWNER`**（宿主文档原话：*"A directory whose DACL grants only Modify now fails the grant loudly instead of silently skipping the confinement."*）；
+- 本机 `D:\` 根的 ACL 是 `Authenticated Users:(M)` 继承 ⇒ 程序创建的工作区根**只有 Modify、没有 `WRITE_OWNER`** ⇒ Win32 5。资源管理器/桌面创建的目录通常带**签名用户完全控制**的显式 ACE，故不受影响。
+
+**判据（对照实验，非推测）**：缺授权的目录上做"同值改所有者"（需 `WRITE_OWNER`）→ `Access is denied`；已授权的仓库目录 → 通过。
+
+**修法（按目录执行；只加不改，不动内容与所有者）**：
+
+```powershell
+icacls <工作区根> /save <备份>.dat          # 先备份 DACL（icacls /restore 可回滚）
+icacls <工作区根> /grant "*<签名用户 SID>:(OI)(CI)F"
+```
+
+**注意**：目录上形如 `S-1-4-…:(OI)(CI)(W,D,DC)` 的显式 ACE **不是**外来污染——那是沙箱自己的"工作区能力 ACE"（由路径派生、每个工作区一个 SID），**不要删**；要修的是"签名用户缺完全控制"这一条。宿主自带诊断脚本（`diagnose-windows-sandbox-acl`）做的是同一件事（含祖先目录、备份与逐项复核）。
+
+**副作用记录**：桌面档 `cordis.patch.yml` 会被 App 侧改写（实测 2026-10-16 12:52:11 写入 `agent-default-model`）⇒ **改桌面档前先备份、改后核对 diff**。

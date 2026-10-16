@@ -2,6 +2,14 @@
 
 - **前提更正（四副本）**：上条「宿主已回传 `usage`」推翻了一处被反复引用的硬约束——「宿主不回传用量、报 token 即为编造」。逐处加日期化更正（保留原句）：`README.md`（`SHISANUO_COST_HINT` 行）、`docs/plugin-assessment-and-roadmap-20261013.md`、`docs/reuse-research-landing-options-20261015.md`、`docs/todo-next-20261013.md`。**成本提示实现未改版**（仍只报计数）——按「边际收益小则不推进」，改报真 token 留作可点名小项。
 
+## 批5 续（2026-10-16）：窄版宿主默认判据 + 会话拒载修复 + 四项决策落定
+
+- **决策 2 落地（判据面唯一语义变更）**：新增**窄版宿主默认判据**——宿主只从**亲见的工具副作用**派生断言（`observeEffect`：写类→`exists`、删除类→`not_exists`；命令类**只认删除**且必须过 B2.1 误阻守卫，**不**派生 `cmd_exit0`——与"禁跑一条无关命令凑 exit 0"同一口径），且仅在「本回合**无任何已登记断言**（pinned／用户原文派生／tool 自登记）且未闭环」时触发。语义边界如实标注：**证明"动作落地"、不证明"目标达成"**，故**独立记账** `effect-closeout`（不从目标级 `auto-closeout` 借分，也不写 `assertionsPassedAt`）。开关 `SHISANUO_EFFECT_ASSERT=0` 关闭（默认开）。新增单测 `tests/effect-assert.test.mjs`（31 例：含守卫反例与"文件删了断言必须翻"的可证伪联动、测试自身负向控制）；`npm test` 28→29 套。**未验证**：指标变化（`auto-closeout`／steer）需样本轮实测，本轮只交实现与单测。
+- **指标记账口径（防自证化）**：目标级 `auto-closeout`（有已登记断言）与动作级 `effect-closeout`（仅物理副作用）在遥测里**分列**；批5 的 ≥80% 目标对哪一列成立，须在样本轮里分开报——把两列相加等于把"动作落地"冒充"目标达成"。
+- **会话拒载事故修复**：桌面档 dev-mount 遗留 `permission-rules` → 宿主读路径拒载 18 个会话日志（`permissionRules/decision` 未带 `ignorable` 标记）；处置=撤挂载（`.bak-20261016-remove-permrules`）＋上游 `repair-session-logs.mjs repair` 补标记（18/18，复扫 `0 affected`）；验收=GUI 无红字截图＋该会话日志 mtime 前进并追加宿主原生行 `session/end-seed`（"被真加载"的机器证据）。规程落 `docs/gui-verification-protocol-20261013.md §5.3`（含铁律：临时 insert 必须登记"撤除条件／撤除动作／撤除后复验判据"）。
+- **四项决策落定**：①本地 `package.json` WIP **丢弃**（`git restore`，`dsh.bundle` 回到提交态；WIP 副本留 `D:/tmp/probe/`）②宿主判据＝**严格为主＋物理副作用子集**（见上）③「层标签」＝只保留能力矩阵状态标签（8/8）＋findings 顶部一行口径声明 ④**不对外发布**（tag／Release／SHA256SUMS／外部收录 PR 全部搁置，物料留存不发）。
+- **环境修复（非插件面，如实记录）**：DSH 桌面档 shell 通道被 Windows ACL 阻断（`SetNamedSecurityInfoW failed (Win32 5): grantWrite(<工作区根>)`）——根因＝工作区根 DACL 只到 Modify、缺 `WRITE_OWNER`，而沙箱要一次写入「能力 ACE＋world 删除拒绝＋Low 标签」三件套（标签在 SACL 内）；按官方诊断口径给签名用户补完全控制（对照实验：无授权目录改所有者 `Access is denied`／已授权目录通过），并复核 DSH 用过的 5 个工作区根。详见 `docs/gui-verification-protocol-20261013.md §5.4`。
+
 ## 收口批9（2026-10-16）：收口执行报告 v5
 
 - 新增 `docs/design-specs/v5-execution-report-20261016.md`：逐批状态（批1–4 全清；批5/6/7/8 除待裁项外落地）＋三个可计算指标真值（H1/H2 含真缓存、收口基线 steer77/ok-auto12、D2 5→0）＋交付物索引＋**待裁四项与影响面**＋复跑命令（信任可传递）＋未验证清单（仅 1 项）。对外发送仍逐项呈批。

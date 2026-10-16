@@ -98,6 +98,7 @@ dsh plugin --profile <你的profile> add ./shisan-xinuo-dsh-plugin-<版本>.tgz
 | `SHISANUO_LOG_DIR` | 覆盖遥测日志目录（默认 `<仓库>/logs`）；`SHISANUO_LOG_DISABLE=1` 关闭落盘 |
 | `SHISANUO_ASSERTIONS` | 会话外钉死验收断言（pinned；格式同 `discipline_task`：`kind:payload; …`）——模型不可移除/改写，clear/replace 均无效 |
 | `SHISANUO_ASSERT_LAYER` | 启用**启发式断言推导**（默认关）：判据来源默认以会话外锚（pinned）与工具自登记为一线，推导仅作可选辅助——依据=电池实测误推导 3/13 且关闭后步数 8→6、每任务累计上下文 −41% |
+| `SHISANUO_EFFECT_ASSERT` | 关闭**窄版宿主默认判据**（默认开；`=0` 关闭）：宿主只从**亲见的工具副作用**派生断言（写类→`exists`、删除类→`not_exists`；命令类只认删除且过误阻守卫），且仅在该回合**无任何已登记断言**（pinned／用户原文派生／tool 自登记）时生效。它证明**动作落地**、不证明**目标达成**，故独立记账 `effect-closeout`（不与目标级 `auto-closeout` 混计）。依据=2026-10-16 批5 续执行单（严格为主＋物理副作用子集） |
 | `SHISANUO_L3_OFF` / `SHISANUO_NO_ASSERT` | 研究旗标（实验用，默认关）：拦截退位为仅记录／关闭断言面（不推导、不注册登记工具）——用于对照实验 |
 | `SHISANUO_ZEROTOOL_GUARD` | F2 盲区护栏（默认关）：开启后，「零工具调用却声称完成」的回合会被记录（`zerotool-claim`）并轻量提示一次（每回合上限 1）——该类回合原本不进入任何收口检查 |
 | `SHISANUO_PROBE_TOOLS` | 工具注册语义探针（默认关，**仅探测会话使用**）：启动时尝试一次**同名工具注册**并打印结果（全局＝拒绝／per-agent＝接受），用于验证"改宿主工具"能力面。产物见 `docs/extension-design-20261014.md` §三.1 |

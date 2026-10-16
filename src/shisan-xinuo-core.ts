@@ -685,6 +685,146 @@ export function shouldSteerNow(usedSoFar: number, cap: number): boolean {
   return usedSoFar < cap
 }
 
+// ── 决策 2（2026-10-16）：宿主默认判据·窄版——只从**亲见的工具副作用**派生断言 ─────────────
+// 口径（决策：严格为主 + 物理副作用子集；依据＝本批执行单 2026-10-16）：
+//   ① 派生输入是**工具调用参数**（宿主亲见的动作），不是模型叙述（claim）——避免自述链；
+//   ② 只产出外部可验的物理事实（路径存在性），不产出"目标达成"类判断；
+//   ③ 优先级**最低**：仅当该回合没有任何已登记断言（pinned／用户原文派生／tool 自登记）时启用；
+//   ④ 独立记账（kind=effect-closeout）：它证明"动作落地"，不证明"目标达成"，不得与 goal 级 auto-closeout 混计。
+// 开关：SHISANUO_EFFECT_ASSERT=0 关闭（默认开）。
+export const EFFECT_ASSERT_LAYER = process.env.SHISANUO_EFFECT_ASSERT !== '0'
+const EFFECT_WRITE_TOOL_RE = /\b(write|edit|patch|apply_patch|create|mkdir|touch|move|rename|copy)\b/i
+const EFFECT_DELETE_TOOL_RE = /\b(delete|remove|unlink|erase|rmdir)\b/i
+const EFFECT_PATH_KEY_RE = /^(file_?path|path|filename|file|target|to|from|dest|destination|source|src|dst)$/i
+const EFFECT_SKIP_KEY_RE = /^(content|text|body|new_?string|old_?string|patch|diff|command|cmd|script)$/i
+
+export interface ObservedEffect {
+  kind: 'exists' | 'not_exists'
+  target: string
+}
+
+/** 抽字符串里的首个**绝对盘符路径**（去尾标点；带通配符的丢弃——它不是可验证的确定目标）。 */
+export function firstAbsolutePath(s: string): string | null {
+  if (!s) return null
+  const cands = [
+    ...[...s.matchAll(QUOTED_PATH_RE)].map((m) => m[1]),
+    ...[...s.matchAll(PATH_TOKEN_RE)].map((m) => m[0]),
+  ]
+  for (const c of cands) {
+    const t = c.replace(/[.,;，。；：:]+$/, '').replace(/[\\/]+$/, '')
+    if (!/^[A-Za-z]:[\\/]/.test(t)) continue
+    if (/[*?]/.test(t)) continue
+    if (t.length < 4) continue
+    return t
+  }
+  return null
+}
+
+/** 从调用参数里取目标路径：路径类键优先，长正文（content/patch/…）不参与（防把正文里的路径当目标）。 */
+function pathFromCallArgs(args: Record<string, unknown>): string | null {
+  const preferred: string[] = []
+  const rest: string[] = []
+  for (const [k, v] of Object.entries(args)) {
+    if (typeof v !== 'string' || !v) continue
+    if (EFFECT_SKIP_KEY_RE.test(k)) continue
+    if (EFFECT_PATH_KEY_RE.test(k)) preferred.unshift(v)
+    else if (v.length <= 300) rest.push(v)
+  }
+  for (const s of [...preferred, ...rest]) {
+    const t = firstAbsolutePath(s)
+    if (t) return t
+  }
+  return null
+}
+
+/**
+ * 观察一次工具调用是否留下**物理副作用**（抽不到即 null——宁缺勿造）。
+ * 命令类只认"删除"且必须过 B2.1 误阻守卫（举例/备份/恢复/目录内容/通配）：命令≠目标，
+ * 与"禁跑一条无关命令凑 exit 0"同一口径（命令类**不**派生 cmd_exit0）。
+ */
+/** 调用参数归一化：宿主 `tool/call` 事件的 `arguments` 实测是 **JSON 字符串**（会话日志实证），
+ * 本地单测则常传对象 ⇒ 两种形态都要吃。顺带覆盖"裸命令串"（非 JSON）的 shell 调用。 */
+function argsAsObject(args: unknown): Record<string, unknown> | null {
+  if (typeof args === 'string') {
+    try {
+      const p = JSON.parse(args) as unknown
+      return p && typeof p === 'object' ? (p as Record<string, unknown>) : null
+    } catch {
+      return null
+    }
+  }
+  return args && typeof args === 'object' ? (args as Record<string, unknown>) : null
+}
+
+export function observeEffect(name: string | null | undefined, args: unknown): ObservedEffect | null {
+  const n = String(name ?? '')
+  if (!n || args === null || args === undefined) return null
+  // 工具名先归一化（`delete_file`/`apply_patch`/`fs.write` → 空隔分隔的词），否则 `\bdelete\b` 在
+  // 下划线/点分隔的名字上不命中（单测抓到：delete_file 被当成未知工具而漏判）。
+  const flat = n.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  const isShell = SHELL_TOOLS.has(n.toLowerCase())
+  const isWriteTool = EFFECT_WRITE_TOOL_RE.test(flat)
+  const isDeleteTool = EFFECT_DELETE_TOOL_RE.test(flat)
+  if (!isShell && !isWriteTool && !isDeleteTool) return null
+  if (isShell) {
+    const cmd = extractCommand({ name: n, arguments: argsAsObject(args) ?? args })
+    if (!cmd) return null
+    if (!DELETE_INTENT_RE.test(cmd) || DELETE_NEGATION_RE.test(cmd)) return null
+    if (ILLUSTRATION_RE.test(cmd) || RESTORE_RE.test(cmd) || BACKUP_RE.test(cmd) || CONTENTS_RE.test(cmd)) return null
+    const t = firstAbsolutePath(cmd)
+    return t ? { kind: 'not_exists', target: t } : null
+  }
+  const obj = argsAsObject(args)
+  if (!obj) return null
+  const t = pathFromCallArgs(obj)
+  if (!t) return null
+  return { kind: isDeleteTool && !isWriteTool ? 'not_exists' : 'exists', target: t }
+}
+
+/** 观察集 → 断言（去重、量化上限 4；同目标同时有 exists/not_exists 时后者优先=最终状态口径）。 */
+export function deriveEffectAssertions(effects: readonly ObservedEffect[]): AcceptanceAssertion[] {
+  const byTarget = new Map<string, ObservedEffect>()
+  for (const e of effects) {
+    const key = e.target.toLowerCase()
+    const prev = byTarget.get(key)
+    if (!prev || (prev.kind === 'exists' && e.kind === 'not_exists')) byTarget.set(key, e)
+  }
+  const out: AcceptanceAssertion[] = []
+  for (const e of byTarget.values()) {
+    out.push(e.kind === 'exists' ? { kind: 'exists', path: e.target } : { kind: 'not_exists', path: e.target })
+    if (out.length >= 4) break
+  }
+  return out
+}
+
+// 副作用缓冲（决策 2 采集面）：`tool/call` **会话事件投影里没有 arguments**（实测 keys=type|turn|content|endKind|name），
+// 参数只在 `tools/pre-execute` 钩子里是完整对象 ⇒ 采集放钩子、回合末按"本回合出现过的工具名"对账取用（有界、用后即取走）。
+const observedEffects: Array<ObservedEffect & { name: string }> = []
+const OBSERVED_EFFECT_CAP = 16
+
+/** pre-execute 钩子侧采集（用后即取走：见 takeObservedEffects）。 */
+export function noteObservedEffect(exec: { name?: string; arguments?: unknown }): void {
+  if (!EFFECT_ASSERT_LAYER) return
+  const eff = observeEffect(exec?.name, exec?.arguments)
+  if (!eff) return
+  observedEffects.push({ ...eff, name: String(exec?.name ?? '').toLowerCase() })
+  if (observedEffects.length > OBSERVED_EFFECT_CAP) observedEffects.splice(0, observedEffects.length - OBSERVED_EFFECT_CAP)
+}
+
+/** 回合末取走与本回合工具名匹配的副作用（清出缓冲，避免跨回合/跨会话串账）。 */
+export function takeObservedEffects(toolNames: readonly string[]): ObservedEffect[] {
+  const want = new Set(toolNames.map((n) => String(n).toLowerCase()))
+  const taken: ObservedEffect[] = []
+  for (let i = observedEffects.length - 1; i >= 0; i--) {
+    const e = observedEffects[i]
+    if (want.size === 0 || want.has(e.name)) {
+      taken.push({ kind: e.kind, target: e.target })
+      observedEffects.splice(i, 1)
+    }
+  }
+  return taken.reverse()
+}
+
 // G5/C5 失败阶梯：同一个会话内 gate 连续失败时逐级收紧要求，避免"连试数次才凑到一条无关命令"。 #决策 2026-10-13 23:55
 // 依据：真实轨迹里三次失败（ls／dir /b／dir /m）后第四次用 `cd D:\` 通过——试凑本身就是成本与风险。
 // n=1：给要求结构（C1 已实现）；n=2：只收算子形态；n>=3：停止试凑，交回人在会话外裁决。
@@ -1380,6 +1520,7 @@ export function apply(ctx: Context) {
     const cmd = extractCommand(exec)
     const hit = activeJudge(String(cmd))
     void log({ kind: 'pre-execute', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit })
+    noteObservedEffect(exec) // 决策 2：物理副作用采集（本缝是唯一能拿到完整 arguments 的地方）
     if (hit) {
       stats.intercepted++
       if (!L3_ENFORCE) {
@@ -1456,7 +1597,7 @@ export function apply(ctx: Context) {
   }
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean; costHinted?: boolean }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; steered: boolean; costHinted?: boolean; toolNames: string[] }>()
   let inventoryLogged = false
   // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
   let lastWireNames: string[] = []
@@ -1663,7 +1804,7 @@ export function apply(ctx: Context) {
       let b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== ev.turn) {
         // 只保留当前回合桶；换回合即重置（上一回合已在 turn/end 结账）
-        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, declaredLevel: null, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false }
+        b = { turn: ev.turn, toolCalls: 0, hostLevel: 0, declaredLevel: null, firstText: '', lastText: '', gateTool: false, gateVerdict: null, gateClosed: false, closedAuto: false, steered: false, toolNames: [] }
         turnBuckets.clear()
         turnBuckets.set(bucketKey, b)
       }
@@ -1677,6 +1818,9 @@ export function apply(ctx: Context) {
           activeJudge,
         )
         if (levelRank(callLevel) > b.hostLevel) b.hostLevel = levelRank(callLevel)
+        // 决策 2：记本回合出现过的工具名（副作用本体在 pre-execute 钩子侧采集——会话事件投影不带 arguments）
+        const callName = String((ev as { name?: unknown }).name ?? '')
+        if (callName && b.toolNames.length < 8 && !b.toolNames.includes(callName)) b.toolNames.push(callName)
       } else if (ev.type === 'assistant/message') {
         const t = assistantText(ev.content)
         if (t) {
@@ -1810,6 +1954,39 @@ export function apply(ctx: Context) {
       // 洞修复（2026-10-16）：**有未复核的已登记断言（含 pinned）时不早退**——否则 pass／unverified 的回合
       // 会绕过宿主侧复核（模型可用 `assert=` 或 `exempt` 绕开"模型不可改写"的钉死判据）。
       if (!assertionsOpen && (b.steered || (b.gateVerdict === 'pass' && b.gateClosed) || b.gateVerdict === 'unverified')) return
+      // ── 决策 2（2026-10-16）·窄版宿主默认判据：只复核"亲见的物理副作用" ──
+      // 触发：本回合**无任何已登记断言**（pinned／用户原文派生／tool 自登记）且未闭环（上一条已排除 steer 过/已闭环/未验证）。
+      // 语义边界（如实）：它证明**动作落地**，不证明**目标达成** ⇒ 独立记账 kind=effect-closeout，
+      // 不写入 taskRecords.assertionsPassedAt（严格路径与被验目标不受影响），也不与 goal 级 auto-closeout 混计。
+      if (EFFECT_ASSERT_LAYER && !assertionsOpen) {
+        const eff = deriveEffectAssertions(takeObservedEffects(b.toolNames))
+        if (eff.length > 0) {
+          const effResults: AssertionResult[] = []
+          for (const x of eff) effResults.push(await evaluateAssertion(x, { judge: gateJudge }))
+          const effFailed = effResults.filter((r) => !r.ok)
+          if (effFailed.length === 0) {
+            b.closedAuto = true
+            void log({ kind: 'effect-closeout', turn: payload.turn, count: effResults.length, table: formatAssertionResults(effResults) })
+            console.log(`[shisan-xinuo] effect-closeout (动作落地级) for turn ${payload.turn} (${effResults.length} effects)`)
+            return
+          }
+          b.steered = true
+          const steerKeyE = currentTaskId || bucketKey
+          const usedE = steerCounts.get(steerKeyE) ?? 0
+          if (!shouldSteerNow(usedE, STEER_CAP)) {
+            void log({ kind: 'gate-steer-capped', turn: payload.turn, used: usedE, cap: STEER_CAP, mode: 'effect-fail' })
+            console.log(`[shisan-xinuo] steer capped for session (used=${usedE}, cap=${STEER_CAP}) → 放行并记为未收口`)
+            skipSurface('effect-fail', usedE)
+            return
+          }
+          steerCounts.set(steerKeyE, usedE + 1)
+          void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'effect-fail', assertions: eff.length })
+          const effFailLine = effFailed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
+          agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主按本回合**实际工具副作用**复核：✘ ${effFailLine}。你以为落地的动作没有落地（或已被撤销/目标不符）——请核实目标真实状态后收口；确实无法完成则如实报告被阻塞原因（宿主记为未收口）。文本 GATE 不计入合规。`))
+          console.log(`[shisan-xinuo] effect-closeout FAIL → steer for turn ${payload.turn} (${effFailed.length}/${effResults.length} failed)`)
+          return
+        }
+      }
       // ── 审计 F-01 修复：宿主自动收口——断言开启时宿主直接复核（不等模型记得调 gate）──
       if (assertionsOpen) {
         const results: AssertionResult[] = []
