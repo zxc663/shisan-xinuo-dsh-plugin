@@ -6,6 +6,8 @@
 - **根因（两处）**：①`discipline_gate` 的 **assert-only pass 分支**只评给定 `assert` 规格就返回，**不评已登记断言（含 pinned）**，并置 `onClosed(true)`；②turn-stopping 的早退条件在 `gateClosed`／`unverified` 时直接放行，**跳过了宿主侧断言复核**。
 - **修复**：①assert-only pass 先复核 `acceptance.list()`（含 pinned）——不过即 `assertion-fail`、不闭环、不 markPassed；②早退改为「**有未复核的已登记断言时不早退**」，把复核权交回宿主侧。
 - **验证**：单测 `tests/gate-assert.test.mjs` +3（断言未过⇒assertion-fail／不闭环／全过⇒pass）；**实机**：同一触发下 pinned 成功拦截（`gate-tool status=assertion-fail` → `gate-steer mode=auto-fail`），模型改为**如实报阻塞**（以 `exempt` 走 `unverified`，拒绝为凑 exit 0 伪造目标）。
+- **同族扫描（T10 教训：缺陷成族）**：把 core 里**全部「宣告闭环」点**（`onClosed(true)`／`closed:true`／`markPassed`／`concludedTurn`，共 5 处）逐一核对——均须复核**已登记断言（含 pinned）**；结论=1 处即上述 assert-only（已修），其余 4 处本已合规。补 cmd 路径显式用例（`P3a/P3b`）把该不变量钉住。
+- **连带修复（测试暴露）**：cmd 路径直接用 `evaluate` 返回值（假定带 `.assertion`）——非符合形状的求值器会让 `explainAssertion` 崩；改为按 assert 路径同款**规范化**（`{assertion:a, ok:!!res?.ok, detail}`＋异常兜底）。
 
 ## 收口批6 附（2026-10-16）：安装三形态实测＋「安装/peer 结论档」
 
