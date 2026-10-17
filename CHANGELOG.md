@@ -1,5 +1,10 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 配置入口调研与设计冻结（2026-10-17）
+
+- **补「双调研缺口」欠账**：新增 `docs/design-specs/config-entry-research-20261017.md`（一手调研）——生态全景（精选目录 1000 条/市场 `dsh-market` 4200+ 插件/23 分类）；**配置入口三个代际**一手证据（文件约定 → client 半＋`configForms`＋插件页卡片 → 新宿主从 Config schema 自动派生「no switch to flip」）；写回机制（`dsh-config-editor` 校验后原子写 profile patch、保留注释与 `!!js`）；UX 五惯例（暂存/保存才写/已覆盖/恢复默认/非法阻止）；治理向竞品抽样 5 例（verify×2/permissions「可视化草稿式编辑器」/undo/evidence-audit）；投稿规范要点（`dsh.bundle` 必需、peer 预发布陷阱与本仓不声明 peer 决策互相印证）。
+- **设计冻结**：新增 `docs/design-specs/config-entry-design-20261017.md`——入口＝侧栏「插件」卡片→设置页三卡片：**执行账本 P0（只读零风险，验收=与 tally 逐项一致）／规则包 P1（只读→编辑，编辑依赖热重载）／纪律文本 P2**；不变量＝配置权限与执行权限分离、文件永远是权威层、UI 只是叠加层、只许加强不许放宽判定。施工需独立立项（不改代码、不动发布冻结）。
+
 ## E1-v5 有效性补样本轮 · 预注册冻结（2026-10-16）
 
 - 冻结 `docs/design-specs/e1-v5-supplement-prereg-20261016.md`：**n≥5 四臂当前版重跑**（4 臂 × 3 任务 × 5 轮 = 60 会话）**＋脱敏对照 S 臂**（clean home 禁用技能目录，3 任务 × 5 轮 = 15 会话，隔离宿主原生 skill-catalog 对 T1/T3 的贡献，不并入主差分）；合计 75 会话。历史轮并入仅作描述性对照（版本漂移不可归因）；模型=单一免费档全轮统一（首选 `glm-4.5-flash`，探针不可用则整批换 `longcat-2.5-preview-free`）；排除规则/证据三源/回滚沿用 v3/v4 冻结矩阵。
