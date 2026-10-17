@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 「DSH自定义」会话/档位级实取视图（2026-10-17 · 第二会话续）
+
+- **交付**：区一作用域选择器（全局｜任一活跃会话）＋`GET /api/dsh-custom/sessions`＋`GET /api/dsh-custom/assembly?session=<id>`——会话视图与真实请求**同法** `assemble({agent, scope: agent})`（对接真相：宿主 `assembleContextFor` 的 scope key＝agent 本体；未活跃会话 404 带指引）。
+- **实测（GUI＋API 双查）**：选到活跃会话后——scopeLabel「会话 fbe14060｜D:\DeepSeek\dsh-plugin-dev（作用域实取）」；首段＝该会话工作区覆盖行（SV-5，vs 全局 GV-1）；**22 段全景**（含 tool:* / plan:policy / file-reference 等仅会话作用域可见的段）＋沙箱/审批策略上下文（**档位差异可观测**＝设计 P0 判据「≥3 会话/2 档位」的实取面）；**变量表带值**：`{{model}}` 按该会话真实解析（longcat-2.5-preview-free）、渲染器在线（非容错模式）＝宿主逐字节同法。测试 128→**132/132**；实现仓 `D:\DeepSeek\dsh-custom` `4e7226e`。设计档 §5 已同步注记（遗留①销项）。
+- **遗留**：互斥现场对照需第二 complete 插件（单测覆盖 409 路径）；P3（导出导入/英文文案/设置区增强）为可选增强；桌面档临时挂载留驻（撤除三步见交接文档 §5）。
+
 ## 「DSH自定义」P2 深改接管（2026-10-17 · 第二会话续）
 
 - **交付（主体能力 P0–P2 全量收官）**：`complete:true` 整段替换（`override.md`；默认关、空文本不放行防空提示词事故）＋**干跑校验**（候选文本对当前变量表预渲染：未知/畸形 `{{变量}}` 422 阻断；已注册但请求期解析的变量放行）＋**版本快照列表与一键回滚**（回滚前自动 pre-restore 快照，可逆；越界路径拒绝）＋**互斥探测**（启用探测组装：multiple-complete 冲突解析对方段名→拒绝并自动回退；API `GET|PUT /override`、`PUT /override/enable`、`GET /backups`、`PUT /backups/restore`）＋浏览器半「区二」块（开关/编辑器/取材于当前/快照回滚列表）。
