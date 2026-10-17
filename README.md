@@ -75,7 +75,7 @@ node scripts/tally.mjs --report --freeze
 ## 路线
 
 - 运行时侧：`docs/design-specs/shisan-xinuo-runtime-roadmap-20261017.md`（F1–F12 / P0–P6）
-- 配置与页面侧：dsh-custom `docs/design-specs/dsh-custom-prompt-iteration-plan-20261017.md`（需求追溯/完全体页面草图/迭代 P3–P7）
+- 配置与页面侧：dsh-custom `docs/design-specs/dsh-custom-prompt-iteration-plan-20261017.md`（需求追溯/完全体页面草图/迭代批次一~六；全体系 P 编号唯一归属运行时路线）
 - 主线：内容层（已完成）→ 页面批（DSH自定义推倒重做）→ 运行时批（判级强制/边界守卫/渐进加载引擎）→ 验证与发行。
 
 ## 三库导航 ｜ 反馈

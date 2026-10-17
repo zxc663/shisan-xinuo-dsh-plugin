@@ -1,8 +1,8 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
-## 运行时治理批 P1–P6 全量落地＋页面批 P4/P5（2026-10-17 · 迭代计划推进轮）
+## 运行时治理批 P1–P6 全量落地＋页面批·批次三/四（2026-10-17 · 迭代计划推进轮）
 
-> 本轮=按两份迭代文档（`shisan-xinuo-runtime-roadmap-20261017.md` F1–F12/P0–P6＋`dsh-custom-prompt-iteration-plan-20261017.md` P3–P7）一次性推完全部可施工迭代；P7（有效性终判 n≥5 样本轮）与发行解冻=需真实多会话样本与显式决策，未做（如实）。
+> 本轮=按两份迭代文档（`shisan-xinuo-runtime-roadmap-20261017.md` F1–F12/P0–P6＋`dsh-custom-prompt-iteration-plan-20261017.md` 批次一~六〔当时为 P 系列，2026-10-18 起页面侧改批次命名，P 编号唯一归属运行时路线〕）一次性推完全部可施工迭代；批次六（有效性终判 n≥5 样本轮=F11）与发行解冻=需真实多会话样本与显式决策，未做（如实）。
 
 - **P1 探针批（`72789ca`）**：宿主 app.asar 只读四探针——①**timed ask 原生**（`dsh-tool-ask-user`：timeout 参数 -1/秒、超时=pending 可续答+`answer_to_pending_question` 回环）⇒ F6 零施工；②**compaction 事件族原生**（start/summary/end/prune，shadowedTokenCount）⇒ F8 无降级；③session-projection 能力缝在但 renderer 无插件缝 ⇒ F7 降级裁定（并入输出不做，可见性=原生 tool/result 渲染）；④**SandboxMode 三档原生**（read-only|workspace-write|danger-full-access）⇒ F3 执法主体=宿主。落档 `docs/design-specs/p1-host-probes-20261017.md`。
 - **P2 判级与清单强制（`46c3387`）**：F1 判级缺失 steer（一次性+熔断+纯聊天/只读/零工具三重早退=0 误注入；追加特征消息→追加判级文案「评估升降档」）；F2 discipline_task 扩 checklist（分号清单≤20、与断言互补、审计 checklistCount）＋L2-F/L3（含宿主视角≥2 低报）无验收绑定→合并 steer。旗标 `SHISANUO_LEVEL_OFF`/`SHISANUO_CHECKLIST_OFF`。39 新测。
@@ -11,7 +11,7 @@
 - **P5 压缩与盘点（`fbe0e24`）**：F8=compaction/end（无 error）→pending→下一 turn-stopping inject notice（一次性送达防重复；失败压缩不注入）；F9=`scanWorkspaceAssets`（npm scripts/scripts 目录/tests 计数，浅层克制）并入 discipline_tools 返回（复用优先指引）。15 新测。
 - **P6 渐进引擎＋镜像同步（`b33d490`）**：F10=`pickLayeredSectionForGap`（判级未知不选道/L2-S→l2s/L2-F/L3/低报→l2f 宁重勿轻）+`loadLayeredSection` fail-closed 装载+两注入点附分节全文；F12=CORE_DISCIPLINE 逐字镜像同步（7563 字符；镜像测试转绿）。
 - **跨插件契约（`b33d490`+`236f6f5`）**：layered 用户覆盖目录优先序 `SHISANUO_LAYERED_DIR > $DSH_HOME/dsh-custom/layered > 包内出厂`＋mtime 缓存热生效＋页面停用跳过注入。
-- **页面批 P4/P5（dsh-custom `236f6f5`+`f37c74e`）**：user-prompt 三段装配（section `dsh-custom:user-prompt` order −1990，装配序=常驻核心→我的提示词→官方；开关独立；空=不注入）＋layered 管理（出厂副本入包 content/layered、用户镜像 `$root/layered/`、恢复出厂单节级、停用 layered-state.json、分节名白名单防越权）＋6 条 API（user-prompt GET|PUT、layered 列表/单节读写/reset/toggle、audit 尾读）＋**client.js 推倒重写**（9 区导航完全体：概览/提示词中心三区/接管官方/作用域/快照/审计/治理只读占位/设置——⑧治理与⑥备份目录项如实占位不伪造）。25 新测+132 回归。
+- **页面批·批次三/四（dsh-custom `236f6f5`+`f37c74e`）**：user-prompt 三段装配（section `dsh-custom:user-prompt` order −1990，装配序=常驻核心→我的提示词→官方；开关独立；空=不注入）＋layered 管理（出厂副本入包 content/layered、用户镜像 `$root/layered/`、恢复出厂单节级、停用 layered-state.json、分节名白名单防越权）＋6 条 API（user-prompt GET|PUT、layered 列表/单节读写/reset/toggle、audit 尾读）＋**client.js 推倒重写**（9 区导航完全体：概览/提示词中心三区/接管官方/作用域/快照/审计/治理只读占位/设置——⑧治理与⑥备份目录项如实占位不伪造）。25 新测+132 回归。
 - **收口**：dsh-plugin-dev 测试 **34/34 套全绿**（P0 前基线 26/29：docs-index 缺录/工作树脏/CORE 镜像旧版三项全修复）；dsh-custom **157 测全绿**。F11 有效性终判=待样本轮（n≥5 四臂需真实会话）；发行态维持冻结。
 
 ## 「DSH自定义」会话/档位级实取视图（2026-10-17 · 第二会话续）
