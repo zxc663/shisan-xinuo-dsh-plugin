@@ -2,7 +2,7 @@
 
 ## 原生纪律注入（2026-10-17）
 
-- 按用户令在桌面日常恢复「纪律注入」，走**宿主原生通道**（不挂插件）：新增仓内正本 `content/agents-md-discipline.md`（与插件纪律文本同文；仅「收口」节改为不依赖 `discipline_gate` 工具的通用判据——该工具已随插件从桌面档卸载），部署至 `$DSH_HOME/AGENTS.md`（`dsh-agent-instructions` 全局注入，**全工作区生效**、65KB 预算内；`dsh-base` 默认启用）。
+- 在桌面日常恢复「纪律注入」，走**宿主原生通道**（不挂插件）：新增仓内正本 `content/agents-md-discipline.md`（与插件纪律文本同文；仅「收口」节改为不依赖 `discipline_gate` 工具的通用判据——该工具已随插件从桌面档卸载），部署至 `$DSH_HOME/AGENTS.md`（`dsh-agent-instructions` 全局注入，**全工作区生效**、65KB 预算内；`dsh-base` 默认启用）。
 - **机器验证**：主 home 实跑会话基线落 `form=instructions kind=agent-instructions`（1308 字符），模型推理引用纪律条款——原生注入生效坐实。
 - **E1-v5 交互**：预注册补 **R4**——r3–r5 开跑前须临时移出 `$DSH_HOME/AGENTS.md`（否则 A 臂携带全局纪律文本、与 r1/r2 不可比），跑毕还原。
 - 编辑入口：当前即该文件本身（文本编辑）；图形化入口属《配置入口设计》P2（纪律文本卡）的规划面。
