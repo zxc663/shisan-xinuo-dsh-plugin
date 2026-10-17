@@ -401,6 +401,17 @@ export function buildWriteAuditEntry(tool: string, path: string, mode: string, i
   }
 }
 
+// ── P4 F6（缩围版）：timed ask 工具检测 ──
+// 宿主原生 dsh-tool-ask-user 提供 timed ask_user_question（timeout 参数；超时=pending 可续答）。
+// 插件角色=检测+指引（零包装层，探针1 裁定）；指引面在 layered/goal-mode.md（提问超时策略）。
+export function isTimedAskSchema(tool: unknown): boolean {
+  const t = tool as { name?: unknown; parameters?: unknown } | null
+  if (!t || typeof t !== 'object') return false
+  if (String(t.name ?? '') !== 'ask_user_question') return false
+  const params = t.parameters as Record<string, unknown> | null | undefined
+  return !!params && typeof params === 'object' && 'timeout' in params
+}
+
 // GATE 收口检查：实质工作回合（≥1 次工具调用）正常收尾（completed）才要求 GATE。
 // 中断/失败/纯聊天不检（防误报骚扰）。返回 ok=有 GATE，missing=缺 GATE，skip=不检。
 export function judgeGate(
@@ -1756,6 +1767,8 @@ export function apply(ctx: Context) {
   let lastWireNames: string[] = []
   // 批3 方向 A：最近一次自报等级（仅观测，供目录上限展示；不驱动裁剪）
   let lastDeclaredLevel: string | null = null
+  // P4 F6：ask 工具 timed 状态（request/header 线缆真值检测；null=未见）
+  let lastAskTimed: boolean | null = null
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
   interface TaskRec {
@@ -1942,6 +1955,14 @@ export function apply(ctx: Context) {
           stats.wireTools = wireTools.length
           lastWireNames = wireTools.map((t) => String((t as { name?: unknown })?.name ?? '')).filter(Boolean)
           void log({ kind: 'tools-wire', count: wireTools.length, chars: JSON.stringify(wireTools).length })
+          // P4 F6：ask 工具 timed 版检测（每会话只记一次状态变化；宿主原生 timeout 参数=指引生效前提）
+          const askTool = wireTools.find((t) => String((t as { name?: unknown })?.name ?? '') === 'ask_user_question')
+          const timedNow = isTimedAskSchema(askTool)
+          if (askTool && timedNow !== lastAskTimed) {
+            lastAskTimed = timedNow
+            void log({ kind: 'ask-tool-mode', timed: timedNow })
+            if (timedNow) console.log('[shisan-xinuo] ask_user_question is TIMED (timeout param present) — goal-mode 提问超时策略可用')
+          }
         }
         return
       }

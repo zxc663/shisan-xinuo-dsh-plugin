@@ -29,6 +29,8 @@ const FIELD_WHITELIST = {
   discipline: ['source', 'valid', 'reason'],
   'tools-inventory': ['count', 'names'],
   'tools-wire': ['count', 'chars'],
+  // P4 F6：ask 工具 timed 检测（宿主原生 timeout 参数）
+  'ask-tool-mode': ['timed'],
   'sandbox-mode': ['mode', 'enforcement'],
   'gate-steer': ['turn', 'toolCalls', 'mode', 'assertions', 'assertionsOpen'],
   // ── B2/B3 遥测（审计 F-04：补齐与引擎写入面的一致性；tests/tally-whitelist.test.mjs 机检防再脱节）──
