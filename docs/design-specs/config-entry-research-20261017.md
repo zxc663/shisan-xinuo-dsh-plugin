@@ -42,7 +42,17 @@
 | `23swccp/dsh-undo` | session | /undo 时间轴 + 会话头按钮 + 消息图标 + 影子 Git 快照（深度 UI 集成） |
 | `030611/qiushi-dsh-evidence-audit` | security | 本地哈希链 receipt（工具结果/会话事件），不存正文——**与 exec-log 审计域同族** |
 
-其余命中（未抽验）：`auditrail`、`dsh-plugin-audit`、`sentinel`×2、`compat-guardian`、`pr-guardian`、`shadow-auditor`、`dsh-sidebar-git-graph` 等。
+其余命中（条目级描述已核，未逐仓审计；分类注在括号）：
+- `863683348/dsh-plugin-audit`（market）——生态级插件健康审计（维护/文档/npm/下载量评分目录）；
+- `BotonJ/dsh-plugin-sentinel`（security）——安装前静态安全审计（生命周期脚本/动态执行/凭据外传组合/patch 层风险）；
+- `Eligahyu/dsh-sentinel-scanner`（security）——静态安全扫描（exec/凭据/混淆/安装脚本/清单，0-100 分）；
+- `GooDAnDReaDY/dsh-shadow-auditor`（security）——后台安全审计（输出泄密扫描+执行前命令安全检查）；
+- `Han-1413141/dsh-compat-guardian`（dev）——插件冲突/装载失败检测与隔离恢复+离线启动救援；
+- `Harzva/dsh-pr-guardian`（git）——PR 反馈收件箱；
+- `JohnXu22786/auditrail`（tools）——工具调用链取证记录（who/工具/文件/时戳）+脱敏回放；
+- `AFunDog/dsh-sidebar-git-graph`（git）——侧栏 git 图（非治理项；因名字命中进入清单，实录以保持口径透明）。
+
+**观察（限定口径）**：治理域在生态中已高度分工——「审计/收据」（evidence-audit、auditrail、exec-log 同族）、「静态安全扫描」（sentinel×2、shadow-auditor）、「验收/验证」（verify×2、我们的 gate 域）、「冲突恢复」（compat-guardian）、「撤销」（undo）。在**本次目录级检索的条目描述面**上，未见到与「收口强制（turn 级打回）＋判据锚定（pinned 不可改写）」完全对位的条目——**未经逐仓审计，该判断属未定论**（沿用本仓「存在性对标」纪律：描述面≠源码面，不作独一档宣称）。
 
 ## 4. 目录投稿规范要点（对我们的直接影响）
 
