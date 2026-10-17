@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 「DSH自定义」P0 主体完成与交接（2026-10-17）
+
+- **独立立项施工**：新仓 `D:\DeepSeek\dsh-custom`（MIT，本地 git）：P0＝存储骨架＋防静默改写护栏（语义 b 保守子集：拦截＋提示＋留痕）＋HTTP 数据面（`/api/dsh-custom/{assembly,status}`）＋浏览器半页签（`settings.plugins.tab`）；单测 43/43。
+- **桌面 App 实测**：宿主半工作（boot/系统提示词服务附着/API 挂载三行＋存储落盘＋API 200 实取 7 段装配）；**卡点**：插件页签未显现（App 版 client-modules 与 CLI 版机制差异，`/plugins` 直探连官方包 404＝探针失效）＋宿主内 `renderPrompt` 动态导入失败（渲染降级）＋护栏负向控制未测。
+- **交接**：`docs/handover-dsh-custom-20261017.md`（现状/卡点/环境/撤除三步/纪律/交接提示词全文）；插件留驻桌面档供接手方实测；接手方＝用户另开 DSH 会话。设计冻结与拍板记录见 `docs/design-specs/dsh-custom-prompt-design-20261017.md` §8。
+
 ## 「DSH自定义」系统提示词管理 · 调研＋设计冻结（2026-10-17）
 
 - **调研**（`docs/design-specs/dsh-custom-prompt-research-20261017.md`，一手）：装配链解剖——`ctx.systemPrompt` 注册表：外部段任意顺序（**order −2000 即 system 层前置**）、**`complete:true` 段＝整段接管官方提示词（合法、不动 asar）**、公开 `assemble()`＋`renderPrompt()`（**实际装配结果可视化成立**）、会话作用域同名遮蔽（工作区覆盖成立）；**0.2.1-rc.1 对照**（next 线已发；`{{cwd}}` 变量移除等 60 行 diff 要点；API 稳定⇒双线可实现，升级建议暂不升级另立项）；**生态同类普查**（prompt 域 13+ 条三族分级）。
