@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 「DSH自定义」系统提示词管理 · 调研＋设计冻结（2026-10-17）
+
+- **调研**（`docs/design-specs/dsh-custom-prompt-research-20261017.md`，一手）：装配链解剖——`ctx.systemPrompt` 注册表：外部段任意顺序（**order −2000 即 system 层前置**）、**`complete:true` 段＝整段接管官方提示词（合法、不动 asar）**、公开 `assemble()`＋`renderPrompt()`（**实际装配结果可视化成立**）、会话作用域同名遮蔽（工作区覆盖成立）；**0.2.1-rc.1 对照**（next 线已发；`{{cwd}}` 变量移除等 60 行 diff 要点；API 稳定⇒双线可实现，升级建议暂不升级另立项）；**生态同类普查**（prompt 域 13+ 条三族分级）。
+- **近邻深核与复用裁定**：`Awoodwhale/dsh-agent-persona`（Apache-2.0，npm）已实现作用域人设/实际提示词查看 tab/开关组/备份/防改写守卫等大半能力；净增量收敛为三件：**complete 深改＋纪律前置总开关＋AGENTS 共存检查**；呈报路线 A（复用为先）／B（自研全栈）／C（先装近邻实测）。
+- **设计冻结**（`docs/design-specs/dsh-custom-prompt-design-20261017.md`）：入口＝侧栏「插件」卡片→设置页；**三区**＝①官方提示词只读（实际装配＋段归属徽标）②complete 深改（干跑校验/快照/回滚/互斥检测）③纪律前置（文本/注入总开关/作用域/AGENTS 共存提示）；载体＝`$DSH_HOME/dsh-custom/` 自管文件；护栏＝tools.guard 防改写＋保存即快照；分期 P0–P3 各带验收判据；拍板项 5 条待批。
+
 ## 原生纪律注入（2026-10-17）
 
 - 在桌面日常恢复「纪律注入」，走**宿主原生通道**（不挂插件）：新增仓内正本 `content/agents-md-discipline.md`（与插件纪律文本同文；仅「收口」节改为不依赖 `discipline_gate` 工具的通用判据——该工具已随插件从桌面档卸载），部署至 `$DSH_HOME/AGENTS.md`（`dsh-agent-instructions` 全局注入，**全工作区生效**、65KB 预算内；`dsh-base` 默认启用）。

@@ -49,6 +49,8 @@
 - `design-specs/e1-v5-supplement-prereg-20261016.md` — E1-v5 有效性补样本轮**预注册**（n≥5 四臂当前版重跑；判据/排除规则/门槛冻结；执行待窗口）。
 - `design-specs/config-entry-research-20261017.md` — **配置入口惯例调研**（生态全景 1000 条目录/市场/23 分类；配置入口三 代际机制一手证据；竞品抽样；投稿规范对我们影响）。
 - `design-specs/config-entry-design-20261017.md` — **配置入口设计（冻结）**（插件页卡片→设置页三卡片：执行账本 P0/规则包 P1/纪律文本 P2；文件=权威层、UI=叠加层；双轨兼容）。
+- `design-specs/dsh-custom-prompt-research-20261017.md` — **「DSH自定义」系统提示词管理·调研**（装配链 API 全貌/`complete` 深改机制/0.2.1-rc.1 对照/生态近邻 `dsh-agent-persona` 深核与复用裁定）。
+- `design-specs/dsh-custom-prompt-design-20261017.md` — **「DSH自定义」设计冻结**（三区页面：官方提示词只读/complete 深改/纪律前置；总开关与作用域；分期 P0-P3；拍板项呈报）。
 
 ## 其余（评估 · 证据 · 交接）
 
