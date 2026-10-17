@@ -1,5 +1,12 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 原生纪律注入（2026-10-17）
+
+- 按用户令在桌面日常恢复「纪律注入」，走**宿主原生通道**（不挂插件）：新增仓内正本 `content/agents-md-discipline.md`（与插件纪律文本同文；仅「收口」节改为不依赖 `discipline_gate` 工具的通用判据——该工具已随插件从桌面档卸载），部署至 `$DSH_HOME/AGENTS.md`（`dsh-agent-instructions` 全局注入，**全工作区生效**、65KB 预算内；`dsh-base` 默认启用）。
+- **机器验证**：主 home 实跑会话基线落 `form=instructions kind=agent-instructions`（1308 字符），模型推理引用纪律条款——原生注入生效坐实。
+- **E1-v5 交互**：预注册补 **R4**——r3–r5 开跑前须临时移出 `$DSH_HOME/AGENTS.md`（否则 A 臂携带全局纪律文本、与 r1/r2 不可比），跑毕还原。
+- 编辑入口：当前即该文件本身（文本编辑）；图形化入口属《配置入口设计》P2（纪律文本卡）的规划面。
+
 ## 配置入口调研与设计冻结（2026-10-17）
 
 - **补「双调研缺口」欠账**：新增 `docs/design-specs/config-entry-research-20261017.md`（一手调研）——生态全景（精选目录 1000 条/市场 `dsh-market` 4200+ 插件/23 分类）；**配置入口三个代际**一手证据（文件约定 → client 半＋`configForms`＋插件页卡片 → 新宿主从 Config schema 自动派生「no switch to flip」）；写回机制（`dsh-config-editor` 校验后原子写 profile patch、保留注释与 `!!js`）；UX 五惯例（暂存/保存才写/已覆盖/恢复默认/非法阻止）；治理向竞品抽样 5 例（verify×2/permissions「可视化草稿式编辑器」/undo/evidence-audit）；投稿规范要点（`dsh.bundle` 必需、peer 预发布陷阱与本仓不声明 peer 决策互相印证）。
