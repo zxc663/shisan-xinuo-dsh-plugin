@@ -601,19 +601,62 @@ export function pickLayeredSectionForGap(gap: {
   return 'l2f-full-workflow.md' // L2-F/L3/低报重活（宁重勿轻）
 }
 
-const layeredSectionCache = new Map<string, { source: 'file' | 'fallback'; text: string }>()
+const layeredSectionCache = new Map<string, { source: 'file' | 'fallback'; text: string; fromPath: string | null; mtimeMs: number }>()
+
+// 用户覆盖目录优先序（保证机制④配套）：SHISANUO_LAYERED_DIR > $DSH_HOME/dsh-custom/layered（dsh-custom 页面
+// 编辑落此处）> 包内出厂。缓存带 mtime——用户经页面改分节即失效（热生效）。
+// 禁用分节（dsh-custom layered-state.json 显式 false）由 layeredSectionDisabled 判定，引擎接线处跳过注入。
+function userLayeredOverridePath(name: string): string | null {
+  const dirs: string[] = []
+  if (process.env.SHISANUO_LAYERED_DIR) dirs.push(process.env.SHISANUO_LAYERED_DIR)
+  const dshHome = process.env.DSH_HOME?.trim()
+  if (dshHome) dirs.push(join(dshHome, 'dsh-custom', 'layered'))
+  for (const d of dirs) {
+    const p = join(d, name)
+    try {
+      if (existsSync(p) && statSync(p).isFile()) return p
+    } catch { /* 探测失败=无覆盖 */ }
+  }
+  return null
+}
+
+export function layeredSectionDisabled(name: string): boolean {
+  const dshHome = process.env.DSH_HOME?.trim()
+  const dirs = process.env.SHISANUO_LAYERED_DIR ? [process.env.SHISANUO_LAYERED_DIR] : []
+  if (dshHome) dirs.push(join(dshHome, 'dsh-custom'))
+  for (const d of dirs) {
+    try {
+      const p = join(d, 'layered-state.json')
+      if (!existsSync(p)) continue
+      const j = JSON.parse(readFileSync(p, 'utf8')) as { enabled?: Record<string, boolean> }
+      if (j?.enabled && j.enabled[name] === false) return true
+    } catch { /* 坏状态文件=默认启用 */ }
+  }
+  return false
+}
 
 export function loadLayeredSection(name: string, layeredDir: string, fallbackText: string): { source: 'file' | 'fallback'; text: string } {
   const key = `${layeredDir}::${name}`
-  const hit = layeredSectionCache.get(key)
-  if (hit) return hit
-  let out: { source: 'file' | 'fallback'; text: string }
+  let resolvedPath: string | null = null
   try {
-    const p = join(layeredDir, name)
-    if (existsSync(p) && statSync(p).isFile()) out = { source: 'file', text: readFileSync(p, 'utf8') }
-    else out = { source: 'fallback', text: fallbackText }
-  } catch {
-    out = { source: 'fallback', text: fallbackText }
+    resolvedPath = userLayeredOverridePath(name) // 用户覆盖优先（dsh-custom 页面编辑的镜像目录）
+    if (resolvedPath === null) {
+      const p = join(layeredDir, name)
+      if (existsSync(p) && statSync(p).isFile()) resolvedPath = p
+    }
+  } catch { /* 探测失败=回退 */ }
+  const mtimeMs = resolvedPath === null ? 0 : statSync(resolvedPath).mtimeMs
+  const hit = layeredSectionCache.get(key)
+  if (hit !== undefined && hit.fromPath === resolvedPath && hit.mtimeMs === mtimeMs) return hit
+  let out: { source: 'file' | 'fallback'; text: string; fromPath: string | null; mtimeMs: number }
+  if (resolvedPath !== null) {
+    try {
+      out = { source: 'file', text: readFileSync(resolvedPath, 'utf8'), fromPath: resolvedPath, mtimeMs }
+    } catch {
+      out = { source: 'fallback', text: fallbackText, fromPath: null, mtimeMs: 0 }
+    }
+  } else {
+    out = { source: 'fallback', text: fallbackText, fromPath: null, mtimeMs: 0 }
   }
   layeredSectionCache.set(key, out)
   return out
@@ -2333,10 +2376,14 @@ export function apply(ctx: Context) {
       if (compPending !== undefined) {
         pendingCompactionSignal.delete(bucketKey)
         void log({ kind: 'compaction-signal', shadowedTokens: compPending, via: 'inject-notice' })
-        // F10：压缩信号附加 compression-reload 分节（检测→注入）
-        const cSec = loadLayeredSection('compression-reload.md', join(contentDir, 'layered'), buildCompactionReloadNotice(compPending))
-        void log({ kind: 'layered-inject', section: 'compression-reload.md', source: cSec.source, chars: cSec.text.length, trigger: 'compaction' })
-        ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', `${buildCompactionReloadNotice(compPending)}\n\n——附：compression-reload.md（${cSec.source}）——\n${cSec.text}`))
+        // F10：压缩信号附加 compression-reload 分节（检测→注入；页面侧停用=跳过附文只留短信号）
+        if (layeredSectionDisabled('compression-reload.md')) {
+          ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', buildCompactionReloadNotice(compPending)))
+        } else {
+          const cSec = loadLayeredSection('compression-reload.md', join(contentDir, 'layered'), buildCompactionReloadNotice(compPending))
+          void log({ kind: 'layered-inject', section: 'compression-reload.md', source: cSec.source, chars: cSec.text.length, trigger: 'compaction' })
+          ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', `${buildCompactionReloadNotice(compPending)}\n\n——附：compression-reload.md（${cSec.source}）——\n${cSec.text}`))
+        }
       }
       // 探针（默认关）：注入探针证实 notice 通道 form/source（SHISANUO_PROBE_NOTICE=1）
       if (process.env.SHISANUO_PROBE_NOTICE === '1' && !noticeProbeDone) {
@@ -2406,10 +2453,10 @@ export function apply(ctx: Context) {
           }
           steerCounts.set(steerKeyF, usedF + 1)
           void log({ kind: 'discipline-steer', turn: payload.turn, needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp, declared: b.declaredLevel ?? '', hostLevel: b.hostLevel })
-          // F10：按判级附加对应 layered 分节全文（检测→注入；装载 fail-closed＋落账）
+          // F10：按判级附加对应 layered 分节全文（检测→注入；装载 fail-closed＋落账；页面侧停用=跳过）
           const secName = pickLayeredSectionForGap({ ...gap, declaredLevel: b.declaredLevel, hostLevel: b.hostLevel })
           let sectionText = ''
-          if (secName) {
+          if (secName && !layeredSectionDisabled(secName)) {
             const sec = loadLayeredSection(secName, join(contentDir, 'layered'), `（分节 ${secName} 装载失败——按常驻核心 §1.4 对应档位纪律执行）`)
             sectionText = `\n\n——附：${secName}（${sec.source}）——\n${sec.text}`
             void log({ kind: 'layered-inject', section: secName, source: sec.source, chars: sec.text.length, trigger: 'discipline-gap' })

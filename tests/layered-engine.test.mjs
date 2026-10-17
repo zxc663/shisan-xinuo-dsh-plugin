@@ -32,9 +32,9 @@ t('map: 两不需要=null', null, pickLayeredSectionForGap({ needLevel: false, n
     mkdirSync(layered)
     writeFileSync(join(layered, 'l2s-short-workflow.md'), '# L2S 短工作流\n内容A')
     const ok = loadLayeredSection('l2s-short-workflow.md', layered, '# 回退\n内容B')
-    t('load: 命中文件', { source: 'file', text: '# L2S 短工作流\n内容A' }, ok)
+    t('load: 命中文件', { source: 'file', text: '# L2S 短工作流\n内容A' }, { source: ok.source, text: ok.text })
     const miss = loadLayeredSection('not-exist.md', layered, '# 回退\n内容B')
-    t('load: 缺失→fail-closed 回退', { source: 'fallback', text: '# 回退\n内容B' }, miss)
+    t('load: 缺失→fail-closed 回退', { source: 'fallback', text: '# 回退\n内容B' }, { source: miss.source, text: miss.text })
     // 仓库真实分节
     const repoLayered = new URL('../content/layered/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
     const real = loadLayeredSection('compression-reload.md', repoLayered, '# 回退')
