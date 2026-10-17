@@ -31,6 +31,9 @@ const FIELD_WHITELIST = {
   'tools-wire': ['count', 'chars'],
   // P4 F6：ask 工具 timed 检测（宿主原生 timeout 参数）
   'ask-tool-mode': ['timed'],
+  // P5 F8：压缩信号（compaction/end → pending → inject notice 送达）
+  'compaction-detected': ['shadowedTokens'],
+  'compaction-signal': ['shadowedTokens', 'via'],
   'sandbox-mode': ['mode', 'enforcement'],
   'gate-steer': ['turn', 'toolCalls', 'mode', 'assertions', 'assertionsOpen'],
   // ── B2/B3 遥测（审计 F-04：补齐与引擎写入面的一致性；tests/tally-whitelist.test.mjs 机检防再脱节）──

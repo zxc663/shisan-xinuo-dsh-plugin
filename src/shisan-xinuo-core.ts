@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { exec } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -410,6 +410,53 @@ export function isTimedAskSchema(tool: unknown): boolean {
   if (String(t.name ?? '') !== 'ask_user_question') return false
   const params = t.parameters as Record<string, unknown> | null | undefined
   return !!params && typeof params === 'object' && 'timeout' in params
+}
+
+// ── P5 F8：压缩信号（宿主 compaction/end → 重载指令注入）──
+// 探针2：宿主 SessionEventMap 原生含 compaction/start|summary|end|prune；无 error 的 end=压缩成功落定。
+// 送达形态：事件到达时记 pending，下一个 turn-stopping（有 agent 句柄）经 inject 送达——notice 通道
+// （SKIP_INTERROGATION 同款信封，非唤醒）；模型按 layered/compression-reload.md 重载序执行。
+export function shouldInjectCompactionSignal(event: unknown): boolean {
+  const e = event as { type?: unknown; data?: { error?: unknown } } | null
+  if (!e || typeof e !== 'object') return false
+  if (e.type !== 'compaction/end') return false
+  return !e.data?.error
+}
+
+export function buildCompactionReloadNotice(shadowedTokenCount: number): string {
+  return `上下文已被压缩（影子化约 ${shadowedTokenCount} tokens）——精度可能已失真。默认重载保持精度：按 compression-reload 重载序执行——①重读系统纪律与在用分节 ②从承载/任务记录恢复任务本质与当前步骤 ③复述任务本质+当前步骤后再继续。纯闲聊可声明跳过。`
+}
+
+// ── P5 F9：环境盘点（工作区自有资产扫描——供 discipline_tools 返回与开工落账）──
+// 只扫浅层确定性资产（npm scripts/根 scripts/ 目录/tests 计数）；不做深遍历（性能与 token 克制）。
+export interface WorkspaceInventory {
+  scripts: string[]
+  scriptFiles: string[]
+  tests: number
+}
+
+export function scanWorkspaceAssets(cwd: string): WorkspaceInventory {
+  const out: WorkspaceInventory = { scripts: [], scriptFiles: [], tests: 0 }
+  try {
+    const pkgPath = join(String(cwd ?? ''), 'package.json')
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { scripts?: Record<string, string> }
+      if (pkg && typeof pkg.scripts === 'object') out.scripts = Object.keys(pkg.scripts).slice(0, 30)
+    }
+  } catch { /* 坏 package.json 不致命 */ }
+  try {
+    const sdir = join(String(cwd ?? ''), 'scripts')
+    if (existsSync(sdir) && statSync(sdir).isDirectory()) {
+      out.scriptFiles = readdirSync(sdir).filter((f) => /\.(mjs|js|ts|ps1)$/.test(f)).sort().slice(0, 30)
+    }
+  } catch { /* 只读观测，非致命 */ }
+  try {
+    const tdir = join(String(cwd ?? ''), 'tests')
+    if (existsSync(tdir) && statSync(tdir).isDirectory()) {
+      out.tests = readdirSync(tdir).filter((f) => /\.(mjs|js|ts)$/.test(f)).length
+    }
+  } catch { /* 只读观测，非致命 */ }
+  return out
 }
 
 // GATE 收口检查：实质工作回合（≥1 次工具调用）正常收尾（completed）才要求 GATE。
@@ -1393,11 +1440,12 @@ export function buildToolsCatalogDefinition(deps: {
   visible: () => string[]
   wire: () => string[]
   log: (entry: Record<string, unknown>) => void
+  workspace?: () => WorkspaceInventory | null
 }) {
   return {
     name: 'discipline_tools',
     description:
-      '工具面目录（只读）：列出当前可见工具与线缆真值。披露（按需暴露）由上游 tool-search 承担；本插件的运行时工具裁剪（budget/mask）已退役，工具面不再由本插件裁剪。本工具**不接受**任何"恢复／放开"请求。',
+      '工具面目录（只读）：列出当前可见工具与线缆真值，附工作区自有资产盘点（npm scripts/脚本/测试）。披露（按需暴露）由上游 tool-search 承担；本插件的运行时工具裁剪（budget/mask）已退役，工具面不再由本插件裁剪。本工具**不接受**任何"恢复／放开"请求。',
     parameters: { type: 'object', properties: {}, required: [] },
     output: {
       schema: { type: 'object', properties: { status: { type: 'string' }, message: { type: 'string' } }, required: ['status', 'message'] },
@@ -1410,16 +1458,19 @@ export function buildToolsCatalogDefinition(deps: {
       const visible = deps.visible()
       const wire = deps.wire()
       deps.log({ kind: 'tools-catalog', level, visible: visible.length })
-      return {
-        status: 'ok',
-        message: [
-          `当前判级/预算：${level || '未声明'}`,
-          `可见工具（${visible.length}）：${visible.join(', ') || '（未采集）'}`,
-          `线缆真值（宿主这次实际发给模型的 ${wire.length} 件）：${wire.join(', ') || '（尚未产生请求，故未知）'}`,
-          '披露模式：上游 tool-search（按需暴露）；运行时裁剪（budget/mask）已退役——工具面不再由本插件裁剪。',
-          '说明："可见工具"取自声明面；"线缆真值"取自最近一次 `request/header`（宿主真正发出去的那份）——两者不一致时**以线缆真值为准**。',
-        ].join('\n'),
+      const lines = [
+        `当前判级/预算：${level || '未声明'}`,
+        `可见工具（${visible.length}）：${visible.join(', ') || '（未采集）'}`,
+        `线缆真值（宿主这次实际发给模型的 ${wire.length} 件）：${wire.join(', ') || '（尚未产生请求，故未知）'}`,
+        '披露模式：上游 tool-search（按需暴露）；运行时裁剪（budget/mask）已退役——工具面不再由本插件裁剪。',
+        '说明："可见工具"取自声明面；"线缆真值"取自最近一次 `request/header`（宿主真正发出去的那份）——两者不一致时**以线缆真值为准**。',
+      ]
+      // P5 F9：工作区自有资产盘点（复用优先——自写前先查这里；命中即用，禁重造）
+      const ws = deps.workspace?.()
+      if (ws) {
+        lines.push(`工作区资产（盘点）：npm scripts=${ws.scripts.join(', ') || '无'}；scripts/=${ws.scriptFiles.join(', ') || '无'}；tests=${ws.tests} 件——写码前先盘这份清单，可复用不得自研。`)
       }
+      return { status: 'ok', message: lines.join('\n') }
     },
   }
 }
@@ -1769,6 +1820,8 @@ export function apply(ctx: Context) {
   let lastDeclaredLevel: string | null = null
   // P4 F6：ask 工具 timed 状态（request/header 线缆真值检测；null=未见）
   let lastAskTimed: boolean | null = null
+  // P5 F8：待送达的压缩重载信号（key=session.id → shadowedTokenCount）
+  const pendingCompactionSignal = new Map<string, number>()
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
   interface TaskRec {
@@ -1937,6 +1990,16 @@ export function apply(ctx: Context) {
           workspaceCwd = c
           void log({ kind: 'workspace-cwd', cwd: c })
         }
+        return
+      }
+      // P5 F8：压缩信号（宿主 compaction 事件族；无 error 的 end=压缩成功落定）→ 记 pending，
+      // 由下一个 turn-stopping（有 agent 句柄）经 inject 送达——notice 通道非唤醒，下回合可见。
+      if (shouldInjectCompactionSignal(event)) {
+        const shadowed = Number((event as { data?: { shadowedTokenCount?: unknown } })?.data?.shadowedTokenCount ?? 0)
+        const cKey = sidKeyOf(session, '')
+        if (cKey) pendingCompactionSignal.set(cKey, shadowed)
+        void log({ kind: 'compaction-detected', shadowedTokens: shadowed })
+        console.log(`[shisan-xinuo] compaction ended (shadowed≈${shadowed} tokens) → reload signal pending`)
         return
       }
       // v0.4 真值测量：request/header=发给模型的实际工具面（预算裁剪效果以此为准，非根 ctx schemas）
@@ -2108,6 +2171,13 @@ export function apply(ctx: Context) {
       if (!bucketKey || typeof payload?.turn !== 'number') return
       const b = turnBuckets.get(bucketKey)
       if (!b || b.turn !== payload.turn) return
+      // P5 F8：压缩重载信号送达（pending→inject notice；一次送达即清除——防重复注入）
+      const compPending = pendingCompactionSignal.get(bucketKey)
+      if (compPending !== undefined) {
+        pendingCompactionSignal.delete(bucketKey)
+        void log({ kind: 'compaction-signal', shadowedTokens: compPending, via: 'inject-notice' })
+        ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', buildCompactionReloadNotice(compPending)))
+      }
       // 探针（默认关）：注入探针证实 notice 通道 form/source（SHISANUO_PROBE_NOTICE=1）
       if (process.env.SHISANUO_PROBE_NOTICE === '1' && !noticeProbeDone) {
         noticeProbeDone = true
@@ -2389,6 +2459,8 @@ export function apply(ctx: Context) {
             },
             wire: () => lastWireNames,
             log: (entry) => void log(entry),
+            // P5 F9：工作区自有资产（cwd 未知时返回 null 不展示）
+            workspace: () => (workspaceCwd ? scanWorkspaceAssets(workspaceCwd) : null),
           })
           const d3 = toolsAny.register(catalog as unknown)
           if (typeof d3 === 'function') statusDisposes.push(() => d3())
