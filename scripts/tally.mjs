@@ -39,6 +39,9 @@ const FIELD_WHITELIST = {
   'append-followup': ['raw'],
   'discipline-steer': ['turn', 'needLevel', 'needChecklist', 'append', 'declared', 'hostLevel'],
   'discipline-steer-capped': ['turn', 'used', 'cap', 'needLevel', 'needChecklist'],
+  // ── P3 F3/F5（roadmap 2026-10-17）：工作区边界对账＋写动作审计（执法=宿主 sandbox）──
+  'write-audit': ['tool', 'path', 'mode', 'inWorkspace', 'enforcement'],
+  'workspace-cwd': ['cwd'],
   pinned: ['count', 'marks'],
   'assertion-unresolved': ['turn', 'count', 'gate'],
   'bypass-blocked': ['cmd', 'fingerprint'],

@@ -328,6 +328,79 @@ export function judgeDisciplineGap(o: {
   return { needLevel, needChecklist }
 }
 
+// ── P3（roadmap F3/F5）：工作区边界守卫——插件面=判定+对账遥测（执法主体=宿主原生 sandbox）──
+// 依据（p1-host-probes §探针4 + 源码实查）：宿主 dsh-sandbox 已完整实现三档执法（read-only 禁写、
+// workspace-write 越区拒、escalation 须经 ctx.approval 用户审批、sandboxDenialMarker 错误映射）。
+// 复用裁定：插件不重复建拦截层（与 2026-10-13「拦截层完全外置」拍板同构）；净增量=边界判定（供遥测
+// 对账与状态披露）＋写动作审计。F5：完全权限档=记录不弹卡（enforcement=record-only）。
+const WRITE_TOOLS = new Set(['write', 'edit', 'str_replace_editor', 'notebook_edit'])
+export function isWriteTool(name: string): boolean {
+  return WRITE_TOOLS.has(String(name ?? '').toLowerCase())
+}
+
+// 写目标路径提取（对接真相：dsh-tool-fs write/edit=file_path；str-replace-editor=path——宿主源码实查）
+export function extractWriteTarget(tool: string, args: Record<string, unknown> | undefined | null): string | null {
+  if (!args || typeof args !== 'object') return null
+  const t = String(tool ?? '').toLowerCase()
+  const key = t === 'str_replace_editor' ? 'path' : 'file_path'
+  const v = (args as Record<string, unknown>)[key]
+  return typeof v === 'string' && v.trim() ? v.trim() : null
+}
+
+// Windows 路径归一：反斜杠→正斜杠、大小写折叠、去尾斜杠（边界判定前统一形态）
+export function normalizeWinPath(p: string): string {
+  return String(p ?? '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+    .toLowerCase()
+}
+
+// 边界判定：目标路径（可相对 cwd）是否落在工作区内（cwd 或放行前缀表内）。
+// 防混淆：换行/空白前缀先剥（语料 10）；相对路径 ../ 逃逸由**词法段归约**消解（字符串拼接+前缀匹配
+// 会把 `cwd/../../x` 误判区内——单测语料 4/5 抓获的真实洞，此处必须 resolve 后再判）。
+function lexicalResolve(p: string): string {
+  const out: string[] = []
+  const isAbs = /^[a-z]:[\/\\]/i.test(p) || p.startsWith('/') || p.startsWith('\\')
+  const root = isAbs ? p.slice(0, p.search(/[\/\\]/) || 2) : ''
+  for (const seg of p.split(/[\/\\]+/)) {
+    if (!seg || seg === '.') continue
+    if (seg === '..') { if (out.length > 0 && out[out.length - 1] !== '..') out.pop(); else if (!isAbs) out.push('..') ; continue }
+    out.push(seg)
+  }
+  const joined = out.join('/')
+  return isAbs ? (root ? root + '/' + joined : joined) : joined
+}
+
+export function judgeWorkspaceBoundary(cwd: string, targetPath: string, extraPrefixes: string[] = []): boolean {
+  const raw = String(targetPath ?? '').trim().replace(/^[\r\n]+/, '')
+  if (!raw) return false
+  const ncwd = normalizeWinPath(lexicalResolve(cwd))
+  const isAbs = /^[a-z]:[\/\\]/i.test(raw) || raw.startsWith('/') || raw.startsWith('\\')
+  const resolved = lexicalResolve(isAbs ? raw : cwd + '/' + raw)
+  const nabs = normalizeWinPath(resolved)
+  // 前缀判定须落在目录边界上（防 dsh-plugin-dev-trap 这类前缀伪造：结尾加 / 后再 startsWith）
+  if (nabs === ncwd || nabs.startsWith(ncwd + '/')) return true
+  for (const p of extraPrefixes) {
+    const np = normalizeWinPath(lexicalResolve(p))
+    if (np && (nabs === np || nabs.startsWith(np + '/'))) return true
+  }
+  return false
+}
+
+// 写动作对账条目（F3 对账面 + F5 完全权限记录模式；执法字段如实标注执法主体）
+export function buildWriteAuditEntry(tool: string, path: string, mode: string, inWorkspace: boolean): {
+  kind: 'write-audit'; tool: string; path: string; mode: string; inWorkspace: boolean; enforcement: string
+} {
+  return {
+    kind: 'write-audit',
+    tool: String(tool ?? ''),
+    path: String(path ?? ''),
+    mode: String(mode ?? ''),
+    inWorkspace,
+    enforcement: mode === 'danger-full-access' ? 'record-only' : 'host-sandbox(对账)',
+  }
+}
+
 // GATE 收口检查：实质工作回合（≥1 次工具调用）正常收尾（completed）才要求 GATE。
 // 中断/失败/纯聊天不检（防误报骚扰）。返回 ok=有 GATE，missing=缺 GATE，skip=不检。
 export function judgeGate(
@@ -1593,6 +1666,14 @@ export function apply(ctx: Context) {
     const hit = activeJudge(String(cmd))
     void log({ kind: 'pre-execute', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit })
     noteObservedEffect(exec) // 决策 2：物理副作用采集（本缝是唯一能拿到完整 arguments 的地方）
+    // P3 F3/F5：写动作对账遥测（执法=宿主 sandbox；插件只记不发裁决——完全权限档 record-only，验收 c/d）
+    if (isWriteTool(String(exec?.name ?? ''))) {
+      const target = extractWriteTarget(String(exec?.name ?? ''), exec?.arguments as Record<string, unknown> | undefined)
+      if (target && workspaceCwd) {
+        const inWs = judgeWorkspaceBoundary(workspaceCwd, target, WORKSPACE_EXTRA_PREFIXES)
+        void log(buildWriteAuditEntry(String(exec?.name), target, sandboxMode, inWs))
+      }
+    }
     if (hit) {
       stats.intercepted++
       if (!L3_ENFORCE) {
@@ -1739,6 +1820,12 @@ export function apply(ctx: Context) {
   // 完全权限感知：宿主 sandbox/mode=danger-full-access 时视为用户已全局授权（会话级），
   // 插件 L3 拦截退位为仅记录（不弹审批卡）；恢复受限模式后拦截自动恢复。
   let fullAccess = false
+  // P3 F3：三档 sandbox 档位跟踪（宿主枚举 read-only|workspace-write|danger-full-access）＋工作区边界源。
+  // 执法主体=宿主原生 sandbox（p1 探针裁定）；插件用档位做写动作对账遥测与状态披露。
+  let sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access' | 'unknown' = 'unknown'
+  let workspaceCwd = ''
+  const WORKSPACE_EXTRA_PREFIXES = (process.env.SHISANUO_WORKSPACE_EXTRA ?? '')
+    .split(';').map((s) => s.trim()).filter((s) => s.length > 0)
 
   // 段指纹（批3 方向 A）：注入系统段的启动基线 + 每请求漂移核对。
   // 段=核心纪律（disciplineLoad.text）＋状态横幅（live-status）；横幅仅随 sandbox-mode 切换变化（预期变更，不判漂移）。
@@ -1817,13 +1904,25 @@ export function apply(ctx: Context) {
       }
       const rawMode = event as { type?: unknown; data?: { mode?: unknown } }
       if (rawMode?.type === 'sandbox/mode') {
+        const m = String(rawMode.data?.mode ?? '')
+        if (m === 'read-only' || m === 'workspace-write' || m === 'danger-full-access') sandboxMode = m
         const was = fullAccess
         fullAccess = rawMode.data?.mode === 'danger-full-access'
-        if (fullAccess !== was) {
+        if (fullAccess !== was || m !== sandboxMode) {
           stats.fullAccess = fullAccess
-          void log({ kind: 'sandbox-mode', mode: String(rawMode.data?.mode), enforcement: fullAccess ? 'suspended' : 'active' })
+          void log({ kind: 'sandbox-mode', mode: m, enforcement: fullAccess ? 'suspended' : 'active' })
           console.log(`[shisan-xinuo] sandbox mode=${String(rawMode.data?.mode)} → L3 enforcement ${fullAccess ? 'SUSPENDED (user full authorization)' : 'active'}`)
           recordSectionFingerprint('sandbox-mode')
+        }
+        return
+      }
+      // P3 F3：工作区边界源（宿主事件 working-directory/change：cwd）
+      const rawWd = event as { type?: unknown; data?: { cwd?: unknown } }
+      if (rawWd?.type === 'working-directory/change') {
+        const c = String(rawWd.data?.cwd ?? '')
+        if (c && c !== workspaceCwd) {
+          workspaceCwd = c
+          void log({ kind: 'workspace-cwd', cwd: c })
         }
         return
       }
