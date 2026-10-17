@@ -271,6 +271,63 @@ export function extractDeclaredLevel(text: string): 'L1' | 'L2-S' | 'L2-F' | 'L3
   return null
 }
 
+// ── P2（roadmap F1/F2）：判级强制＋任务清单强制——纯函数面（turn-stopping 检测逻辑单测化）──
+// 追加特征判别：短消息以追加词开头视为"同一任务的追加要求"（长文本=新任务；疑问句不算——提问≠追加）。
+// 误判面如实：本判别只决定 steer 文案用哪个版本（追加判级 vs 补判级），不改变任务边界（R20 每条用户消息仍开新任务）。
+const APPEND_FOLLOWUP_RE = /^(继续|然后|接着|再加|还要|顺便|以及|另外|next|continue)/i
+export function isAppendFollowUpText(text: string): boolean {
+  const t = (text ?? '').trim()
+  if (!t || t.length > 80) return false // 长文本=新任务描述，不是追加
+  if (/[?？]\s*$/.test(t)) return false // 疑问句=提问不是追加
+  return APPEND_FOLLOWUP_RE.test(t)
+}
+
+// F1/F2 steer 文案：needLevel=补判级（追加版提示评估升降档）；needChecklist=L2 复杂任务登记提示。
+export function buildDisciplineSteerText(opts: { needLevel: boolean; needChecklist: boolean; append: boolean }): string {
+  const parts: string[] = []
+  if (opts.needLevel) {
+    parts.push(opts.append
+      ? '用户在原任务上追加了要求，但你没有输出状态行判级。请补一行 `Context: state=续接 L=<等级> …`，并评估新增要求是否使等级或复杂档需要升档（不允许沿用旧判级不声明）。'
+      : '实质工作回合未输出判级状态行。请补一行 `Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> …`（等级封闭枚举见系统纪律段），再继续收口。')
+  }
+  if (opts.needChecklist) {
+    parts.push('本任务判级为复杂档（L2-F/L3）但没有任何验收登记。请用 discipline_task register 登记可机器判定的断言（附 checklist 需求项清单，与用户原文可对账）；语义型无法机器判定的需求项在收口 GATE 的 exempt 中如实声明，不要伪造。')
+  }
+  return parts.join(' ')
+}
+
+// checklist 解析：分号分隔的需求项清单（与断言语法同风格；空/空白项丢弃）。
+export function parseChecklistSpec(spec: string | undefined | null): string[] {
+  if (!spec) return []
+  return String(spec)
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 20) // 上限防滥用（清单不是碎念流水）
+}
+
+// F1/F2 判定核心：turn-stopping 收尾时调用。返回 null=无需注入；{needLevel,needChecklist}=该 steer 什么。
+// 前置（调用方保证）：已过零工具早退与只读早退 ⇒ 纯聊天回合 0 误注入（验收 c）；本函数内再守一道 toolCalls/hostLevel 门槛（纯函数自洽）。
+export function judgeDisciplineGap(o: {
+  declaredLevel: string | null
+  hostLevel: number
+  toolCalls: number
+  hasAssertions: boolean
+  hasChecklist: boolean
+  levelEnforce: boolean
+  checklistEnforce: boolean
+}): { needLevel: boolean; needChecklist: boolean } | null {
+  if (o.toolCalls < 1) return null
+  if (o.hostLevel < 1) return null
+  const needLevel = o.levelEnforce && o.declaredLevel === null
+  // F2：判级 L2-F/L3（或宿主视角重活但模型未自报——低报也逃不掉）且无任何验收绑定 → 要清单
+  const heavy = o.declaredLevel === 'L2-F' || o.declaredLevel === 'L3' || (o.declaredLevel === null && o.hostLevel >= 2)
+  const bound = o.hasAssertions || o.hasChecklist
+  const needChecklist = o.checklistEnforce && heavy && !bound && o.declaredLevel !== 'L1' && o.declaredLevel !== 'L2-S'
+  if (!needLevel && !needChecklist) return null
+  return { needLevel, needChecklist }
+}
+
 // GATE 收口检查：实质工作回合（≥1 次工具调用）正常收尾（completed）才要求 GATE。
 // 中断/失败/纯聊天不检（防误报骚扰）。返回 ok=有 GATE，missing=缺 GATE，skip=不检。
 export function judgeGate(
@@ -558,7 +615,7 @@ export function pinnedAssertionRecords(spec: string | undefined): AssertionRecor
   return parseAssertionSpec(spec).map((a) => ({ assertion: a, source: 'pinned' as const }))
 }
 export interface AcceptanceBridge {
-  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown, mode?: 'merge' | 'replace') => { count: number; mark: string; preservedAuto?: number }
+  register: (assertions: AcceptanceAssertion[], goal: string, ctx?: unknown, mode?: 'merge' | 'replace', checklist?: string[]) => { count: number; mark: string; preservedAuto?: number; checklistCount?: number }
   clear: (ctx?: unknown) => void
   list: (ctx?: unknown) => AssertionRecord[]
   evaluate: (a: AcceptanceAssertion, ctx?: unknown) => Promise<AssertionResult>
@@ -1295,6 +1352,7 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
         goal: { type: 'string', description: '任务目标原文摘录（随断言记录）' },
         assertions: { type: 'string', description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
         mode: { type: 'string', description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（仅替换工具自登记断言；用户原文推导断言恒保留）' },
+        checklist: { type: 'string', description: '可选：需求项清单（";"分隔，≤20 项）——L2 复杂任务把用户要求逐项登记于此（与断言互补：语义型无法机器判定的需求项落这里，收口时对账）。' },
         reason: { type: 'string', description: '可选：说明本次改动的理由（落审计）' },
       },
       required: ['action'],
@@ -1314,14 +1372,15 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
       const goal = args.goal === undefined ? '' : String(args.goal).slice(0, 300)
       if (action === 'register') {
         const list = parseAssertionSpec(String(args.assertions ?? ''))
-        if (list.length === 0) {
+        const checklist = parseChecklistSpec(args.checklist === undefined ? undefined : String(args.checklist))
+        if (list.length === 0 && checklist.length === 0) {
           void deps.log({ kind: 'task-register', status: 'empty' })
-          return { status: 'empty', count: 0, message: '未解析到有效断言（格式：not_exists:路径; cmd_exit0:命令）。若目标无法机器判定，请在文本 GATE 的 exempt 中明说“未绑定断言”，不要伪造。' }
+          return { status: 'empty', count: 0, message: '未解析到有效断言或清单（断言格式：not_exists:路径; cmd_exit0:命令；清单：";"分隔需求项）。若目标无法机器判定，请在文本 GATE 的 exempt 中明说"未绑定断言"，不要伪造。' }
         }
         const mode = String(args.mode ?? 'merge').toLowerCase() === 'replace' ? ('replace' as const) : ('merge' as const)
         const reason = args.reason === undefined ? '' : String(args.reason).slice(0, 200)
-        const r = deps.acceptance.register(list, goal, execCtx, mode)
-        void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, preservedAuto: r.preservedAuto ?? 0, reason, goal })
+        const r = deps.acceptance.register(list, goal, execCtx, mode, checklist)
+        void deps.log({ kind: 'task-register', status: 'ok', mode, count: r.count, preservedAuto: r.preservedAuto ?? 0, checklistCount: checklist.length, reason, goal })
         const how = mode === 'replace' ? '替换工具自登记断言（用户原文推导断言保留）' : '合并登记（保留既有断言）'
         // C8：与先前的争议配对——"争议→补交"应被记为一次修复（而非只留一句道歉）
         const disputedAt = (deps as { disputedAt?: number }).disputedAt
@@ -1331,7 +1390,7 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
           void deps.log({ kind: 'task-amend-after-dispute', count: r.count, goal })
           amendNote = ' 另：本会话此前登记过一次争议（自认先前收口无效），本次登记已与之配对，记为一次**补交修复**——请随后调用 discipline_gate 重跑验证，让修复有真值证据。'
         }
-        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条：${list.map((a) => explainAssertion(a)).join('；')}。收口时 discipline_gate 将自动复核。${amendNote}` }
+        return { status: 'ok', count: r.count, message: `已${how}，当前有效断言 ${r.count} 条${checklist.length ? `＋需求清单 ${checklist.length} 项` : ''}：${list.map((a) => explainAssertion(a)).join('；')}。收口时 discipline_gate 将自动复核。${amendNote}` }
       }
       // C7：争议标记——模型可自认先前那次收口无效（只记录、**不改判定**；撤销/改判保留给人在会话外）
       if (action === 'dispute') {
@@ -1383,6 +1442,9 @@ const L3_ENFORCE = process.env.SHISANUO_L3_OFF !== '1'
 const ASSERT_LAYER = process.env.SHISANUO_NO_ASSERT !== '1' && process.env.SHISANUO_ASSERT_LAYER === '1'
 // F2 护栏（默认关闭，避免骚扰纯聊天回合）：开启后，"零工具调用却声称完成"的回合会被记录并轻量提示一次（每回合上限 1 次）
 const ZEROTOOL_GUARD = process.env.SHISANUO_ZEROTOOL_GUARD === '1'
+// P2 F1/F2（roadmap 2026-10-17）：判级强制＋任务清单强制——默认开，SHISANUO_LEVEL_OFF / SHISANUO_CHECKLIST_OFF 可单项退位。
+const LEVEL_ENFORCE = process.env.SHISANUO_LEVEL_OFF !== '1'
+const CHECKLIST_ENFORCE = process.env.SHISANUO_CHECKLIST_OFF !== '1'
 
 // ── 遥测脱敏（写入前深处理；覆盖常见密钥形态，非穷尽——日志仍按敏感数据处理，可用 SHISANUO_LOG_DIR 指到私密目录）──
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -1607,7 +1669,7 @@ export function apply(ctx: Context) {
   }
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; effectClosed: boolean; steered: boolean; costHinted?: boolean; toolNames: string[] }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; effectClosed: boolean; steered: boolean; disciplineSteered?: boolean; costHinted?: boolean; toolNames: string[] }>()
   let inventoryLogged = false
   // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
   let lastWireNames: string[] = []
@@ -1619,6 +1681,8 @@ export function apply(ctx: Context) {
     raw: string
     goal: string
     assertions: AssertionRecord[]
+    // F2：需求项清单（语义型需求登记；与断言互补——清单不参与自动复核，但计入"复杂任务有登记"判定与对账）
+    checklist?: string[]
     assertionsPassedAt: number | null
     unresolvedLogged: boolean
   }
@@ -1641,7 +1705,7 @@ export function apply(ctx: Context) {
     return direct || 'default'
   }
   const acceptanceBridge: AcceptanceBridge = {
-    register: (assertions, goal, ctx, mode = 'merge') => {
+    register: (assertions, goal, ctx, mode = 'merge', checklist) => {
       const key = resolveKey(ctx)
       const prev = taskRecords.get(key)
       // 判据权威：用户原文推导断言（auto）恒保留——replace 仅作用于工具自登记断言；模型不可移除/改写用户判据
@@ -1650,11 +1714,12 @@ export function apply(ctx: Context) {
       const seen = new Set(base.map((x) => JSON.stringify(x.assertion)))
       const add = assertions.filter((a) => !seen.has(JSON.stringify(a))).map((a) => ({ assertion: a, source: 'tool' as const }))
       const merged = [...base, ...add]
-      taskRecords.set(key, { raw: goal || prev?.raw || '', goal: goal || prev?.goal || '', assertions: merged, assertionsPassedAt: null, unresolvedLogged: false })
+      const mergedChecklist = [...(prev?.checklist ?? []), ...(checklist ?? [])].filter((x, i, arr) => arr.indexOf(x) === i).slice(0, 20)
+      taskRecords.set(key, { raw: goal || prev?.raw || '', goal: goal || prev?.goal || '', assertions: merged, checklist: mergedChecklist, assertionsPassedAt: null, unresolvedLogged: false })
       const total = merged.length + pinnedRecords.length
       stats.assertion = `${total} 条待复(${mode === 'replace' ? '替换工具断言' : '登记'})`
       const mark = [...pinnedRecords, ...merged].map((x) => explainAssertion(x.assertion)).join('；').slice(0, 240)
-      return { count: total, mark, preservedAuto: autoKept }
+      return { count: total, mark, preservedAuto: autoKept, checklistCount: mergedChecklist.length }
     },
     clear: (ctx) => {
       taskRecords.delete(resolveKey(ctx))
@@ -1708,6 +1773,8 @@ export function apply(ctx: Context) {
   // 跳过治理（批3 方向 A）：每任务≤1 次 notice——熔断跳过时向用户落行 + 向模型发三问质询（不静默）
   const skipNoticeTasks = new Set<string>()
   let noticeProbeDone = false
+  // P2 F1：当前任务是否"追加型"（用户追加消息开启）——补判级 steer 用追加版文案（评估升降档）
+  let taskAppendFollowUp = false
 
   const sessionEventDispose = ctx.on('session/event', (session: unknown, event: unknown) => {
     try {
@@ -1729,7 +1796,11 @@ export function apply(ctx: Context) {
         }
         if (!txt || txt.startsWith(STEER_PREFIX)) return
         // B 组：**用户原文开任务**（客观锚，不依赖模型自觉）——切换任务即重置任务级计数与断言残留
-        openTask(null, 'user-message', sidKeyOf(session, ''))
+        // P2 F1：追加特征消息 → 本任务标记 appendFollowUp（只影响补判级 steer 用追加版文案；R20 任务边界不变）
+        const isAppend = isAppendFollowUpText(txt)
+        if (isAppend) void log({ kind: 'append-followup', raw: txt.slice(0, 120) })
+        openTask(null, isAppend ? 'user-message+append' : 'user-message', sidKeyOf(session, ''))
+        taskAppendFollowUp = isAppend
         const derived = ASSERT_LAYER ? deriveAssertionsFromUserText(txt) : []
         const key = sidKeyOf(session)
         if (derived.length > 0 && lastDerivedText.get(key) !== txt) {
@@ -1958,6 +2029,37 @@ export function apply(ctx: Context) {
           console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
         }
         return
+      }
+      // ── P2 F1/F2（roadmap 2026-10-17）：判级强制＋任务清单强制 ──
+      // 检测点=回合收尾（模型已输出文本，判级有无此时才可知）。纯聊天/零工具/只读已在上方早退 ⇒ 0 误注入；
+      // 一次性（b.disciplineSteered）＋走 STEER_CAP 熔断；与收口 steer 互斥（本块命中即 return，收口留下回合）。
+      // F1 验收 a：实质工作回合判级缺失 100% 注入；F2：L2-F/L3（或宿主视角≥2 的低报）无验收绑定 → 合并登记提示。
+      if ((LEVEL_ENFORCE || CHECKLIST_ENFORCE) && !b.disciplineSteered) {
+        const recF = taskRecords.get(bucketKey)
+        const gap = judgeDisciplineGap({
+          declaredLevel: b.declaredLevel,
+          hostLevel: b.hostLevel,
+          toolCalls: b.toolCalls,
+          hasAssertions: pinnedRecords.length > 0 || (recF?.assertions?.length ?? 0) > 0,
+          hasChecklist: (recF?.checklist?.length ?? 0) > 0,
+          levelEnforce: LEVEL_ENFORCE,
+          checklistEnforce: CHECKLIST_ENFORCE,
+        })
+        if (gap) {
+          b.disciplineSteered = true
+          const steerKeyF = currentTaskId || bucketKey
+          const usedF = steerCounts.get(steerKeyF) ?? 0
+          if (!shouldSteerNow(usedF, STEER_CAP)) {
+            void log({ kind: 'discipline-steer-capped', turn: payload.turn, used: usedF, cap: STEER_CAP, needLevel: gap.needLevel, needChecklist: gap.needChecklist })
+            skipSurface('discipline-gap', usedF)
+            return
+          }
+          steerCounts.set(steerKeyF, usedF + 1)
+          void log({ kind: 'discipline-steer', turn: payload.turn, needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp, declared: b.declaredLevel ?? '', hostLevel: b.hostLevel })
+          agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} ${buildDisciplineSteerText({ ...gap, append: taskAppendFollowUp })}`))
+          console.log(`[shisan-xinuo] discipline gap steer for turn ${payload.turn} (level=${gap.needLevel} checklist=${gap.needChecklist} append=${taskAppendFollowUp})`)
+          return
+        }
       }
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]

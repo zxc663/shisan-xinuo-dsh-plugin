@@ -19,6 +19,7 @@
 
 - `design-specs/` — 设计档（含对话弧研究、A/B 预注册、发行与版本规划等）。
 - `design-specs/shisan-xinuo-runtime-roadmap-20261017.md` — **运行时治理总路线（现行）**：F1–F12 功能规划＋P0–P6 迭代阶段（吸收并替代旧 v2/v3 路线）。
+- `design-specs/p1-host-probes-20261017.md` — P1 探针批结论：timed ask 原生／compaction 事件族／projection 缝无 renderer 面／sandbox 三档原生。
 - `config-contract.md` — 配置与规则包契约。
 - `b2-acceptance-binding-report-20261013.md` · `b3b-generator-and-semantic-regression-20261013.md` — 验收绑定与拦截换芯批次报告。
 - `positioning-and-reuse-strategy-20261013.md` · `implementation-batches-20261013.md` · `product-recalibration-20261013.md` — 定位、执行域与产品校准。

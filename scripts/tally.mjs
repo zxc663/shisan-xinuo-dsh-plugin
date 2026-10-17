@@ -34,7 +34,11 @@ const FIELD_WHITELIST = {
   // ── B2/B3 遥测（审计 F-04：补齐与引擎写入面的一致性；tests/tally-whitelist.test.mjs 机检防再脱节）──
   'task-auto': ['count', 'sourceKind', 'raw', 'mark'],
   'task-carryover': ['count', 'prior'],
-  'task-register': ['status', 'mark', 'count', 'goal', 'mode', 'preservedAuto', 'reason'],
+  'task-register': ['status', 'mark', 'count', 'goal', 'mode', 'preservedAuto', 'reason', 'checklistCount'],
+  // ── P2 F1/F2（roadmap 2026-10-17）：判级强制＋任务清单强制 ──
+  'append-followup': ['raw'],
+  'discipline-steer': ['turn', 'needLevel', 'needChecklist', 'append', 'declared', 'hostLevel'],
+  'discipline-steer-capped': ['turn', 'used', 'cap', 'needLevel', 'needChecklist'],
   pinned: ['count', 'marks'],
   'assertion-unresolved': ['turn', 'count', 'gate'],
   'bypass-blocked': ['cmd', 'fingerprint'],
