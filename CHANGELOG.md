@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 「DSH自定义」P1b 作用域覆盖（2026-10-17 · 第二会话续）
+
+- **交付**：`scope.json` 工作区规则（路径＋匹配方式 exact/prefix/contains/regex＋文本；空正文=该位置关闭；越具体越优先：完全一致＞前缀＞包含＞正则）；命中即按 **agent 作用域注册同名段遮蔽全局**（`agent.ctx.inject(['systemPrompt'])`，参照宿主 `dsh-file-reference-local` 先例的 install/dispose 生命周期）；cwd 每次组装实时读取；API `GET|PUT /api/dsh-custom/scope`（写=快照＋留痕）；浏览器半「作用域覆盖」编辑器（模式/路径/文本行＋增删＋保存）。
+- **实机验收（五态机证）**：同一会话日志 `system/message` 逐轮对比——装前无标记（seq=7）→全局注入（seq=38）→总开关关（seq=50 纯净）→**工作区覆盖**（seq=62：前缀命中会话 cwd，规则文本遮蔽全局且全局不出现）→**位关**（seq=76：空正文规则，全部不注入）；模型逐轮核对自证。测试 78→**100/100**（匹配优先级/合成/API 22 例）；实现仓 `D:\DeepSeek\dsh-custom` `b8c06fe`。设计档 §5 已同步 P1b 注记（P1 全批收官）。
+- **遗留**：「按会话/档位取实际装配」为后续首项；跨工作区现场移动未做实验（机制=逐组装重读 cwd，单测覆盖）；作用域编辑器视觉截屏受面板高度所限未留证（代码审阅＋API/端点测试已过，如实登记）。
+
 ## 「DSH自定义」P1a 纪律前置（2026-10-17 · 第二会话续）
 
 - **交付**：纪律前置段注册（`systemPrompt.section({ name: 'dsh-custom:discipline', order: −2000, interpolate: false })`；text 为函数＝宿主每次组装重读 ⇒ **热生效**，改完下一条消息生效、无需重启/推送）＋**注入总开关**（`settings.json`，关=空文本渲染期自动剔除 ⇒ 模型只见纯宿主提示词）＋**编辑器**（API `GET|PUT /api/dsh-custom/discipline`，保存前自动快照＋留痕）＋**增量预览**（前 8 行）＋**AGENTS.md 共存信息提示**（宿主原生通道，仅提示不接管）。
