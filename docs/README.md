@@ -55,6 +55,12 @@
 - `handover-dsh-custom-20261017.md` — **「DSH自定义」P0 交接文档**（现场/卡点与诊断线索/环境与撤除三步/纪律/交接提示词全文）。
 - `design-specs/dsh-custom-prompt-design-20261017.md` — **「DSH自定义」设计冻结**（三区页面：官方提示词只读/complete 深改/纪律前置；总开关与作用域；分期 P0-P3；拍板项呈报）。
 
+## 迭代推进轮（2026-10-18）
+
+- `design-specs/e1-v5-supplement-prereg-20261016.md`（含 R5 重基线修订）· `design-specs/e1-v5-supplement-results-20261018.md` — **E1-v5 有效性补样本轮**：预注册与执行结果（75 有效会话；真值 72/75；治理层差分仅 C 臂成立；装置事故如实全录）。
+- `design-specs/real-machine-walkthrough-20261018.md` — **实机走查报告**（页面 8 区渲染＋F1 判级强制/追加判级、F8 压缩重载信号、F3 越界写审计的真机证据；两处缺陷发现→修复→复验记录）。
+- `evidence/e1v5-20261018/` — E1-v5 轮原始会话记录（`sessions-r1..r5.jsonl`，含作废标记；截图与本机装置留档见报告 §7 指针）。
+
 ## 其余（评估 · 证据 · 交接）
 
 - `extension-design-20261014.md` · `handoff-experience-optimization-20261014.md` — 扩展面设计与体验优化交接。

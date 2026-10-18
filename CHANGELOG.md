@@ -1,5 +1,16 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 实机走查＋E1-v5 重基线轮（2026-10-18 · 验证收口轮）
+
+> 本轮=预注册 E1-v5 补样本轮全量执行（75 有效会话）＋实机走查（页面 8 区＋F1/F3/F8 真机行为）；过程中发现并修复两处遥测缺陷（失败用例先行）；迭代批次六（有效性终判）由此落地；发行维持冻结（解冻=显式决策，未做）。
+
+- **走查缺陷修复（先于跑批；`src/shisan-xinuo-core.ts`＋单测）**：①**F3** `workspace-cwd` 源修正——宿主 0.2.0-rc.2 **不出** `working-directory/change` 事件（整条会话日志实锤），改从 runtime-context 快照解析（`extractRuntimeContextCwd`；7 新测）；②**F8** `shadowedTokens` 源修正——字段在 `compaction/summary` 而非 `compaction/end`（真机实证），summary 捕获→end 取用（`extractCompactionShadowedTokens`；7 新测）。两套件先红后绿（失败用例先行）；全量 **34/34** 绿；tally 白名单同步（`workspace-cwd.via`）。修复实机复验：`write-audit` 越区记录落账（inWorkspace=false）、`compaction-detected shadowedTokens=6313`。
+- **实机走查（`docs/design-specs/real-machine-walkthrough-20261018.md`）**：页面 **8 区**渲染（草图 9 项中「备份管理」并入快照区——登记）；**F1** 补判级/追加判级 steer 真机两连（模型补状态行 L2-F／追加评估「维持原判级不升档」）；**F8** `/compact`→`compaction-detected`→inject notice→模型重载序（重读纪律/任务状态/工作区真值＋复述＋断层声明）；**F3** 越界写=宿主沙箱拒写（`file access denied under workspace-write mode`）＋提权卡（走查择「拒绝」，文件保持不存在）。证据=截图 31 张＋exec-log 全链。
+- **E1-v5 重基线轮（`docs/design-specs/e1-v5-supplement-results-20261018.md`；预注册 R5）**：5 臂×3 任务×5 轮=**75 有效会话**（6 会话作废重跑：D 臂凭据注入修复＋S 臂 preset 按更新后宿主真源重建）。**真值 72/75**（C/B/A 各 15/15；D 14/15、S 13/15——3 例 T3 partial=尾换行损耗，n=3 不作因果主张）；**治理层差分仅 C 臂成立**（T1 危险删除拦截＋审批 5/5、gate-ok 13/15 vs 对照 0、判级强制 steer 3 次全合规收敛）。**行为有效性对任务结果未见增量**（与「机制存在≠有效」口径一致，如实报告）。
+- **装置与隔离**：桌面档 dev-mount 旋挂旋撤（撤除登记＋复验=无新 boot 行）；AGENTS.md 隔离-还原（R4）；S 臂脱敏验收 `skill-catalog` 1713 字符（用户工程技能 0 残留）；驱动工程四修复（DPI 感知/MoveWindow 150% 缩放、`DSH_HOME` 显式设定、arm 行新鲜度、窗口几何归一）。
+- **批毕缺陷处置（ask_user_question L3 误报；预注册备案「跑毕处置」）**：询问类工具参数=展示提问文本，词面命中删除动词≠动作——新增 `isInquiryTool` 豁免（执行面工具判定不变；`discipline_gate` 命令仍受 L3 护栏）；单测 6 例（judge-l3 套件）；**真机复验**：陷阱会话（提问文案逐字含 `Remove-Item …`）→ `pre-execute tool=ask_user_question l3:null`、零 `l3-intercept`、问题卡正常（对照=10-17 台账误报实录）。
+- **收口**：README 状态总表全 ✅（唯「有效性」=已测·未证显著）；docs 索引/机检全绿。
+
 ## 运行时治理批 P1–P6 全量落地＋页面批·批次三/四（2026-10-17 · 迭代计划推进轮）
 
 > 本轮=按两份迭代文档（`shisan-xinuo-runtime-roadmap-20261017.md` F1–F12/P0–P6＋`dsh-custom-prompt-iteration-plan-20261017.md` 批次一~六〔当时为 P 系列，2026-10-18 起页面侧改批次命名，P 编号唯一归属运行时路线〕）一次性推完全部可施工迭代；批次六（有效性终判 n≥5 样本轮=F11）与发行解冻=需真实多会话样本与显式决策，未做（如实）。
