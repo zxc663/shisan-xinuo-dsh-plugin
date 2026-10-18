@@ -27,7 +27,7 @@ Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄
 - approval=执行授权状态：待批准=已申请未获准（本轮结束回合等待，不得执行该动作）｜已批准/已拒绝=已获准/被拒｜豁免=规则允许的豁免（行外附一行豁免依据）。无需审批的动作写 无需。
 - 已澄清 ≠ 已批准：澄清的是意图，批准的是动作，两事分开记录。
 - 追加任务必须重给判级：评估新增要求是否改变等级/复杂档（升档或维持），状态行同步更新——不允许沿用旧判级。
-- 首轮必写（新任务或续接的第一轮，一行）；同一任务后续轮次只在上述四项有变化时重写——无变化不重复贴（防流程噪声）。
+- 首轮必写（新任务或续接的第一轮，一行；**单次/只读轻查询同样写**——state 记 单次、L 记 L1）；同一任务后续轮次只在上述四项有变化时重写——无变化不重复贴（防流程噪声）。
 - L=L3 时调用 discipline_gate 的 level 参数填 L2-F（工具枚举无 L3；L3 动作由审批流保障，gate 拒跑 L3 危险命令）。
 
 ## 1. 开工协议
@@ -2676,19 +2676,13 @@ export function apply(ctx: Context) {
         }
         return
       }
-      // C2：**按客观副作用免 gate**——只读回合（宿主视角 ≤L1，判据在宿主侧不用模型自报）不强制收口；
-      // 已有弱证据 pass 也不再追讨（对只读回合追问判据=纯 token 税，治理-token 平衡原则）。 #决策 2026-10-13 23:55, 2026-10-16 00:35
-      if (b.hostLevel <= 1) {
-        if (b.gateVerdict !== 'pass') {
-          void log({ kind: 'gate-skip-readonly', turn: payload.turn, toolCalls: b.toolCalls, hostLevel: b.hostLevel })
-          console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
-        }
-        return
-      }
       // ── P2 F1/F2（roadmap 2026-10-17）：判级强制＋任务清单强制 ──
-      // 检测点=回合收尾（模型已输出文本，判级有无此时才可知）。纯聊天/零工具/只读已在上方早退 ⇒ 0 误注入；
+      // 检测点=回合收尾（模型已输出文本，判级有无此时才可知）。零工具/纯聊天在上方早退（闲聊 0 误注入）。
+      // 2026-10-19 实机缺陷修复：**只读回合（hostLevel≤1）不再豁免判级声明**——原「只读免收口」早退置于本块之前，
+      // 把判级检查一并吞掉（实测：只读问答 7 次工具调用首轮缺状态行且无任何强制；纯函数契约 judgeDisciplineGap 本含
+      // hostLevel≥1 的判级面、测试早已锚定——属接线顺序违规而非设计）。收口豁免见下方 C2 块，语义不变。
       // 一次性（b.disciplineSteered）＋走 STEER_CAP 熔断；与收口 steer 互斥（本块命中即 return，收口留下回合）。
-      // F1 验收 a：实质工作回合判级缺失 100% 注入；F2：L2-F/L3（或宿主视角≥2 的低报）无验收绑定 → 合并登记提示。
+      // F1 验收 a：实质工作回合判级缺失 100% 注入（含只读回合）；F2：L2-F/L3（或宿主视角≥2 的低报）无验收绑定 → 合并登记提示。
       // 治理开关（2026-10-18）：levelChecklist=false 等价双 OFF（env 显式关闭仍优先——env 关了文件开不起来，符合运维语义）
       const govTurn = readGovernanceCached(governancePath())
       const levelEnforceEff = LEVEL_ENFORCE && govTurn.levelChecklist
@@ -2702,7 +2696,8 @@ export function apply(ctx: Context) {
           hasAssertions: pinnedRecords.length > 0 || (recF?.assertions?.length ?? 0) > 0,
           hasChecklist: (recF?.checklist?.length ?? 0) > 0,
           levelEnforce: levelEnforceEff,
-          checklistEnforce: checklistEnforceEff,
+          // 清单强制按 hostLevel 门控：只读回合（hostLevel≤1）无验收对象——只查判级声明（2026-10-19 修复配套）
+          checklistEnforce: checklistEnforceEff && b.hostLevel > 1,
         })
         if (gap) {
           b.disciplineSteered = true
@@ -2727,6 +2722,16 @@ export function apply(ctx: Context) {
           console.log(`[shisan-xinuo] discipline gap steer for turn ${payload.turn} (level=${gap.needLevel} checklist=${gap.needChecklist} append=${taskAppendFollowUp})`)
           return
         }
+      }
+      // C2：**按客观副作用免 gate**——只读回合（宿主视角 ≤L1，判据在宿主侧不用模型自报）不强制收口；
+      // 已有弱证据 pass 也不再追讨（对只读回合追问判据=纯 token 税，治理-token 平衡原则）。 #决策 2026-10-13 23:55, 2026-10-16 00:35
+      // （2026-10-19 重排：本块移至 F1/F2 之后——判级声明对只读回合仍强制，收口豁免语义不变。）
+      if (b.hostLevel <= 1) {
+        if (b.gateVerdict !== 'pass') {
+          void log({ kind: 'gate-skip-readonly', turn: payload.turn, toolCalls: b.toolCalls, hostLevel: b.hostLevel })
+          console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
+        }
+        return
       }
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]

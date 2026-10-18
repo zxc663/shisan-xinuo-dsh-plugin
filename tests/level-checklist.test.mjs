@@ -72,6 +72,9 @@ t('gap: L2-F 已有清单 → 不再要清单', null, G({ declaredLevel: 'L2-F',
 t('gap: 清单关闭旗标生效', null, G({ declaredLevel: 'L2-F', checklistEnforce: false }))
 t('gap: 宿主视角重活无自报判级 → 双缺（低报也逃不掉）', { needLevel: true, needChecklist: true }, G({ declaredLevel: null, hostLevel: 2 }))
 t('gap: 无判级+清单强制关 → 只补判级', { needLevel: true, needChecklist: false }, G({ declaredLevel: null, checklistEnforce: false }))
+// 2026-10-19 实机缺陷锚（只读回合逃判级）：契约＝hostLevel≥1 的判级面照查（上面「实质回合无判级」条即契约），
+// hostLevel=0（零判据工具）才免——handler 修复=把 F1/F2 块重排到「只读免收口」早退之前，
+// 并在 handler 侧对只读回合门控 checklistEnforce（函数层不变）。本块注释为接线顺序的回归锚。
 
 // ── F2：discipline_task register 扩展 checklist（工具面）──
 {
