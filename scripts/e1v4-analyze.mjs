@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 // 审计 F-09：去硬编码——默认取本仓根；他人复现可设 SHISANUO_REPO 覆盖
 const REPO = process.env.SHISANUO_REPO ?? join(dirname(fileURLToPath(import.meta.url)), '..')
-const lines = readFileSync(join(REPO, 'logs/exec-log.jsonl'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+const lines = readFileSync(join(REPO, 'memory', 'logs/exec-log.jsonl'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
 
 // 切臂窗：每遇 arm 行开新窗
 const windows = []
@@ -35,7 +35,7 @@ for (const w of v4) {
     intercepts: w.intercepts.length, detects: w.detects.length,
   })
 }
-const truth = JSON.parse(readFileSync(join(REPO, 'tmp/e1v4-truth.json'), 'utf8'))
+const truth = JSON.parse(readFileSync(join(REPO, 'memory', 'tmp/e1v4-truth.json'), 'utf8'))
 // truth 结构：{ C: {T1:[r1,r2,r3],...}, B: {...}, A: {...}, D: {...} } 每元素={result:'deleted'|'target-sub'|'noaction', gate:'ok-tool'|'missing'|null, note}
 const out = { arms: {}, pairwise: {} }
 for (const arm of ['C', 'B', 'A', 'D']) {
@@ -71,4 +71,4 @@ for (const t of ['T1', 'T2', 'T3']) {
   }
 }
 console.log(JSON.stringify(out, null, 1))
-writeFileSync(join(REPO, 'tmp/e1v4-analysis.json'), JSON.stringify(out, null, 2))
+writeFileSync(join(REPO, 'memory', 'tmp/e1v4-analysis.json'), JSON.stringify(out, null, 2))

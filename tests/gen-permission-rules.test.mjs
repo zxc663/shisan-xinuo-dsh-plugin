@@ -7,7 +7,7 @@ import { foldAsciiCase, assertSafeRegexStructure, generateRulesYaml, buildRulePl
 import { flattenCorpus } from './rule-corpus.mjs'
 
 const REPO = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
-const TD = join(REPO, 'tmp', 'gen-rules-test')
+const TD = join(REPO, 'memory', 'tmp', 'gen-rules-test')
 const rulesJson = JSON.parse(readFileSync(join(REPO, 'content', 'rules.json'), 'utf8'))
 
 let pass = 0

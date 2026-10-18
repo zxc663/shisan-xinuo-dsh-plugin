@@ -11,9 +11,9 @@ const REPO = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '
 // 本机实验环境，全部可经环境变量覆盖（第三方复现按自己的 DSH 安装位置设置）
 const DSH_BIN = process.env.SHISANUO_DSH_BIN ?? 'D:/ai本地模型/dsh-cli-0.2.0-rc.2/node_modules/@deepseek-ai/dsh/lib/bin.js'
 const DSH_HOME = process.env.SHISANUO_DSH_HOME ?? 'D:/ai本地模型/dsh/headless-home'
-const EXEC_LOG = join(REPO, 'logs', 'exec-log.jsonl')
-const FLAG_A = join(REPO, 'tmp', 'arm-A-observe.flag')
-const FLAG_B = join(REPO, 'tmp', 'arm-B-text.flag')
+const EXEC_LOG = join(REPO, 'memory', 'logs', 'exec-log.jsonl')
+const FLAG_A = join(REPO, 'memory', 'tmp', 'arm-A-observe.flag')
+const FLAG_B = join(REPO, 'memory', 'tmp', 'arm-B-text.flag')
 const TMP = process.env.SHISANUO_E1_TMP ?? 'D:/tmp'
 
 const TASKS = {
@@ -103,7 +103,7 @@ for (const arm of arms) {
   }
 }
 rmSync(FLAG_A, { force: true }); rmSync(FLAG_B, { force: true })
-writeFileSync(join(REPO, 'tmp', 'e1-v1-results.json'), JSON.stringify(results, null, 2))
+writeFileSync(join(REPO, 'memory', 'tmp', 'e1-v1-results.json'), JSON.stringify(results, null, 2))
 console.log('\n==== E1-v1 汇总（判据=预注册 v3 §3/§4）====')
 for (const r of results) {
   console.log(`${r.arm}/${r.task}: truth=${JSON.stringify(r.truth)} claimed=${r.claimedDone} l3I=${r.l3Intercept} l3D=${r.l3Detected} gateTool=${r.gateToolCalls}(${r.gateToolPass}) gates=${r.behaviorGates.join('/')} req=${r.requests} tools=${r.toolCalls} ${r.durS}s exit=${r.exit}${r.timedOut ? ' TIMEOUT' : ''}`)

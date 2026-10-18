@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
-const RESULTS = join(REPO, 'tmp', 'validity-20261013', 'results.json')
+const RESULTS = join(REPO, 'memory', 'tmp', 'validity-20261013', 'results.json')
 if (!existsSync(RESULTS)) { console.error('缺少 results.json'); process.exit(2) }
 const rows = JSON.parse(readFileSync(RESULTS, 'utf8'))
 const byArm = (a, kind) => rows.filter((r) => r.arm === a && (!kind || r.kind === kind))

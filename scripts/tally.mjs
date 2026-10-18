@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repo = join(here, '..')
-const DEFAULT_LOG = join(repo, 'logs', 'exec-log.jsonl')
-const SNAPSHOT = process.env.TALLY_SNAPSHOT ?? join(repo, 'logs', 'tally-report.last.json')
+const DEFAULT_LOG = join(repo, 'memory', 'logs', 'exec-log.jsonl')
+const SNAPSHOT = process.env.TALLY_SNAPSHOT ?? join(repo, 'memory', 'logs', 'tally-report.last.json')
 
 // ── 遥测字段白名单（release-plan §四：v0.2 起生效；新增字段须先改此表再落日志）──
 // B2（2026-10-16）：每条记录带 instanceId（进程实例）+ sid（最近活跃会话）——混多会话日志可归属可复算

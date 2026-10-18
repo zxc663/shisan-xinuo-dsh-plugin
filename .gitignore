@@ -32,3 +32,10 @@ Thumbs.db
 !.vscode/extensions.json
 lib
 *.tgz
+
+# carrier (xinuo) generated / temp / local-only
+.xinuo/tmp/
+.xinuo/logs/
+.xinuo/artifacts/
+.xinuo/backups/
+.xinuo/index/

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { CONFIG_CORPUS as corpus, CONFIG_CONTENT_EXCEPTIONS as contentExceptions } from './rule-corpus.mjs'
 
 const REPO = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
-const TD = join(REPO, 'tmp', 'config-test')
+const TD = join(REPO, 'memory', 'tmp', 'config-test')
 
 let pass = 0, fail = 0
 const cases = []

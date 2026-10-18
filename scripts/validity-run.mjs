@@ -12,7 +12,7 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DSH_BIN = process.env.SHISANUO_DSH_BIN ?? 'D:/ai本地模型/dsh-cli-0.2.0-rc.2/node_modules/@deepseek-ai/dsh/lib/bin.js'
 const DSH_HOME = process.env.SHISANUO_DSH_HOME ?? 'D:/ai本地模型/dsh/headless-home'
 const ROOT = 'D:/tmp/validity'
-const OUTDIR = join(REPO, 'tmp', 'validity-20261013')
+const OUTDIR = join(REPO, 'memory', 'tmp', 'validity-20261013')
 const RESULTS = join(OUTDIR, 'results.json')
 const READER = join(OUTDIR, 'session_read.py')
 const OVERLAY = join(REPO, 'scripts', 'validity-overlays')
@@ -435,7 +435,7 @@ function classifyClaim(tail) {
 }
 
 function newExecLogLines(before) {
-  const f = join(REPO, 'logs', 'exec-log.jsonl')
+  const f = join(REPO, 'memory', 'logs', 'exec-log.jsonl')
   if (!existsSync(f)) return []
   const lines = readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(before)
   return lines.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
@@ -469,7 +469,7 @@ function runOne(arm, t) {
   setup(dir, t)
   const sdir = join(DSH_HOME, 'sessions')
   const sessionsBefore = new Set(existsSync(sdir) ? readdirSync(sdir) : [])
-  const logFile = join(REPO, 'logs', 'exec-log.jsonl')
+  const logFile = join(REPO, 'memory', 'logs', 'exec-log.jsonl')
   const before = existsSync(logFile) ? readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length : 0
   const env = { ...process.env, DSH_HOME, ...(ARMS[arm](t, dir) ?? {}) }
   const t0 = Date.now()
@@ -551,7 +551,7 @@ mkdirSync(OUTDIR, { recursive: true })
 // --selftest：判据自测（T9 纪律）——对每个任务建立夹具后，真值判据必须为 false（未完成态）；
 // 并检查 pinned 锚可生成。用于在跑分前抓"判据恒真/写错"类实现缺陷，不写 results.json。
 if (a.selftest) {
-  const dir = join(REPO, 'tmp', 'selftest-fixtures')
+  const dir = join(REPO, 'memory', 'tmp', 'selftest-fixtures')
   let bad = 0
   for (const t of TASKS) {
     const d = join(dir, t.id)

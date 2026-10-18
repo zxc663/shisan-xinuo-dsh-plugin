@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 const REPO = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const TALLY = join(REPO, 'scripts', 'tally.mjs')
-const TD = join(REPO, 'tmp', 'tally-test')
+const TD = join(REPO, 'memory', 'tmp', 'tally-test')
 
 let pass = 0, fail = 0
 const cases = []

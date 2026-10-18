@@ -14,6 +14,8 @@ export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 元工
 
 以下纪律逐条执行，不是参考建议。每条=目的＋触发＋可检查结果。
 
+**插件自包含边界**：本插件随包提供常驻核心、渐进流程细则、固定模板、运行时检测与收口工具；模型执行本插件工作流时不得把插件外部 Skill、外部工作流仓库或宿主技能目录当作前置依赖。外部 Skill 只能作为可选参考，缺失、未加载或不可用时，仍必须依据本插件已注入的规则和工具继续；需要的细则由插件自身 \`content/\` 按触发注入。
+
 ## 0. 状态行（每轮开工/追加输出一行；仅在 模式/等级/澄清/审批 变化时更新）
 Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄清|已澄清> approval=<无需|待批准|已批准|已拒绝|豁免:理由>
 
@@ -97,13 +99,15 @@ Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄
 - 方案/选型/版本/最佳实践类问题=先调研对比再答（K1/K4 联动：官方文档、现有方案、可信信号）；训练知识只作候选，不作结论。
 
 ## 3. 承载协议（工作流承载文档）
-- 承载根：项目工作区**根目录新建专用文件夹**（建议 \`.xinuo/\`，名称以项目规则文件为准），工作流要求的承载文档都写在这里；模板从按需层 templates/ 复制，禁空占位。
+- 承载根：项目工作区**根目录固定使用 \`memory/\`**，工作流要求的承载文档都写在这里；不得另造 \`.xinu/\`、\`.agent/\` 等同义目录。模板从按需层 templates/ 复制，禁空占位。
+- **根目录卫生（强制）**：临时脚本/探针/日志/打包产物一律放 \`memory/\` 的分类子目录——\`tmp/\`（临时脚本与探针）、\`logs/\`（运行日志）、\`artifacts/\`（打包产物与校验和）；**不得堆在工作区根目录**。根目录只保留源码、配置、文档与项目结构目录。新建临时文件前先定位到 \`memory/\` 对应分类，而不是随手丢根目录。
+- **承载区结构与文件索引（强制）**：承载区固定结构＝\`STATE.md\`（一面状态）＋\`design/\`（设计文档）＋\`index/\`（工作区文件索引）＋\`tmp/\`＋\`logs/\`＋\`artifacts/\`＋\`backups/\`。工作区文件索引由脚本生成（如 \`node scripts/workspace-index.mjs\` → \`memory/index/workspace.json\`），记录每个文件的相对路径/大小/mtime/分类，用于一眼看清文件当前状态、发现并清理临时垃圾；索引可复跑、幂等覆盖。
 - 一档制单文件四区（防双写漂移），四者职责分开：
   - **一面状态（状态段）**：≤10 行，首行 STATE 单行结构化；挂会话锚（任务 id/会话短 id）——多会话并行时每会话一行锚，一屏可读；与上下文冲突→以本档为准并重读真实文件系统。
   - **教训库（教训区）**：踩坑条目（症状→根因→解决→预防＋证据＋命中计数）；同坑复现=修订既有条目，禁另立近重复；高频置顶一行（症状→对策），其余按类。
   - **偏好段**：已确认的技术栈/语言/风格偏好，不重复问。
   - **流水区**：每任务块一行，固定格式 \`YYYY-MM-DD HH:mm | [会话短id] | 改动 | 验证(结果) | 未验证项\`——**时间戳精确到分**（真实项目中 agent 迭代速度远快于人工，秒级是噪声）；>200 行或 >150KB 旧行移轮转档（移动非删除）。**重要决策另落一行决策审计**：\`决定 | 依据(前提+重开条件) | 被否候选 | 影响\`——决策有出处、可重开、可追责。
-- **备份规则（不越过工作区）**：备份只允许写进承载文件夹的备份分类子目录（\`.xinuo/backups/\`）；每个备份必须附 \`backup-info.txt\`——写清**备份时间（到分）／备份节点（改前/改后/里程碑）／作用（可回滚到哪个状态）／原因（因什么而备份）**；临时脚本的临时备份**任务完成后直接删除**，除非标 important 的重要备份，其余不留。
+- **备份规则（不越过工作区）**：备份只允许写进承载文件夹的备份分类子目录（\`memory/backups/\`）；每个备份必须附 \`backup-info.txt\`——写清**备份时间（到分）／备份节点（改前/改后/里程碑）／作用（可回滚到哪个状态）／原因（因什么而备份）**；临时脚本的临时备份**任务完成后直接删除**，除非标 important 的重要备份，其余不留。
 - 脚本复用：轮转/检索/对账脚本从插件或技能目录复用，**不复制进工作区承载**——工作区只放数据。
 - 会话末必做：流水一行＋状态段刷新；不更新=交接断链。
 - 边界：单次/纯只读问答不建承载，交付回复声明一行「单次：未建承载」。
@@ -919,24 +923,37 @@ export function deriveAssertionsFromUserText(text: string): AcceptanceAssertion[
 }
 
 export interface AssertionEvalDeps {
-  runCmd?: (cmd: string, opts?: { timeoutMs?: number; signal?: AbortSignal }) => Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>
+  runCmd?: (cmd: string, opts?: { timeoutMs?: number; signal?: AbortSignal; cwd?: string }) => Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; spawnError?: string }>
   judge?: (cmd: string) => string | null
+  /** 工作区根：相对路径断言（not_exists/exists/path_contains）据此解析；缺省=按进程 cwd（可能错位） */
+  cwd?: string
+}
+
+// 相对路径锚定：相对路径（无盘符、非 / \ 开头）相对工作区 cwd 解析；绝对路径原样。
+// 本会话实证：断言用相对路径（如 memory/xxx）时若按进程 cwd 解析会落错位置，文件真实存在于工作区仍判「目标不存在」，
+// 导致收口死循环。此处把相对路径统一锚到会话工作区根，消除「写在工作区、验在进程 cwd」的漂移。
+export function resolveAssertionPath(path: string, cwd: string | undefined): string {
+  const raw = String(path ?? '')
+  const isAbs = /^[a-z]:[\/\\]/i.test(raw) || raw.startsWith('/') || raw.startsWith('\\')
+  if (isAbs || !cwd) return raw
+  return join(cwd, raw)
 }
 
 // 断言真值评估（宿主侧直测；cmd_exit0 走 planGate 预检，断言不得成为 L3 侧门）。
 export async function evaluateAssertion(a: AcceptanceAssertion, deps: AssertionEvalDeps = {}): Promise<AssertionResult> {
   try {
     if (a.kind === 'not_exists') {
-      const present = existsSync(a.path)
+      const present = existsSync(resolveAssertionPath(a.path, deps.cwd))
       return { assertion: a, ok: !present, detail: present ? '目标仍存在' : '已不存在（通过）' }
     }
     if (a.kind === 'exists') {
-      const present = existsSync(a.path)
+      const present = existsSync(resolveAssertionPath(a.path, deps.cwd))
       return { assertion: a, ok: present, detail: present ? '已存在（通过）' : '目标不存在' }
     }
     if (a.kind === 'path_contains') {
-      if (!existsSync(a.path)) return { assertion: a, ok: false, detail: '文件不存在' }
-      const t = readFileSync(a.path, 'utf8')
+      const p = resolveAssertionPath(a.path, deps.cwd)
+      if (!existsSync(p)) return { assertion: a, ok: false, detail: '文件不存在' }
+      const t = readFileSync(p, 'utf8')
       const ok = t.includes(a.substr)
       return { assertion: a, ok, detail: ok ? '内容匹配（通过）' : '内容不包含目标文本' }
     }
@@ -1291,10 +1308,10 @@ const GATE_TAIL_CAP = 300
 // 真实执行（副作用面，测试经注入替换）：Windows 下走 cmd.exe（Node exec 默认 ComSpec）。
 export async function runGateCommand(
   cmd: string,
-  opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+  opts: { timeoutMs?: number; signal?: AbortSignal; cwd?: string } = {},
 ): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; spawnError?: string }> {
   return new Promise((resolve) => {
-    exec(cmd, { timeout: opts.timeoutMs ?? GATE_CMD_TIMEOUT_MS, signal: opts.signal, maxBuffer: 1024 * 256 }, (err, stdout, stderr) => {
+    exec(cmd, { timeout: opts.timeoutMs ?? GATE_CMD_TIMEOUT_MS, signal: opts.signal, maxBuffer: 1024 * 256, cwd: opts.cwd }, (err, stdout, stderr) => {
       const timedOut = Boolean(err && (err as unknown as NodeJS.ErrnoException & { killed?: boolean }).killed)
       resolve({
         code: err && typeof (err as { code?: number | string }).code === 'number' ? (err as { code: number }).code : err ? null : 0,
@@ -1312,6 +1329,8 @@ export interface GateToolDeps {
   log: (entry: Record<string, unknown>) => void | Promise<void>
   onStats?: (verdict: string, execCtx?: unknown) => void
   judge?: (cmd: string) => string | null
+  /** 工作区根（运行时动态读取）：断言相对路径与收口命令执行目录据此锚定 */
+  cwd?: () => string
   /** 保留字段（宿主状态观测）；审计 F-02 修复后 refuse 不再被其豁免 */
   isFullAccess?: () => boolean
   /** B2 验收桥：验证通过后附加复核已登记断言（资源真值）；未接线=沿用旧行为 */
@@ -1338,9 +1357,9 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
       properties: {
         level: { type: 'string', description: '任务判级：L1 | L2-S | L2-F' },
         v: { type: 'string', description: '改动范围一句话' },
-        cmd: { type: 'string', description: '可重跑的验证命令（宿主将真实执行）；与 assert 至少给一个' },
+        cmd: { type: 'string', description: '可重跑的验证命令（宿主将真实执行，工作目录=当前工作区）；与 assert 至少给一个' },
         claimedExit: { type: 'number', description: '你声称该命令将返回的退出码（通常是 0）；给了 cmd 才需要' },
-        assert: { type: 'string', description: '算子判据（**插件内联求值、永不过 shell**，故不受沙箱/引号影响）：not_exists:<路径> | exists:<路径> | path_contains:<路径>::<子串>' },
+        assert: { type: 'string', description: '算子判据（**插件内联求值、永不过 shell**，故不受沙箱/引号影响）：not_exists:<路径> | exists:<路径> | path_contains:<路径>::<子串>。相对路径相对当前工作区解析；绝对路径原样。多条以;分隔' },
         summary: { type: 'string', description: '任务交付摘要（≤500 字）：做了什么/改了哪些文件/验证结论。通过时随收口证据落档并回显，防收口后回合被收回导致交付文本丢失（A4）。' },
         files: { type: 'string', description: '变更文件清单（逗号分隔）' },
         exempt: { type: 'string', description: '未验证事项声明（无则省略）。**无可机器判据的任务**（只读/语义型、交付物为会话内文本）在此如实声明——宿主按"诚实未验证"登记（非完成、非失败），不必硬凑命令。' },
@@ -1396,7 +1415,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         }
         for (const a of specs) {
           try {
-            const res = await (deps.acceptance?.evaluate ? deps.acceptance.evaluate(a, execCtx) : evaluateAssertion(a))
+            const res = await (deps.acceptance?.evaluate ? deps.acceptance.evaluate(a, execCtx) : evaluateAssertion(a, { judge, cwd: deps.cwd?.() }))
             // 规范化返回形状：assertion 以本处解析对象为准（求值器实现/桩可能省略该字段）
             assertResults.push({ assertion: a, ok: !!res?.ok, detail: String(res?.detail ?? '') })
           } catch (e) {
@@ -1522,7 +1541,7 @@ export function buildGateToolDefinition(deps: GateToolDeps) {
         }
       }
 
-      const r = await runCmd(cmd, { signal: execCtx.signal })
+      const r = await runCmd(cmd, { signal: execCtx.signal, cwd: deps.cwd?.() })
       const base = { level, v, cmd: cmd.slice(0, 200), claimedExit, files, exempt, ...(summary ? { summary } : {}), stdoutTail: r.stdout, stderrTail: r.stderr }
       // C3 第一档：比对"模型自报等级"与"宿主按命令推出的等级"，低报即落账（**不覆盖、不改判定**）
       const hostLevel = hostLevelFromCmd(cmd, deps.judge)
@@ -1736,7 +1755,7 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
       properties: {
         action: { type: 'string', description: 'register | clear | dispute | status（dispute＝自认先前收口无效，仅记录不改判定）' },
         goal: { type: 'string', description: '任务目标原文摘录（随断言记录）' },
-        assertions: { type: 'string', description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text" },
+        assertions: { type: 'string', description: "断言列表：kind:payload 以';'分隔；kind ∈ not_exists|exists|path_contains|cmd_exit0；path_contains 形如 path_contains:<path>::text。路径相对当前工作区解析（相对路径即可，勿用盘符绝对路径制造锚点漂移）" },
         mode: { type: 'string', description: 'register 语义：merge（默认，追加合并、保留既有断言）| replace（仅替换工具自登记断言；用户原文推导断言恒保留）' },
         checklist: { type: 'string', description: '可选：需求项清单（";"分隔，≤20 项）——L2 复杂任务把用户要求逐项登记于此（与断言互补：语义型无法机器判定的需求项落这里，收口时对账）。' },
         reason: { type: 'string', description: '可选：说明本次改动的理由（落审计）' },
@@ -1816,7 +1835,7 @@ export function buildTaskToolDefinition(deps: TaskToolDeps) {
 
 // 仓库根相对基准（可移植：换机/换 OS 不失效；SHISANUO_LOG_DIR 可覆盖日志目录）
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
-const LOG_DIR = process.env.SHISANUO_LOG_DIR ?? join(REPO_ROOT, 'logs')
+const LOG_DIR = process.env.SHISANUO_LOG_DIR ?? join(REPO_ROOT, 'memory', 'logs')
 const LOG_FILE = join(LOG_DIR, 'exec-log.jsonl')
 // 不留痕环境开关：SHISANUO_LOG_DISABLE=1 时不落盘（代价=放弃审计底座；启动时以 stdout 一行声明）
 const LOG_ENABLED = process.env.SHISANUO_LOG_DISABLE !== '1'
@@ -2128,7 +2147,7 @@ export function apply(ctx: Context) {
     },
     list: (ctx) => [...pinnedRecords, ...(taskRecords.get(resolveKey(ctx))?.assertions ?? [])],
     // 审计 F-04：调试探针（execctx-probe）已移除——生产遥测不再落宿主上下文样本
-    evaluate: (a) => evaluateAssertion(a, { judge: gateJudge }),
+    evaluate: (a) => evaluateAssertion(a, { judge: gateJudge, cwd: workspaceCwd }),
     markPassed: (ctx) => {
       const key = resolveKey(ctx)
       const rec = taskRecords.get(key) ?? { raw: '', goal: '', assertions: [], assertionsPassedAt: null, unresolvedLogged: false }
@@ -2553,7 +2572,7 @@ export function apply(ctx: Context) {
         const eff = deriveEffectAssertions(takeObservedEffects(b.toolNames))
         if (eff.length > 0) {
           const effResults: AssertionResult[] = []
-          for (const x of eff) effResults.push(await evaluateAssertion(x, { judge: gateJudge }))
+          for (const x of eff) effResults.push(await evaluateAssertion(x, { judge: gateJudge, cwd: workspaceCwd }))
           const effFailed = effResults.filter((r) => !r.ok)
           if (effFailed.length === 0) {
             b.closedAuto = true
@@ -2582,7 +2601,7 @@ export function apply(ctx: Context) {
       // ── 审计 F-01 修复：宿主自动收口——断言开启时宿主直接复核（不等模型记得调 gate）──
       if (assertionsOpen) {
         const results: AssertionResult[] = []
-        for (const x of pending) results.push(await evaluateAssertion(x.assertion, { judge: gateJudge }))
+        for (const x of pending) results.push(await evaluateAssertion(x.assertion, { judge: gateJudge, cwd: workspaceCwd }))
         const failed = results.filter((r) => !r.ok)
         if (failed.length === 0) {
           if (rec) rec.assertionsPassedAt = Date.now()
@@ -2671,10 +2690,13 @@ export function apply(ctx: Context) {
           log: (entry) => void log(entry),
           judge: gateJudge,
           isFullAccess: () => fullAccess,
+          cwd: () => workspaceCwd,
           acceptance: acceptanceBridge,
-          // 方案三施工（2026-10-15 探针实证后默认启用）：gate 闭环 pass → concludeTurn 标记回合终态。
-          // SHISANUO_CONCLUDE_ON_PASS=0 可退位（回退开关；失败路径 steer 打回不受影响）。
-          concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS !== '0',
+          // #决策 2026-10-18（实机实证）：gate pass 时 concludeTurn 会**提前终止回合**，模型来不及输出面向用户的交付文本
+          // ——用户只看到工具调用行、没有结果输出，误以为任务中断。收口=验证完成，不等于交付完成；两者必须分开。
+          // 默认关闭即时终结：让模型继续输出交付后自然结束。断言复核仍由回合收尾自动兜底（不依赖 concludeTurn）。
+          // SHISANUO_CONCLUDE_ON_PASS=1 可显式恢复旧的「pass 即终结」行为。
+          concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
           // T2：失败阶梯按**任务**分桶（任务切换即归零）
           taskId: () => currentTaskId,
           onStats: (verdict, execCtx2) => {
@@ -2782,7 +2804,7 @@ export function apply(ctx: Context) {
         gateTool: gateToolRegistered,
         taskTool: taskToolRegistered,
         catalog: catalogRegistered,
-        concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS !== '0',
+        concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
         fingerprint: sectionFingerprintLast.slice(0, 16),
       }
       const missing: string[] = []
