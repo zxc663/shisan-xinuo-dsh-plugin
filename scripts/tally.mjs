@@ -39,6 +39,9 @@ const FIELD_WHITELIST = {
   'compaction-signal': ['shadowedTokens', 'via'],
   // P6 F10：渐进加载引擎（检测→注入的分节装载落账）
   'layered-inject': ['section', 'source', 'chars', 'trigger'],
+  // F13（2026-10-19）：留档核查打回（旧「未建承载」声明／静默跳过）
+  'archive-steer': ['turn', 'hostLevel', 'toolCalls', 'declared', 'cause'],
+  'archive-steer-capped': ['turn', 'used', 'cap'],
   'sandbox-mode': ['mode', 'enforcement'],
   'gate-steer': ['turn', 'toolCalls', 'mode', 'assertions', 'assertionsOpen'],
   // ── B2/B3 遥测（审计 F-04：补齐与引擎写入面的一致性；tests/tally-whitelist.test.mjs 机检防再脱节）──

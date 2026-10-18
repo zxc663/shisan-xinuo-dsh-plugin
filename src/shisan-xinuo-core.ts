@@ -11,7 +11,7 @@ export const name = 'shisan-xinuo-core'
 
 export const inject = ['systemPrompt', 'tools']
 
-export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 元工作流核心 · v8 · 本会话强制生效）
+export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 元工作流核心 · v9 · 本会话强制生效）
 
 以下纪律逐条执行，不是参考建议。每条=目的＋触发＋可检查结果。
 
@@ -21,7 +21,7 @@ export const CORE_DISCIPLINE = `# 工程纪律（Shisan Xinuo Workflow · 元工
 Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄清|已澄清> approval=<无需|待批准|已批准|已拒绝|豁免:理由>
 
 字段语义（中文固定枚举，禁止行内附注；备注移到行外；机器解析按映射表：新任务=new 续接=resume 单次=single；无=none 待澄清=pending 已澄清=resolved；无需=not_required 待批准=pending 已批准=granted 已拒绝=denied 豁免=waived）：
-- state=上下文模式：新任务=新开任务｜续接=续接既有任务｜单次=独立单次（只读/短问答，不建承载）。**收尾不是 state 值**——收尾回合的固定交付见 §5。
+- state=上下文模式：新任务=新开任务｜续接=续接既有任务｜单次=独立单次（**纯只读/零副作用**短问答，不建承载；有副作用的回合不得记单次——按 新任务 判级处理）。**收尾不是 state 值**——收尾回合的固定交付见 §5。
 - L=风险等级（封闭枚举）。L2-S=短工作流（≤3 文件、单域、与既有模式同构）；L2-F=完整工作流（多模块/新功能/任何 L3）。行为差异见 §1.4。
 - clarify=是否存在待解决的意图歧义：待澄清=已提问待回答（本轮结束回合等待）｜已澄清=歧义已消除｜无=无歧义。
 - approval=执行授权状态：待批准=已申请未获准（本轮结束回合等待，不得执行该动作）｜已批准/已拒绝=已获准/被拒｜豁免=规则允许的豁免（行外附一行豁免依据）。无需审批的动作写 无需。
@@ -114,7 +114,7 @@ Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄
 - **备份规则（不越过工作区）**：备份只允许写进承载文件夹的备份分类子目录（\`memory/backups/\`）；每个备份必须附 \`backup-info.txt\`——写清**备份时间（到分）／备份节点（改前/改后/里程碑）／作用（可回滚到哪个状态）／原因（因什么而备份）**；临时脚本的临时备份**任务完成后直接删除**，除非标 important 的重要备份，其余不留。
 - 脚本复用：轮转/检索/对账脚本从插件或技能目录复用，**不复制进工作区承载**——工作区只放数据。
 - 会话末必做：流水一行＋状态段刷新；不更新=交接断链。
-- 边界：单次/纯只读问答不建承载，交付回复声明一行「单次：未建承载」。
+- 边界：**纯只读问答**不建承载——state=单次 已表明该模式，交付无需另行声明；**有副作用的回合（创建/修改/删除文件等，含工作区外）不适用免建**：收尾按 §5 五件执行，承载留档（流水一行＋状态段刷新）不可省、跳过必须显式声明。宿主按副作用核查留档，缺失=打回。
 
 ## 4. 红线（不可豁免）
 - 歧义/不确定/破坏性/范围扩大：先问不先写；设计确认先于写码。
@@ -136,7 +136,7 @@ Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄
 收尾（任务收尾回合的固定交付，收口工具之外的五件）：
 1. **交付摘要**（随 gate 的 summary，≤500 字）：做了什么/改了哪些文件/验证结论——防收口后回合文本丢失；
 2. **验收对照**：逐条核销开工时的验收标准（每条=通过/未过/未验证），执行过≠验收通过；
-3. **承载留档**：流水一行＋状态段刷新（§3）；
+3. **承载留档**：流水一行＋状态段刷新（§3）——有副作用的回合不可省（宿主核查），跳过必须显式声明及理由；
 4. **未决点清单**：未验证项与待用户确认项——必须是真待办，不写「无」充数；
 5. **备份清理**：临时备份删除，重要备份保留在 backups/ 并附 backup-info.txt（§3）。
 
@@ -887,6 +887,22 @@ export function judgeGate(
   if (endKind !== 'completed') return 'skip'
   if (toolCalls < 1) return 'skip'
   return /GATE:\s*\{/.test(lastAssistantText) ? 'ok' : 'missing'
+}
+
+// F13 留档核查（2026-10-19 实机缺陷修复）：有副作用回合（hostLevel≥2 且 ≥1 工具调用）须落承载留档或显式声明。
+// 'legacy-claim'=旧式「未建承载/不建承载」声明（已废除，免建仅限纯只读）；'silent-skip'=未触 memory/ 且正文未提留档。
+export function judgeArchiveGap(o: {
+  lastText: string
+  hostLevel: number
+  toolCalls: number
+  memoryTouched: boolean
+}): 'ok' | 'legacy-claim' | 'silent-skip' {
+  if (o.hostLevel < 2 || o.toolCalls < 1) return 'ok'
+  const t = o.lastText ?? ''
+  if (/未建承载|不建承载/.test(t)) return 'legacy-claim'
+  if (/留档|流水|状态段|agent-log|memory[\\/]/i.test(t)) return 'ok'
+  if (o.memoryTouched) return 'ok'
+  return 'silent-skip'
 }
 
 // F2（零工具调用盲区）判定：本回合没有任何工具调用，却在文本里声称"已完成"。
@@ -2187,6 +2203,20 @@ export function apply(ctx: Context) {
         void log(buildWriteAuditEntry(String(exec?.name), target, sandboxMode, inWs))
       }
     }
+    // F13 留档核查配套：记录本回合是否写过承载区（memory/ 路径段——写工具目标或写型命令命中即记）
+    {
+      let touchedMem = false
+      const memSeg = /(^|[\\/])memory([\\/]|$)/i
+      if (isWriteTool(String(exec?.name ?? ''))) {
+        const tgt = extractWriteTarget(String(exec?.name ?? ''), exec?.arguments as Record<string, unknown> | undefined)
+        if (tgt && memSeg.test(tgt.replace(/\\/g, '/'))) touchedMem = true
+      }
+      if (!touchedMem && memSeg.test(String(cmd).replace(/\\/g, '/')) && /Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Remove-Item|Tee-Object|>>/i.test(String(cmd))) touchedMem = true
+      if (touchedMem) {
+        const bb = turnBuckets.get(currentSid)
+        if (bb) bb.memoryTouched = true
+      }
+    }
     if (rawHit) {
       if (allowEntry) {
         // 白名单放行=用户已持久裁决该形态安全（页面治理开关管理）；不计 intercepted（等同豁免语义）。
@@ -2274,7 +2304,7 @@ export function apply(ctx: Context) {
   }
 
   // ── GATE 收口+行为指标机检：每 session 一个回合桶：turn → {toolCalls, firstText, lastText, gateTool} ──
-  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; effectClosed: boolean; steered: boolean; disciplineSteered?: boolean; costHinted?: boolean; toolNames: string[] }>()
+  const turnBuckets = new Map<string, { turn: number; toolCalls: number; hostLevel: number; declaredLevel: string | null; firstText: string; lastText: string; gateTool: boolean; gateVerdict: string | null; gateClosed: boolean; closedAuto: boolean; effectClosed: boolean; steered: boolean; disciplineSteered?: boolean; costHinted?: boolean; memoryTouched?: boolean; archiveSteered?: boolean; toolNames: string[] }>()
   let inventoryLogged = false
   // Step 0 探针／P4 共用：最近一次 request/header 的**线缆真值**工具名（发给模型的实际工具面）
   let lastWireNames: string[] = []
@@ -2820,6 +2850,24 @@ export function apply(ctx: Context) {
               noticeMessage(`渐进加载：已附 ${b.declaredLevel ?? '低报重档'} 流程分节`, `（宿主按判级覆盖送达自动附流程分节：${coverAttach.delivered.join('、')}——按分节执行；本通知非用户发言。）${coverAttach.text}`),
             )
           }
+        }
+      }
+      // F13（2026-10-19 实机缺陷修复）：留档核查——「未建承载」旧声明已废除（免建仅限纯只读）；副作用回合
+      // 未落 §5 留档（未写 memory/ 亦未声明）=打回一次（参与流量帽：steerCounts/STEER_CAP）。
+      if (!b.archiveSteered) {
+        const gapA = judgeArchiveGap({ lastText: b.lastText, hostLevel: b.hostLevel, toolCalls: b.toolCalls, memoryTouched: b.memoryTouched === true })
+        if (gapA !== 'ok') {
+          b.archiveSteered = true
+          const steerKeyA = currentTaskId || bucketKey
+          const usedA = steerCounts.get(steerKeyA) ?? 0
+          if (shouldSteerNow(usedA, STEER_CAP)) {
+            steerCounts.set(steerKeyA, usedA + 1)
+            void log({ kind: 'archive-steer', turn: payload.turn, hostLevel: b.hostLevel, toolCalls: b.toolCalls, declared: b.declaredLevel ?? '', cause: gapA })
+            agent.steer?.(noticeMessage('[十三希诺留档强制] 副作用回合未落承载留档', `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有实际副作用（宿主视角≥L2，${b.toolCalls} 次工具调用），「未建承载」类声明已废除（免建仅限纯只读问答）。请二选一：①补承载留档——流水一行＋状态段刷新（工作区无承载则建最小 memory/agent-log.md）；②显式声明跳过留档及其理由（跳过必声明）。`))
+            console.log(`[shisan-xinuo] archive steer injected for turn ${payload.turn} (${gapA})`)
+            return
+          }
+          void log({ kind: 'archive-steer-capped', turn: payload.turn, used: usedA, cap: STEER_CAP })
         }
       }
       const rec = taskRecords.get(bucketKey)
