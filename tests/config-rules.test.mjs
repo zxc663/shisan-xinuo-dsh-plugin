@@ -96,7 +96,10 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
   t('repo: content 与内置默认在 37 例语料上判定一致', 0, mismatches)
   t('repo: content 路径 dry-run（无豁免）拦 rm', '数据删除', judgeL3With(repoRules.rules, 'rm -rf /var --dry-run'))
   const disciplineContent = readFileSync(join(REPO, 'content', 'discipline.md'), 'utf8')
-  t('repo: discipline.md 与 CORE_DISCIPLINE 逐字镜像', true, disciplineContent.trim() === CORE_DISCIPLINE.trim())
+  // EOL 归一比较（2026-10-18）：git autocrlf 会把工作树文件转 CRLF，而 Node 加载器/提交态为 LF——
+  // 逐字镜像的意图=内容漂移防线，EOL 属平台工件，两边统一 \n 后比较（真内容差仍会被拦）。
+  const norm = (s) => s.replace(/\r\n/g, '\n').trim()
+  t('repo: discipline.md 与 CORE_DISCIPLINE 逐字镜像（EOL 归一）', true, norm(disciplineContent) === norm(CORE_DISCIPLINE))
 }
 
 console.log(cases.join('\n'))
