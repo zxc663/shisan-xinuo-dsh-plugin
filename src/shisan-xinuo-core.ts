@@ -1,9 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { exec } from 'node:child_process'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash, randomUUID } from 'node:crypto'
 
@@ -105,7 +105,7 @@ Context: state=<新任务|续接|单次> L=<L1|L2-S|L2-F|L3> clarify=<无|待澄
 ## 3. 承载协议（工作流承载文档）
 - 承载根：项目工作区**根目录固定使用 \`memory/\`**，工作流要求的承载文档都写在这里；不得另造 \`.xinu/\`、\`.agent/\` 等同义目录。模板从按需层 templates/ 复制，禁空占位。
 - **根目录卫生（强制）**：临时脚本/探针/日志/打包产物一律放 \`memory/\` 的分类子目录——\`tmp/\`（临时脚本与探针）、\`logs/\`（运行日志）、\`artifacts/\`（打包产物与校验和）；**不得堆在工作区根目录**。根目录只保留源码、配置、文档与项目结构目录。新建临时文件前先定位到 \`memory/\` 对应分类，而不是随手丢根目录。
-- **承载区结构与文件索引（强制）**：承载区固定结构＝\`STATE.md\`（一面状态）＋\`design/\`（设计文档）＋\`index/\`（工作区文件索引）＋\`tmp/\`＋\`logs/\`＋\`artifacts/\`＋\`backups/\`。工作区文件索引由脚本生成（如 \`node scripts/workspace-index.mjs\` → \`memory/index/workspace.json\`），记录每个文件的相对路径/大小/mtime/分类，用于一眼看清文件当前状态、发现并清理临时垃圾；索引可复跑、幂等覆盖。
+- **承载区结构与文件索引（强制）**：承载区固定结构＝\`STATE.md\`（一面状态）＋\`design/\`（设计文档）＋\`index/\`（工作区文件索引）＋\`tmp/\`＋\`logs/\`＋\`artifacts/\`＋\`backups/\`。工作区文件索引由脚本生成（**脚本随插件包分发**：\`node <插件目录>/scripts/workspace-index.mjs <工作区根>\` → \`memory/index/workspace.json\`；插件目录不可达时用等价目录清单替代，结构不变），记录每个文件的相对路径/大小/mtime/分类，用于一眼看清文件当前状态、发现并清理临时垃圾；索引可复跑、幂等覆盖。
 - 一档制单文件四区（防双写漂移），四者职责分开：
   - **一面状态（状态段）**：≤10 行，首行 STATE 单行结构化；挂会话锚（任务 id/会话短 id）——多会话并行时每会话一行锚，一屏可读；与上下文冲突→以本档为准并重读真实文件系统。
   - **教训库（教训区）**：踩坑条目（症状→根因→解决→预防＋证据＋命中计数）；同坑复现=修订既有条目，禁另立近重复；高频置顶一行（症状→对策），其余按类。
@@ -494,6 +494,29 @@ export function governancePath(): string {
   if (env) return env
   const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
   return join(dshHome, 'dsh-custom', 'governance.json')
+}
+
+// ── C6（2026-10-19）：有效域目录上报（单一真源管道）─────────────────
+/** 从生效规则集提取「域 → 是否不可豁免」目录（去重；编码/解码执行恒为不可豁免，与判定器同口径）。 */
+export function l3CatalogOf(patterns: Array<{ domain: string; noExempt?: boolean }>): Array<{ domain: string; noExempt: boolean }> {
+  const byDomain = new Map<string, boolean>()
+  for (const p of patterns) {
+    if (p.domain.trim() === '') continue
+    const noExempt = p.noExempt === true || p.domain === '编码执行' || p.domain === '解码执行'
+    byDomain.set(p.domain, (byDomain.get(p.domain) ?? false) || noExempt)
+  }
+  return [...byDomain.entries()].map(([domain, noExempt]) => ({ domain, noExempt }))
+}
+
+/** 把有效域目录写到治理文件同目录 `l3-catalog.json`（dsh-custom 管理页优先读取；失败只告警不阻断）。 */
+export function writeL3Catalog(governanceFilePath: string, domains: Array<{ domain: string; noExempt: boolean }>, source: string): void {
+  try {
+    const dir = dirname(governanceFilePath)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'l3-catalog.json'), JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), source, domains }, null, 2) + '\n', 'utf8')
+  } catch (e) {
+    console.warn('[shisan-xinuo] L3 域目录上报失败（管理页将回退内置镜像副本）：', String((e as { message?: unknown })?.message ?? e))
+  }
 }
 
 let governanceCache: { source: string; mtimeMs: number; cfg: GovernanceConfig } | null = null
@@ -2047,6 +2070,9 @@ export function apply(ctx: Context) {
   const rulesLoad = loadRulesFile(process.env.SHISANUO_RULES ?? contentDir + 'rules.json')
   void log({ kind: 'rules', source: rulesLoad.source, valid: rulesLoad.valid, domains: rulesLoad.domains, ...(rulesLoad.reason ? { reason: rulesLoad.reason } : {}) })
   console.log(`[shisan-xinuo] rules: source=${rulesLoad.source} valid=${rulesLoad.valid} domains=${rulesLoad.domains}${rulesLoad.reason ? ` reason=${rulesLoad.reason}` : ''}`)
+  // C6（2026-10-19）：把本次装载后的「有效域目录」写到治理文件同目录 l3-catalog.json——dsh-custom 管理页
+  // 优先读它（单一真源，消手抄镜像漂移面），缺失/坏档才回退其镜像副本。写入失败只告警不阻断启动。
+  writeL3Catalog(governancePath(), l3CatalogOf(rulesLoad.rules.patterns), rulesLoad.source)
   const disciplineLoad = loadTextWithFallback(process.env.SHISANUO_DISCIPLINE ?? contentDir + 'discipline.md', CORE_DISCIPLINE)
   void log({ kind: 'discipline', source: disciplineLoad.source, valid: disciplineLoad.valid, ...(disciplineLoad.reason ? { reason: disciplineLoad.reason } : {}) })
   // 治理开关 boot 落账（boot 行核验可观测；文件后续热改不重读本行——各消费点 mtime 热读为准）

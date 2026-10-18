@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // 工作区文件索引：扫描工作区，记录每个文件的当前状态（相对路径/大小/mtime/分类），
-// 输出到 memory/index/workspace.json。
+// 输出到 <工作区根>/memory/index/workspace.json。
 // 用途：一眼看清工作区有多少文件、哪些是临时垃圾、防止根目录越堆越多。
-// 复跑：node scripts/workspace-index.mjs（幂等，覆盖写）
+// 用法：node workspace-index.mjs [工作区根]（缺省=脚本所在包根；幂等，覆盖写）
+// 随插件包分发（C5）：可在插件目录对任意工作区执行 `node <插件目录>/scripts/workspace-index.mjs <工作区根>`。
 import { readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join, dirname, relative, extname } from 'node:path'
+import { join, dirname, relative, extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const repo = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repo = process.argv[2] !== undefined && process.argv[2] !== ''
+  ? resolve(process.argv[2])
+  : join(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT_DIR = join(repo, 'memory', 'index')
 const OUT = join(OUT_DIR, 'workspace.json')
 const SKIP = new Set(['node_modules', '.git', '.pnpm-store'])

@@ -1,6 +1,6 @@
 // v0.3 Config 化单测——规则包结构校验/fail-closed/行为可重复验证（改 rules→行为变，非仅文件变）/内置-外置等价。
 // 运行：node tests/config-rules.test.mjs
-import { compileRules, loadRulesFile, judgeL3With, judgeL3, CORE_DISCIPLINE, planGate } from '../src/shisan-xinuo-core.ts'
+import { compileRules, loadRulesFile, judgeL3With, judgeL3, CORE_DISCIPLINE, planGate, l3CatalogOf, writeL3Catalog } from '../src/shisan-xinuo-core.ts'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
@@ -100,6 +100,22 @@ t('compile: version=2 记错', true, compileRules({ version: 2, l3Domains: [{ do
   // 逐字镜像的意图=内容漂移防线，EOL 属平台工件，两边统一 \n 后比较（真内容差仍会被拦）。
   const norm = (s) => s.replace(/\r\n/g, '\n').trim()
   t('repo: discipline.md 与 CORE_DISCIPLINE 逐字镜像（EOL 归一）', true, norm(disciplineContent) === norm(CORE_DISCIPLINE))
+}
+
+// ── C6：L3 域目录上报（单一真源）——去重＋noExempt 归一＋落盘到治理同目录 ──
+{
+  const loaded = loadRulesFile(join(REPO, 'content', 'rules.json'))
+  const catalog = l3CatalogOf(loaded.rules.patterns)
+  t('catalog: 去重后 10 域', 10, catalog.length)
+  t('catalog: 仅编码/解码执行 noExempt', '编码执行,解码执行', catalog.filter((d) => d.noExempt).map((d) => d.domain).sort().join(','))
+  t('catalog: 数据删除 非 noExempt', false, catalog.find((d) => d.domain === '数据删除')?.noExempt)
+  const cdir = join(TD, 'catalog-' + String(Date.now()))
+  writeL3Catalog(join(cdir, 'governance.json'), catalog, 'rules.json')
+  const written = JSON.parse(readFileSync(join(cdir, 'l3-catalog.json'), 'utf8'))
+  t('catalog: 落盘 version=1', 1, written.version)
+  t('catalog: 落盘域数与源一致', 10, written.domains.length)
+  t('catalog: source 透传', 'rules.json', written.source)
+  rmSync(cdir, { recursive: true, force: true })
 }
 
 console.log(cases.join('\n'))
