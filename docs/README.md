@@ -59,6 +59,7 @@
 
 - `design-specs/e1-v5-supplement-prereg-20261016.md`（含 R5 重基线修订）· `design-specs/e1-v5-supplement-results-20261018.md` — **E1-v5 有效性补样本轮**：预注册与执行结果（75 有效会话；真值 72/75；治理层差分仅 C 臂成立；装置事故如实全录）。
 - `design-specs/real-machine-walkthrough-20261018.md` — **实机走查报告**（页面 8 区渲染＋F1 判级强制/追加判级、F8 压缩重载信号、F3 越界写审计的真机证据；两处缺陷发现→修复→复验记录）。
+- `design-specs/real-machine-walkthrough-p0-20261018.md` — **P0 实机走查报告**（会话级覆盖 V1–V5 API 直证＋4 页管理后台 V6＋concludeOnPass 翻转复验＋L3 拦截→审批→拒绝→澄清→收口全链活证据；零新增缺陷）。
 - `evidence/e1v5-20261018/` — E1-v5 轮原始会话记录（`sessions-r1..r5.jsonl`，含作废标记；截图与本机装置留档见报告 §7 指针）。
 
 ## 其余（评估 · 证据 · 交接）

@@ -19,7 +19,10 @@ const COMMON = new Set(['ts', 'kind', 'instanceId', 'sid'])
 const FIELD_WHITELIST = {
   arm: ['mode'],
   'pre-execute': ['tool', 'cmd', 'l3'],
-  'l3-detected': ['tool', 'domain', 'cmd', 'decision'],
+  'l3-detected': ['tool', 'domain', 'cmd', 'decision', 'allowRule'],
+  // 治理开关（2026-10-18）：boot 落账＋L3 总闸关闭/压缩信号抑制
+  governance: ['source', 'l3Enabled', 'domainsOff', 'allowlist', 'levelChecklist', 'compactionSignal'],
+  'compaction-signal-suppressed': ['shadowedTokens', 'via'],
   'l3-intercept': ['tool', 'domain', 'cmd'],
   behavior: ['turn', 'hasText', 'restated', 'levelDeclared', 'gate', 'gateQuality', 'textClaim'],
   'gate-ok': ['turn', 'via', 'tail'],

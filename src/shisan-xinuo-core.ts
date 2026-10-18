@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { exec } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -410,6 +411,126 @@ export function loadTextWithFallback(path: string, fallback: string): { text: st
     return { text: fallback, source: path, valid: false, reason: String(e).slice(0, 80) }
   }
 }
+
+// ── 治理开关（governance.json）：dsh-custom 页面写 → 本引擎 mtime 热读（layered-state 同款跨包管道）──
+// 优先序：SHISANUO_* env（运维显式意图）> governance.json > 内置默认。坏文件/坏字段=该项回落默认
+//（fail-closed：配置损坏不解除防护）。noExempt 域（编码/解码执行）不受白名单与域级关闭影响——
+// 页面 422 拒写为第一道，引擎侧 effectiveRulesFor 过滤时强制保留为第二道。
+// #决策 2026-10-18：noExempt 域不开放任何豁免通道（依据=白名单不得成为拆保险丝入口；被否候选=全域可白名单）。
+export interface GovernanceAllowEntry { raw: string; note: string }
+export interface GovernanceConfig {
+  l3Enabled: boolean
+  domainsOff: string[]
+  allowlist: GovernanceAllowEntry[]
+  levelChecklist: boolean
+  compactionSignal: boolean
+  concludeOnPass: boolean
+}
+export const GOVERNANCE_DEFAULT: GovernanceConfig = { l3Enabled: true, domainsOff: [], allowlist: [], levelChecklist: true, compactionSignal: true, concludeOnPass: false }
+// 审批卡误拦引导（单一来源：reason 拼接与测试共用）
+export const L3_ASK_GUIDANCE = '如属误拦：设置 → DSH自定义 → 治理开关，可加白名单放行。'
+const GOV_ALLOW_MIN_LEN = 4 // 归一化后最短长度（防「rm」级单 token 全域放行）
+
+export function compileGovernance(raw: unknown): { cfg: GovernanceConfig; errors: string[] } {
+  const errors: string[] = []
+  const cfg: GovernanceConfig = { ...GOVERNANCE_DEFAULT, domainsOff: [], allowlist: [] }
+  if (!raw || typeof raw !== 'object') return { cfg, errors: ['根不是对象'] }
+  const r = raw as Record<string, unknown>
+  if (r.version !== undefined && r.version !== 1) errors.push(`version 必须为 1（实际 ${JSON.stringify(r.version)}）`)
+  const l3 = r.l3 as Record<string, unknown> | undefined
+  if (l3 !== undefined) {
+    if (l3 && typeof l3 === 'object') {
+      if (typeof l3.enabled === 'boolean') cfg.l3Enabled = l3.enabled
+      else if (l3.enabled !== undefined) errors.push('l3.enabled 必须为 boolean')
+      if (l3.domainsOff !== undefined) {
+        if (Array.isArray(l3.domainsOff) && l3.domainsOff.every((d) => typeof d === 'string')) {
+          const noExemptDomains = new Set(['编码执行', '解码执行'])
+          cfg.domainsOff = (l3.domainsOff as string[]).filter((d) => {
+            if (noExemptDomains.has(d)) { errors.push(`域「${d}」不可豁免，关闭项被忽略`); return false }
+            return true
+          })
+        } else errors.push('l3.domainsOff 必须为 string[]')
+      }
+      if (l3.allowlist !== undefined) {
+        if (Array.isArray(l3.allowlist)) {
+          for (const [i, e] of (l3.allowlist as Array<Record<string, unknown>>).entries()) {
+            const pattern = e?.pattern
+            if (typeof pattern !== 'string' || pattern.trim() === '') { errors.push(`allowlist[${i}].pattern 非法`); continue }
+            const note = typeof e.note === 'string' ? e.note.slice(0, 200) : ''
+            if (normalizeCmdFingerprint(pattern).length < GOV_ALLOW_MIN_LEN) { errors.push(`allowlist[${i}] 归一化后短于 ${GOV_ALLOW_MIN_LEN} 字符（防全域放行）`); continue }
+            cfg.allowlist.push({ raw: pattern, note })
+          }
+        } else errors.push('l3.allowlist 必须为数组')
+      }
+    } else errors.push('l3 必须为对象')
+  }
+  if (typeof r.levelChecklist === 'boolean') cfg.levelChecklist = r.levelChecklist
+  else if (r.levelChecklist !== undefined) errors.push('levelChecklist 必须为 boolean')
+  if (typeof r.compactionSignal === 'boolean') cfg.compactionSignal = r.compactionSignal
+  else if (r.compactionSignal !== undefined) errors.push('compactionSignal 必须为 boolean')
+  if (typeof r.concludeOnPass === 'boolean') cfg.concludeOnPass = r.concludeOnPass
+  else if (r.concludeOnPass !== undefined) errors.push('concludeOnPass 必须为 boolean')
+  return { cfg, errors }
+}
+
+export interface GovernanceLoadResult { cfg: GovernanceConfig; source: string; valid: boolean; reason?: string }
+// 缺文件=全默认（无配置=防护不变）；坏文件=该项回落默认并带 reason（调用方 console 一行，不静默）
+export function loadGovernanceFile(path: string): GovernanceLoadResult {
+  const defaults = (): GovernanceConfig => ({ ...GOVERNANCE_DEFAULT, domainsOff: [], allowlist: [] })
+  if (!existsSync(path)) return { cfg: defaults(), source: path, valid: false, reason: '文件不存在（默认全开）' }
+  let raw: unknown
+  try { raw = JSON.parse(readFileSync(path, 'utf8')) } catch (e) {
+    return { cfg: defaults(), source: path, valid: false, reason: `JSON 解析失败：${String(e).slice(0, 80)}` }
+  }
+  const { cfg, errors } = compileGovernance(raw)
+  return { cfg, source: path, valid: errors.length === 0, ...(errors.length ? { reason: errors.join('；') } : {}) }
+}
+
+export function governancePath(): string {
+  const env = process.env.SHISANUO_GOVERNANCE?.trim()
+  if (env) return env
+  const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+  return join(dshHome, 'dsh-custom', 'governance.json')
+}
+
+let governanceCache: { source: string; mtimeMs: number; cfg: GovernanceConfig } | null = null
+// mtime 缓存热读（页面保存即生效；缺文件也缓存 mtime=0，避免每回合 stat 抖动与 console 刷屏）
+export function readGovernanceCached(path: string): GovernanceConfig {
+  let mtimeMs = 0
+  try { if (existsSync(path)) mtimeMs = statSync(path).mtimeMs } catch { mtimeMs = 0 }
+  if (governanceCache && governanceCache.source === path && governanceCache.mtimeMs === mtimeMs) return governanceCache.cfg
+  const res = loadGovernanceFile(path)
+  if (!res.valid && res.reason !== '文件不存在（默认全开）') {
+    console.log(`[shisan-xinuo] governance: ${res.reason}（该项回落默认）`)
+  }
+  governanceCache = { source: path, mtimeMs, cfg: res.cfg }
+  return res.cfg
+}
+
+// 域级关闭过滤（noExempt 规则强制保留）；无关闭项时原对象复用（零开销路径）
+export function effectiveRulesFor(gov: GovernanceConfig, base: CompiledRules): CompiledRules {
+  if (gov.domainsOff.length === 0) return base
+  return { patterns: base.patterns.filter((p) => !(gov.domainsOff.includes(p.domain) && p.noExempt !== true)), exempts: base.exempts }
+}
+
+// 白名单匹配：归一化子串＋词边界（与拒绝指纹同语义：大小写不敏感、防词内误匹配、包装命令可命中）
+export function matchGovernanceAllowlist(list: GovernanceAllowEntry[], cmd: string): GovernanceAllowEntry | null {
+  const c = normalizeCmdFingerprint(cmd)
+  const isWordChar = (ch: string): boolean => /[0-9a-z._-]/i.test(ch)
+  for (const e of list) {
+    const f = normalizeCmdFingerprint(e.raw)
+    if (f.length < GOV_ALLOW_MIN_LEN) continue
+    let idx = c.indexOf(f)
+    while (idx !== -1) {
+      const before = idx === 0 ? ' ' : c[idx - 1]
+      const after = idx + f.length >= c.length ? ' ' : c[idx + f.length]
+      if (!isWordChar(before) && !isWordChar(after)) return e
+      idx = c.indexOf(f, idx + 1)
+    }
+  }
+  return null
+}
+
 
 // ── 运行时工具裁剪（budget/mask 层，原 v0.4 T2）**已退役**（批4 方向 B，2026-10-16）──
 // 披露减法让位上游 tool-search（Letter2025/dsh-tool-search 0.1.7，实测 wire 7 件 / 3,374 chars，−84.4%）；
@@ -1925,7 +2046,16 @@ export function apply(ctx: Context) {
   console.log(`[shisan-xinuo] rules: source=${rulesLoad.source} valid=${rulesLoad.valid} domains=${rulesLoad.domains}${rulesLoad.reason ? ` reason=${rulesLoad.reason}` : ''}`)
   const disciplineLoad = loadTextWithFallback(process.env.SHISANUO_DISCIPLINE ?? contentDir + 'discipline.md', CORE_DISCIPLINE)
   void log({ kind: 'discipline', source: disciplineLoad.source, valid: disciplineLoad.valid, ...(disciplineLoad.reason ? { reason: disciplineLoad.reason } : {}) })
-  const activeJudge = (c: string): string | null => judgeL3With(rulesLoad.rules, c)
+  // 治理开关 boot 落账（boot 行核验可观测；文件后续热改不重读本行——各消费点 mtime 热读为准）
+  const govBoot = readGovernanceCached(governancePath())
+  void log({ kind: 'governance', source: governancePath(), l3Enabled: govBoot.l3Enabled, domainsOff: govBoot.domainsOff.length, allowlist: govBoot.allowlist.length, levelChecklist: govBoot.levelChecklist, compactionSignal: govBoot.compactionSignal })
+  const activeJudge = (c: string): string | null => {
+    // 治理开关（2026-10-18）：域级关闭（noExempt 强制保留）＋白名单（词边界子串）；无配置=行为与旧版一致
+    const gov = readGovernanceCached(governancePath())
+    const raw = judgeL3With(effectiveRulesFor(gov, rulesLoad.rules), c)
+    if (raw && matchGovernanceAllowlist(gov.allowlist, c)) return null
+    return raw
+  }
   // 判据锚点（pinned）：环境变量在会话外钉死验收断言（格式同 discipline_task）；模型不可见/不可改
   const pinnedRecords = pinnedAssertionRecords(process.env.SHISANUO_ASSERTIONS)
   if (pinnedRecords.length > 0) {
@@ -1996,7 +2126,12 @@ export function apply(ctx: Context) {
   const toolDispose = ctx.on('tools/pre-execute', async (exec: { name?: string; arguments?: unknown }, next: () => Promise<unknown>) => {
     const cmd = extractCommand(exec)
     // 批毕缺陷处置（2026-10-18）：询问类工具（ask_user_question）=展示提问文本，不判 L3（误报实录见 INQUIRY_TOOLS 注释）
-    const hit = isInquiryTool(String(exec?.name ?? '')) ? null : activeJudge(String(cmd))
+    // 治理开关（2026-10-18）：域级关闭（noExempt 强制保留）→ 白名单（词边界子串，命中=用户已持久裁决安全）
+    const gov = readGovernanceCached(governancePath())
+    const effectiveRules = effectiveRulesFor(gov, rulesLoad.rules)
+    const rawHit = isInquiryTool(String(exec?.name ?? '')) ? null : judgeL3With(effectiveRules, String(cmd))
+    const allowEntry = rawHit ? matchGovernanceAllowlist(gov.allowlist, String(cmd)) : null
+    const hit = rawHit !== null && !allowEntry ? rawHit : null
     void log({ kind: 'pre-execute', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit })
     noteObservedEffect(exec) // 决策 2：物理副作用采集（本缝是唯一能拿到完整 arguments 的地方）
     // P3 F3/F5：写动作对账遥测（执法=宿主 sandbox；插件只记不发裁决——完全权限档 record-only，验收 c/d）
@@ -2007,11 +2142,22 @@ export function apply(ctx: Context) {
         void log(buildWriteAuditEntry(String(exec?.name), target, sandboxMode, inWs))
       }
     }
-    if (hit) {
+    if (rawHit) {
+      if (allowEntry) {
+        // 白名单放行=用户已持久裁决该形态安全（页面治理开关管理）；不计 intercepted（等同豁免语义）。
+        // allow 终态短路整条瀑布（同 fullAccess D2 理由：下游 ask 在 approval=never 下硬失败并谎报"用户拒绝"）。
+        void log({ kind: 'l3-detected', tool: exec?.name, domain: rawHit, cmd: String(cmd).slice(0, 200), decision: 'allow-allowlist', allowRule: allowEntry.raw.slice(0, 120) })
+        return { kind: 'allow' }
+      }
       stats.intercepted++
       if (!L3_ENFORCE) {
         // 研究旗标（SHISANUO_L3_OFF=1）：拦截层退位为仅记录——用于完成信号对照实验，剔除审批 fail-closed 混杂
         void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'allow-research' })
+        return next()
+      }
+      if (!gov.l3Enabled) {
+        // 治理开关（页面）：L3 拦截总闸关闭——同 allow-research 语义但 decision 独立落账（审计可辨「页面关」与「实验关」）
+        void log({ kind: 'l3-detected', tool: exec?.name, domain: hit, cmd: String(cmd).slice(0, 200), decision: 'governance-off' })
         return next()
       }
       if (armMode !== 'C') {
@@ -2037,10 +2183,10 @@ export function apply(ctx: Context) {
       }
       return {
         kind: 'ask',
-        reason: `[十三希诺纪律] L3 危险操作命中（${hit}）：需要用户明确确认后才能继续。`,
+        reason: `[十三希诺纪律] L3 危险操作命中（${hit}）：需要用户明确确认后才能继续。${L3_ASK_GUIDANCE}`,
         displayReason: {
-          en: `[Shisan Xinuo] L3 risky operation detected (${hit}); user confirmation required.`,
-          zh: `[十三希诺纪律] L3 危险操作命中（${hit}）：需要用户明确确认后才能继续。`,
+          en: `[Shisan Xinuo] L3 risky operation detected (${hit}); user confirmation required. False positive? Settings → DSH Custom → Governance to allowlist.`,
+          zh: `[十三希诺纪律] L3 危险操作命中（${hit}）：需要用户明确确认后才能继续。${L3_ASK_GUIDANCE}`,
         },
       }
     }
@@ -2465,14 +2611,19 @@ export function apply(ctx: Context) {
       const compPending = pendingCompactionSignal.get(bucketKey)
       if (compPending !== undefined) {
         pendingCompactionSignal.delete(bucketKey)
-        void log({ kind: 'compaction-signal', shadowedTokens: compPending, via: 'inject-notice' })
-        // F10：压缩信号附加 compression-reload 分节（检测→注入；页面侧停用=跳过附文只留短信号）
-        if (layeredSectionDisabled('compression-reload.md')) {
-          ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', buildCompactionReloadNotice(compPending)))
+        // 治理开关（2026-10-18）：compactionSignal=false → 信号抑制落账不注入（页面可关）
+        if (!readGovernanceCached(governancePath()).compactionSignal) {
+          void log({ kind: 'compaction-signal-suppressed', shadowedTokens: compPending, via: 'governance-off' })
         } else {
-          const cSec = loadLayeredSection('compression-reload.md', join(contentDir, 'layered'), buildCompactionReloadNotice(compPending))
-          void log({ kind: 'layered-inject', section: 'compression-reload.md', source: cSec.source, chars: cSec.text.length, trigger: 'compaction' })
-          ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', `${buildCompactionReloadNotice(compPending)}\n\n——附：compression-reload.md（${cSec.source}）——\n${cSec.text}`))
+          void log({ kind: 'compaction-signal', shadowedTokens: compPending, via: 'inject-notice' })
+          // F10：压缩信号附加 compression-reload 分节（检测→注入；页面侧停用=跳过附文只留短信号）
+          if (layeredSectionDisabled('compression-reload.md')) {
+            ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', buildCompactionReloadNotice(compPending)))
+          } else {
+            const cSec = loadLayeredSection('compression-reload.md', join(contentDir, 'layered'), buildCompactionReloadNotice(compPending))
+            void log({ kind: 'layered-inject', section: 'compression-reload.md', source: cSec.source, chars: cSec.text.length, trigger: 'compaction' })
+            ;(agent as { inject?: (m: unknown) => void })?.inject?.(noticeMessage('上下文已压缩：请按重载序恢复精度', `${buildCompactionReloadNotice(compPending)}\n\n——附：compression-reload.md（${cSec.source}）——\n${cSec.text}`))
+          }
         }
       }
       // 探针（默认关）：注入探针证实 notice 通道 form/source（SHISANUO_PROBE_NOTICE=1）
@@ -2521,7 +2672,11 @@ export function apply(ctx: Context) {
       // 检测点=回合收尾（模型已输出文本，判级有无此时才可知）。纯聊天/零工具/只读已在上方早退 ⇒ 0 误注入；
       // 一次性（b.disciplineSteered）＋走 STEER_CAP 熔断；与收口 steer 互斥（本块命中即 return，收口留下回合）。
       // F1 验收 a：实质工作回合判级缺失 100% 注入；F2：L2-F/L3（或宿主视角≥2 的低报）无验收绑定 → 合并登记提示。
-      if ((LEVEL_ENFORCE || CHECKLIST_ENFORCE) && !b.disciplineSteered) {
+      // 治理开关（2026-10-18）：levelChecklist=false 等价双 OFF（env 显式关闭仍优先——env 关了文件开不起来，符合运维语义）
+      const govTurn = readGovernanceCached(governancePath())
+      const levelEnforceEff = LEVEL_ENFORCE && govTurn.levelChecklist
+      const checklistEnforceEff = CHECKLIST_ENFORCE && govTurn.levelChecklist
+      if ((levelEnforceEff || checklistEnforceEff) && !b.disciplineSteered) {
         const recF = taskRecords.get(bucketKey)
         const gap = judgeDisciplineGap({
           declaredLevel: b.declaredLevel,
@@ -2529,8 +2684,8 @@ export function apply(ctx: Context) {
           toolCalls: b.toolCalls,
           hasAssertions: pinnedRecords.length > 0 || (recF?.assertions?.length ?? 0) > 0,
           hasChecklist: (recF?.checklist?.length ?? 0) > 0,
-          levelEnforce: LEVEL_ENFORCE,
-          checklistEnforce: CHECKLIST_ENFORCE,
+          levelEnforce: levelEnforceEff,
+          checklistEnforce: checklistEnforceEff,
         })
         if (gap) {
           b.disciplineSteered = true
@@ -2679,6 +2834,10 @@ export function apply(ctx: Context) {
     let catalogRegistered = false
 
     // ── T1 discipline_gate 工具注册（仅 C 臂；A 惰性/B 纯文本=不注册，保持分组定义纯净）──
+    // 治理开关（2026-10-18）：env 显式 > governance.json.concludeOnPass > 默认关；boot 快照（热改此项需重启）
+    const concludeOnPassEffective = process.env.SHISANUO_CONCLUDE_ON_PASS !== undefined
+      ? process.env.SHISANUO_CONCLUDE_ON_PASS === '1'
+      : readGovernanceCached(governancePath()).concludeOnPass
     let gateToolDispose: (() => void) | undefined
     const toolsAny = ctx.tools as { register?: (def: unknown) => unknown } | undefined
     if (typeof toolsAny?.register === 'function') {
@@ -2695,8 +2854,9 @@ export function apply(ctx: Context) {
           // #决策 2026-10-18（实机实证）：gate pass 时 concludeTurn 会**提前终止回合**，模型来不及输出面向用户的交付文本
           // ——用户只看到工具调用行、没有结果输出，误以为任务中断。收口=验证完成，不等于交付完成；两者必须分开。
           // 默认关闭即时终结：让模型继续输出交付后自然结束。断言复核仍由回合收尾自动兜底（不依赖 concludeTurn）。
-          // SHISANUO_CONCLUDE_ON_PASS=1 可显式恢复旧的「pass 即终结」行为。
-          concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
+          // 优先序（2026-10-18 治理开关批）：SHISANUO_CONCLUDE_ON_PASS env 显式 > governance.json.concludeOnPass > 默认关。
+          // 此处为注册面一次读取（boot 快照）——治理页改此项需重启 DSH 生效（页面已标注）。
+          concludeOnPass: concludeOnPassEffective,
           // T2：失败阶梯按**任务**分桶（任务切换即归零）
           taskId: () => currentTaskId,
           onStats: (verdict, execCtx2) => {
@@ -2777,7 +2937,7 @@ export function apply(ctx: Context) {
         } catch (e) {
           console.error('[shisan-xinuo] tools catalog registration FAILED:', String(e).slice(0, 120))
         }
-        console.log(`[shisan-xinuo] conclude-on-pass=${process.env.SHISANUO_CONCLUDE_ON_PASS !== '0' ? 'ON (probe-verified 2026-10-15; =0 可退位)' : 'off (退位开关生效)'}`)
+        console.log(`[shisan-xinuo] conclude-on-pass=${concludeOnPassEffective ? 'ON' : 'off (默认：交付后自然结束；env SHISANUO_CONCLUDE_ON_PASS=1 或治理页可开)'} [来源=${process.env.SHISANUO_CONCLUDE_ON_PASS !== undefined ? 'env' : 'governance/默认'}]`)
         // P2：断言登记工具**默认可达**（不再受推导层的默认关牵连）；研究旗标 NO_ASSERT=1 仍可整体关闭
         if (process.env.SHISANUO_NO_ASSERT !== '1') {
           const taskDef = buildTaskToolDefinition({ log: (entry) => void log(entry), acceptance: acceptanceBridge })
@@ -2804,7 +2964,7 @@ export function apply(ctx: Context) {
         gateTool: gateToolRegistered,
         taskTool: taskToolRegistered,
         catalog: catalogRegistered,
-        concludeOnPass: process.env.SHISANUO_CONCLUDE_ON_PASS === '1',
+        concludeOnPass: concludeOnPassEffective,
         fingerprint: sectionFingerprintLast.slice(0, 16),
       }
       const missing: string[] = []

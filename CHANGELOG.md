@@ -1,5 +1,18 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 治理开关批（2026-10-18 · L3 页面化管理＋误拦白名单＋能力开关）
+
+> 需求：L3 拦截=宿主沙箱∪插件 10 危险域词面的加严层，误拦截时缺持久出口（审批卡无放行记忆，宿主无审批回调）——要求「误拦可治理＋治理能力页面化管理」。三拍板：能力级开关组／noExempt 域禁豁免／审批卡加引导语。
+
+- **跨包管道**：dsh-custom 页面写 `$DSH_HOME/dsh-custom/governance.json` → 本引擎 `readGovernanceCached` mtime 热读（layered-state 同款；`SHISANUO_GOVERNANCE` 可覆盖路径；DSH_HOME 未设回退 `~/.dsh`，对齐 dsh-custom resolveHome 口径）。fail-closed：缺文件/坏文件/坏字段=该项回落默认（防护不因配置损坏解除）；boot 落 `kind:"governance"` 行可核验。
+- **pre-execute 分流**：白名单命中→`l3-detected decision=allow-allowlist`＋allow 终态短路（不计 intercepted；同 fullAccess 理由防下游 ask 硬失败谎报拒绝）；`l3.enabled=false`→`decision=governance-off` 仅记录（与 `SHISANUO_L3_OFF` 实验关分账可辨）；域级关闭经 `effectiveRulesFor` 过滤（**noExempt 域引擎侧强制保留**=第二道，页面 422 为第一道）。`activeJudge`/`gateJudge` 同吃治理——gate 收口/断言求值通道自动尊重白名单与域开关。
+- **白名单语义**：归一化字面子串＋词边界（与拒绝指纹同实现），最短 4 字符；无正则（消 ReDoS 面）。
+- **审批卡引导语**：reason 末尾追加「如属误拦：设置 → DSH自定义 → 治理开关，可加白名单放行。」（`L3_ASK_GUIDANCE` 单源；displayReason 双语同步）。
+- **能力开关**：判级/清单强制（=LEVEL_OFF＋CHECKLIST_OFF 语义；env 显式关闭仍优先——env 关了文件开不起来）、压缩重载信号（抑制落 `compaction-signal-suppressed`）、concludeOnPass（优先序 env>文件>默认关；**注册面 boot 快照，热改需重启**——页面已标注）。
+- **遥测白名单同步**：`governance`/`compaction-signal-suppressed` 新 kind＋`l3-detected.allowRule` 字段进 tally 白名单（whitelist 测试先红拦截→同批补）。
+- **测试**：`governance-config` 新套 41 例（装载/fail-closed/noExempt 强制/词边界白名单/热读/env 优先/行为级三态）；全量 **37/37** 套绿（+1 套）；tsc build exit 0。
+- **实机三判据（桌面真机，LongCat 免费档）**：①noExempt 域关闭 API 422＋点名域；②白名单条目命中→`allow-allowlist` 落账×2（pre-execute＋gate 通道）零弹卡；③真跑删除命令→L3 卡在屏、引导语逐字可见（截图 `D:/tmp/wt-20261018-p0/24-28`）。走查后探针白名单条目已移除、配置回默认。
+
 ## 收口强制呈现改造（2026-10-18 · notice 通知，不与用户发言混排）
 
 > 需求：收口/判级强制此前以「用户发言」气泡呈现（宿主投递接口约束），要求改为独立消息通知、不与用户消息混排（用户点名）。改造=复用宿主既有 notice 通道（零新机制）。
