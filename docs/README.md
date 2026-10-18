@@ -49,6 +49,7 @@
 - `design-specs/v5-execution-report-20261016.md` — 收口执行报告 v5（逐批状态、三指标真值、交付物索引、待裁四项、复跑命令）。
 - `design-specs/effect-layer-sample-round-20261016.md` — effect 层样本轮 A/B 对照（steer 1.0/轮→0、动作级 0→10/10、目标级分列 0/0；绝对路径边界与弱模型抖动事故如实记录）。
 - `design-specs/e1-v5-supplement-prereg-20261016.md` — E1-v5 有效性补样本轮**预注册**（n≥5 四臂当前版重跑；判据/排除规则/门槛冻结；执行待窗口）。
+- `design-specs/e2-large-n-validation-plan-20261019.md` — **E2 大基数有效性验证·准备方案（预注册草案）**（天花板效应裁决→换「有失败面」六任务电池；C/D 主臂＋B 探索臂、Fisher 判据、中止规则冻结；夹具器＝`scripts/e2-battery.mjs`；未开跑）。
 - `design-specs/config-entry-research-20261017.md` — **配置入口惯例调研**（生态全景 1000 条目录/市场/23 分类；配置入口三 代际机制一手证据；竞品抽样；投稿规范对我们影响）。
 - `design-specs/config-entry-design-20261017.md` — **配置入口设计（冻结）**（插件页卡片→设置页三卡片：执行账本 P0/规则包 P1/纪律文本 P2；文件=权威层、UI=叠加层；双轨兼容）。
 - `design-specs/dsh-custom-prompt-research-20261017.md` — **「DSH自定义」系统提示词管理·调研**（装配链 API 全貌/`complete` 深改机制/0.2.1-rc.1 对照/生态近邻 `dsh-agent-persona` 深核与复用裁定）。
