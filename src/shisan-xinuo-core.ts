@@ -222,6 +222,27 @@ export function noticeMessage(summary: string, text: string): { id: string; role
   return { id: randomUUID(), role: 'user', content: [{ type: 'text', text }], source: { kind: 'shisan-xinuo', form: 'notice', summary } }
 }
 
+// 呈现层改造（2026-10-18 用户要求）：收口/判级强制**不再以「用户发言」呈现**——改走宿主 notice 信封
+//（`noticeMessage`：`source.form='notice'`＋单行 summary）。宿主 UI 渲染契约=chat `contextBody` case "notice"
+//（summary 非空即折叠为通知行、正文为模型可见文本；缺 summary 降级 opaque）。**`steer()` 唤醒语义不变**——
+// 信封只改呈现面，唤醒由 steer 调用本身承担；模型可见文本（含 `[十三希诺收口强制]` 前缀）逐字保留。
+export function steerSummaryFor(
+  kind: 'zerotool' | 'effect-fail' | 'assert-fail' | 'no-closeout' | 'discipline-gap',
+  o: { needLevel?: boolean; needChecklist?: boolean; append?: boolean } = {},
+): string {
+  switch (kind) {
+    case 'zerotool': return `${STEER_PREFIX} 零工具调用却声称完成——请实际执行或如实说明`
+    case 'effect-fail': return `${STEER_PREFIX} 动作级复核未过——请核实目标真实状态后收口`
+    case 'assert-fail': return `${STEER_PREFIX} 登记断言未过——请完成真实目标后收口`
+    case 'no-closeout': return `${STEER_PREFIX} 本回合未真值收口——请补收口动作`
+    case 'discipline-gap':
+      if (o.append) return '[十三希诺追加判级] 追加要求未声明判级——请评估升降档后收口'
+      if (o.needLevel && o.needChecklist) return '[十三希诺判级+清单强制] 缺少状态行判级与验收登记'
+      if (o.needChecklist) return '[十三希诺任务清单强制] 复杂档任务缺少验收登记'
+      return '[十三希诺判级强制] 实质工作回合缺少状态行判级'
+  }
+}
+
 // 段指纹：对注入系统段（名称+正文）取 SHA-256——启动自检 + 每请求核对段漂移（段变更率=0 的遥测底座）。
 export function sectionFingerprint(sections: Array<{ name: string; text: string }>): string {
   const h = createHash('sha256')
@@ -2463,7 +2484,7 @@ export function apply(ctx: Context) {
         if (ZEROTOOL_GUARD && !b.steered && judgeZeroToolClaim(b.lastText)) {
           b.steered = true
           void log({ kind: 'zerotool-claim', turn: b.turn, tail: b.lastText.slice(-200) })
-          agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`))
+          agent.steer?.(noticeMessage(steerSummaryFor('zerotool'), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合没有任何工具调用，却声明任务已完成——宿主无法核验该说法。请实际执行任务并调用 discipline_gate 交出可复算的验证命令；若确实未执行，请如实说明（宿主将记为未收口）。`))
           console.log(`[shisan-xinuo] zero-tool completion claim → steer for turn ${b.turn}`)
         }
         return
@@ -2511,7 +2532,7 @@ export function apply(ctx: Context) {
             sectionText = `\n\n——附：${secName}（${sec.source}）——\n${sec.text}`
             void log({ kind: 'layered-inject', section: secName, source: sec.source, chars: sec.text.length, trigger: 'discipline-gap' })
           }
-          agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} ${buildDisciplineSteerText({ ...gap, append: taskAppendFollowUp })}${sectionText}`))
+          agent.steer?.(noticeMessage(steerSummaryFor('discipline-gap', { needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp }), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} ${buildDisciplineSteerText({ ...gap, append: taskAppendFollowUp })}${sectionText}`))
           console.log(`[shisan-xinuo] discipline gap steer for turn ${payload.turn} (level=${gap.needLevel} checklist=${gap.needChecklist} append=${taskAppendFollowUp})`)
           return
         }
@@ -2553,7 +2574,7 @@ export function apply(ctx: Context) {
           steerCounts.set(steerKeyE, usedE + 1)
           void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'effect-fail', assertions: eff.length })
           const effFailLine = effFailed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
-          agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主按本回合**实际工具副作用**复核：✘ ${effFailLine}。你以为落地的动作没有落地（或已被撤销/目标不符）——请核实目标真实状态后收口；确实无法完成则如实报告被阻塞原因（宿主记为未收口）。文本 GATE 不计入合规。`))
+          agent.steer?.(noticeMessage(steerSummaryFor('effect-fail'), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主按本回合**实际工具副作用**复核：✘ ${effFailLine}。你以为落地的动作没有落地（或已被撤销/目标不符）——请核实目标真实状态后收口；确实无法完成则如实报告被阻塞原因（宿主记为未收口）。文本 GATE 不计入合规。`))
           console.log(`[shisan-xinuo] effect-closeout FAIL → steer for turn ${payload.turn} (${effFailed.length}/${effResults.length} failed)`)
           return
         }
@@ -2584,7 +2605,7 @@ export function apply(ctx: Context) {
         steerCounts.set(steerKeyA, usedA + 1)
         void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'auto-fail', assertions: pending.length })
         const failLine = failed.map((f) => `${explainAssertion(f.assertion)}（${f.detail}）`).join('；')
-        agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`))
+        agent.steer?.(noticeMessage(steerSummaryFor('assert-fail'), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 宿主已自动复核验收断言，未通过：✘ ${failLine}。任务不能以现状结束——请完成真实目标后调用 discipline_gate（宿主将复跑断言）；若确实无法完成，如实报告被阻塞原因（宿主将记为未收口）。文本 GATE 不计入合规。`))
         console.log(`[shisan-xinuo] auto-closeout FAIL → steer for turn ${payload.turn} (${failed.length}/${results.length} failed)`)
         return
       }
@@ -2600,7 +2621,7 @@ export function apply(ctx: Context) {
       }
       steerCounts.set(steerKeyB, usedB + 1)
       void log({ kind: 'gate-steer', turn: payload.turn, toolCalls: b.toolCalls, mode: 'no-assertions', assertions: 0 })
-      agent.steer?.(userMessage(`${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。调用 discipline_gate 时必须携带**锚定本任务目标的判据**：优先用 assert 算子（not_exists/exists/path_contains:<目标路径>，宿主内联求值）；仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主将记 gate-unproven）。文本 GATE 不再计入合规。若确实无法验证，请如实声明「未验证」与原因（宿主将记为 unverified）。`))
+      agent.steer?.(noticeMessage(steerSummaryFor('no-closeout'), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} 本回合有 ${b.toolCalls} 次工具调用但未收口，任务暂不能结束。调用 discipline_gate 时必须携带**锚定本任务目标的判据**：优先用 assert 算子（not_exists/exists/path_contains:<目标路径>，宿主内联求值）；仅跑一条与本任务无关的命令凑 exit 0 不构成收口（宿主将记 gate-unproven）。文本 GATE 不再计入合规。若确实无法验证，请如实声明「未验证」与原因（宿主将记为 unverified）。`))
       console.log(`[shisan-xinuo] gate steer injected for turn ${payload.turn} (toolCalls=${b.toolCalls})`)
     } catch (e) {
       console.error('[shisan-xinuo] turn-stopping check failed (non-fatal):', String(e).slice(0, 120))
