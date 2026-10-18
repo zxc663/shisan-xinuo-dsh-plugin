@@ -7,6 +7,7 @@ import {
   normalizeWinPath,
   judgeWorkspaceBoundary,
   buildWriteAuditEntry,
+  extractRuntimeContextCwd,
 } from '../src/shisan-xinuo-core.ts'
 
 let pass = 0
@@ -62,6 +63,16 @@ t('out: 10 换行注入越区（防 \\n 前缀混淆）', false, B('\nD:\\DeepSe
 t('extra: 放行前缀命中', true, B('E:\\share\\assets\\logo.png', ['E:\\share\\assets']))
 t('extra: 放行前缀大小写折叠', true, B('E:\\SHARE\\assets\\x', ['e:/share/assets']))
 t('extra: 放行表不等于逃逸（无命中仍拦）', false, B('E:\\other\\x', ['E:\\share\\assets']))
+
+// ── F3 修复回归（2026-10-18 实机走查）：宿主 0.2.0-rc.2 不出 working-directory/change 事件，
+// cwd 经 runtime-context 快照消息注入 → 从快照文本解析（会话日志实证格式：Current working directory: "D:\\tmp".）──
+t('rcwd: 标准快照格式', 'D:\\tmp', extractRuntimeContextCwd('Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent working directory: "D:\\tmp".\n\nCurrent DSH file policy: workspace-write.'))
+t('rcwd: 正斜杠形态', 'D:/x/proj', extractRuntimeContextCwd('Current working directory: "D:/x/proj".'))
+t('rcwd: 中文文本包裹仍可解析', 'D:\\DeepSeek\\dsh-plugin-dev', extractRuntimeContextCwd('前缀中文说明\nCurrent working directory: "D:\\DeepSeek\\dsh-plugin-dev".\n后文'))
+t('rcwd: 无该字段 → null', null, extractRuntimeContextCwd('普通文本，无 cwd 快照'))
+t('rcwd: 无引号 → null（防误抓）', null, extractRuntimeContextCwd('Current working directory: D:\\x'))
+t('rcwd: 空输入安全', null, extractRuntimeContextCwd(''))
+t('rcwd: 非字符串安全', null, extractRuntimeContextCwd(null))
 
 // ── 对账遥测条目（F3/F5）──
 t('audit: workspace-write 越区记录含完整对账字段', {

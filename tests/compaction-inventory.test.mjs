@@ -3,6 +3,7 @@
 import {
   buildCompactionReloadNotice,
   shouldInjectCompactionSignal,
+  extractCompactionShadowedTokens,
   scanWorkspaceAssets,
 } from '../src/shisan-xinuo-core.ts'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
@@ -56,6 +57,16 @@ t('F8: 信号文案要求复述任务本质+当前步骤', true, notice.includes
     rmSync(dir, { recursive: true, force: true })
   }
 }
+
+// ── F8 修复回归（2026-10-18 实机走查）：shadowedTokenCount 只存在于 compaction/summary 事件
+// （会话日志实证：end 事件 data 无该字段、summary 有 shadowedSeqs/shadowedTokenCount）→ 从 summary 捕获 ──
+t('F8f: summary 事件提取影子 token（真机形状）', { compactionId: 'c1', tokens: 5480 }, extractCompactionShadowedTokens({ type: 'compaction/summary', data: { compactionId: 'c1', shadowedSeqs: [9, 10], shadowedTokenCount: 5480 } }))
+t('F8f: end 事件不提取（无该字段）', null, extractCompactionShadowedTokens({ type: 'compaction/end', data: { compactionId: 'c1', turn: null } }))
+t('F8f: start 事件不提取', null, extractCompactionShadowedTokens({ type: 'compaction/start', data: { compactionId: 'c1' } }))
+t('F8f: summary 缺 compactionId → null（防串账）', null, extractCompactionShadowedTokens({ type: 'compaction/summary', data: { shadowedTokenCount: 5 } }))
+t('F8f: summary 缺计数 → 0', { compactionId: 'c2', tokens: 0 }, extractCompactionShadowedTokens({ type: 'compaction/summary', data: { compactionId: 'c2' } }))
+t('F8f: 非数字计数 → 0 兜底', { compactionId: 'c3', tokens: 0 }, extractCompactionShadowedTokens({ type: 'compaction/summary', data: { compactionId: 'c3', shadowedTokenCount: 'x' } }))
+t('F8f: null 安全', null, extractCompactionShadowedTokens(null))
 
 // 非存在目录安全
 t('F9: 目录不存在=空形态不炸', { scripts: [], scriptFiles: [], tests: 0 }, scanWorkspaceAssets('D:/definitely-not-exist-xyz'))

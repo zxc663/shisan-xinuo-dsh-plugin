@@ -465,6 +465,15 @@ export function isWriteTool(name: string): boolean {
   return WRITE_TOOLS.has(String(name ?? '').toLowerCase())
 }
 
+// 批毕缺陷处置（2026-10-18，E1-v5 预注册备案口径）：**询问类工具不参与 L3 判定**——其参数是「给人看的
+// 提问文本」（展示面），词面命中删除动词≠执行动作。真机误报实录：E1-v5 台账 10-17 23:00:07Z
+// `l3-intercept tool=ask_user_question domain=数据删除`（模型提问文案含 Remove-Item 字样即误弹审批卡）。
+// 执行面工具（shell/写/gate）判定不变；discipline_gate 的命令仍受 L3 护栏（gate 会真执行命令）。
+export const INQUIRY_TOOLS = new Set(['ask_user_question'])
+export function isInquiryTool(name: string): boolean {
+  return INQUIRY_TOOLS.has(String(name ?? '').toLowerCase())
+}
+
 // 写目标路径提取（对接真相：dsh-tool-fs write/edit=file_path；str-replace-editor=path——宿主源码实查）
 export function extractWriteTarget(tool: string, args: Record<string, unknown> | undefined | null): string | null {
   if (!args || typeof args !== 'object') return null
@@ -528,6 +537,15 @@ export function buildWriteAuditEntry(tool: string, path: string, mode: string, i
   }
 }
 
+// F3 修复（2026-10-18 实机走查）：宿主 0.2.0-rc.2 **实测不产生** `working-directory/change` 会话事件
+// （会话日志举证：整条会话无该事件；写入被宿主沙箱拒后 workspace-cwd 仍为空 ⇒ write-audit 从未落账）。
+// cwd 的真实来源=runtime-context 快照消息文本（source.kind=runtime-context；
+// 会话日志原文：`Current working directory: "D:\tmp".`）——从快照解析，change 事件保留为次源。
+export function extractRuntimeContextCwd(text: string): string | null {
+  const m = /Current working directory:\s*"([^"]+)"/.exec(String(text ?? ''))
+  return m && m[1] ? m[1] : null
+}
+
 // ── P4 F6（缩围版）：timed ask 工具检测 ──
 // 宿主原生 dsh-tool-ask-user 提供 timed ask_user_question（timeout 参数；超时=pending 可续答）。
 // 插件角色=检测+指引（零包装层，探针1 裁定）；指引面在 layered/goal-mode.md（提问超时策略）。
@@ -548,6 +566,18 @@ export function shouldInjectCompactionSignal(event: unknown): boolean {
   if (!e || typeof e !== 'object') return false
   if (e.type !== 'compaction/end') return false
   return !e.data?.error
+}
+
+// F8 修复（2026-10-18 实机走查）：shadowedTokenCount **不在** `compaction/end` 事件里（真机实测该事件
+// data 仅 {compactionId, sourceCommandId, turn}）——而在 `compaction/summary` 事件（真机实测
+// {shadowedSeqs: [...27 项], shadowedTokenCount: 5480, ...}）。从 summary 按 compactionId 捕获，end 时取用。
+export function extractCompactionShadowedTokens(event: unknown): { compactionId: string; tokens: number } | null {
+  const e = event as { type?: unknown; data?: { compactionId?: unknown; shadowedTokenCount?: unknown } } | null
+  if (!e || e.type !== 'compaction/summary') return null
+  const id = String(e.data?.compactionId ?? '')
+  if (!id) return null
+  const n = Number(e.data?.shadowedTokenCount)
+  return { compactionId: id, tokens: Number.isFinite(n) ? n : 0 }
 }
 
 export function buildCompactionReloadNotice(shadowedTokenCount: number): string {
@@ -1925,7 +1955,8 @@ export function apply(ctx: Context) {
   })
   const toolDispose = ctx.on('tools/pre-execute', async (exec: { name?: string; arguments?: unknown }, next: () => Promise<unknown>) => {
     const cmd = extractCommand(exec)
-    const hit = activeJudge(String(cmd))
+    // 批毕缺陷处置（2026-10-18）：询问类工具（ask_user_question）=展示提问文本，不判 L3（误报实录见 INQUIRY_TOOLS 注释）
+    const hit = isInquiryTool(String(exec?.name ?? '')) ? null : activeJudge(String(cmd))
     void log({ kind: 'pre-execute', tool: exec?.name, cmd: String(cmd).slice(0, 200), l3: hit })
     noteObservedEffect(exec) // 决策 2：物理副作用采集（本缝是唯一能拿到完整 arguments 的地方）
     // P3 F3/F5：写动作对账遥测（执法=宿主 sandbox；插件只记不发裁决——完全权限档 record-only，验收 c/d）
@@ -2022,6 +2053,8 @@ export function apply(ctx: Context) {
   let lastAskTimed: boolean | null = null
   // P5 F8：待送达的压缩重载信号（key=session.id → shadowedTokenCount）
   const pendingCompactionSignal = new Map<string, number>()
+  // F8 修复：summary 事件的影子 token 缓存（key=compactionId；end 到达时取用——真机 end 事件无该字段）
+  const compactionShadowed = new Map<string, number>()
 
   // ── B2 任务记录（会话内存态）：验收断言持有方。key=session.id；execCtx 无法解析时退化"本进程唯一会话"。
   interface TaskRec {
@@ -2145,6 +2178,12 @@ export function apply(ctx: Context) {
           // 故"skill 纳入预算"的裁剪形态在当前插件面**不可行**；可做的是**度量**——把 skill 类注入的体积落账，
           // 让成本可见（基线实测：skill 类注入 88.4KB/8 会话 ≈ 系统段 19.4KB 的 4.5 倍）。裁剪建议归宿主配置层。
           if (/skill/i.test(srcKind)) void log({ kind: 'skill-catalog-cost', sourceKind: srcKind, chars: txt.length })
+          // F3 修复（2026-10-18 实机走查）：runtime-context 快照携带 cwd → 工作区边界源（本宿主不出 change 事件）
+          const rcCwd = extractRuntimeContextCwd(txt)
+          if (rcCwd && rcCwd !== workspaceCwd) {
+            workspaceCwd = rcCwd
+            void log({ kind: 'workspace-cwd', cwd: rcCwd, via: 'runtime-context' })
+          }
           return
         }
         if (!txt || txt.startsWith(STEER_PREFIX)) return
@@ -2194,8 +2233,19 @@ export function apply(ctx: Context) {
       }
       // P5 F8：压缩信号（宿主 compaction 事件族；无 error 的 end=压缩成功落定）→ 记 pending，
       // 由下一个 turn-stopping（有 agent 句柄）经 inject 送达——notice 通道非唤醒，下回合可见。
+      // F8 修复：影子 token 从 summary 事件捕获（end 事件无该字段——真机实证）。
+      const compSum = extractCompactionShadowedTokens(event)
+      if (compSum) {
+        if (compactionShadowed.size > 16) compactionShadowed.clear() // 上限防无界（正常远小于）
+        compactionShadowed.set(compSum.compactionId, compSum.tokens)
+        return
+      }
       if (shouldInjectCompactionSignal(event)) {
-        const shadowed = Number((event as { data?: { shadowedTokenCount?: unknown } })?.data?.shadowedTokenCount ?? 0)
+        const cid = String((event as { data?: { compactionId?: unknown } })?.data?.compactionId ?? '')
+        const fromSummary = cid ? compactionShadowed.get(cid) : undefined
+        if (cid) compactionShadowed.delete(cid)
+        const direct = Number((event as { data?: { shadowedTokenCount?: unknown } })?.data?.shadowedTokenCount)
+        const shadowed = Number.isFinite(direct) ? direct : (fromSummary ?? 0)
         const cKey = sidKeyOf(session, '')
         if (cKey) pendingCompactionSignal.set(cKey, shadowed)
         void log({ kind: 'compaction-detected', shadowedTokens: shadowed })
