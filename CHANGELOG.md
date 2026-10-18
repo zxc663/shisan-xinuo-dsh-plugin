@@ -1,5 +1,15 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## F10 检测扩面＋可达性修复＋dsh-custom CI（2026-10-19）
+
+> 触发：用户质询「其余 M/S 分节无检测点是否可接受」——按「机器可检信号最大化」补齐；此前「成本高」表述不准确（真实成本＝每 L2-F 任务约 +5.5KB 一次性上下文，非工程不可行）。
+
+- **检测矩阵扩面**：新增 a) **判级覆盖送达**——声明 L2-S/L2-F/L3 且进实质工作（过只读早退）→ 一次性附对应档位分节集（L2-S→`l2s`；L2-F→`l2f`＋`requirements-challenge`＋`environment-inventory`＋`plan`/`carrier` 模板；L3／宿主视角≥3 另加 `rollback` 模板）；b) **目标模式**——用户消息命中「目标模式/无人值守/你决定」类明示授权→附 `goal-mode.md`（「按最优解走」等歧义短语不收录，防误开自主授权）。缺口路径附文改为分节集＋同任务去重（`layeredCoveredTasks`）；全部为被动送达（非唤醒 notice），逐节落账（trigger=discipline-gap / level-coverage / goal-mode）。
+- **无信号留模型侧（如实标注）**：`docking-truth-list`（K1）、`tool-triggers`、`clarify-protocol`、`acceptance`/`task-record`/`retro` 模板——路由表两副本已明示。
+- **可达性修复**：分节目录绝对路径（存在才列、按覆盖优先序）注入常驻核心段末——消费项目工作区模型也可按路由读分节。
+- **dsh-custom CI**：新增 GitHub Actions（`npm ci`＋tsc build＋全量测试；Node 22/24）。
+- 测试：layered-engine 扩至分节集映射/缺口路径/目标模式/目录提示纯函数面；构建 0 错、全量套＋voice 见提交。
+
 ## 渐进加载文档真值修正＋验证证据再核（2026-10-19）
 
 > 触发：用户质询「渐进加载是怎么确保的／路由表何时被模型运用／测试语句是否泄露」——比对发现 shipped 文案与运行事实不一致（F10 引擎早已实现，文案仍写「未实现」）。

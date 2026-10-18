@@ -779,16 +779,44 @@ export function scanWorkspaceAssets(cwd: string): WorkspaceInventory {
 // ── P6 F10：渐进加载引擎（检测→注入）──
 // 三检测点（F1 判级缺失/F2 清单缺失/F8 压缩信号）共用；注入目标=layered 对应分节全文（一次性附于
 // steer/notice 文本之后）；分节装载 fail-closed（缺失/坏→内联回退，装载事件落账）。
-export function pickLayeredSectionForGap(gap: {
-  needLevel: boolean
-  needChecklist: boolean
-  declaredLevel?: string | null
-  hostLevel?: number
-}): string | null {
-  if (gap.needLevel && !gap.needChecklist) return null // 判级未知无法选道——先补判级，分节等判级出来
-  if (!gap.needChecklist) return null
-  if (gap.declaredLevel === 'L2-S') return 'l2s-short-workflow.md'
-  return 'l2f-full-workflow.md' // L2-F/L3/低报重活（宁重勿轻）
+// F10 分节选道（2026-10-19 扩面：判级覆盖＋缺口共用）：按判级（或宿主视角低报重活）给出任务应覆盖的分节集——宁重勿轻。
+export function pickLayeredSectionsForLevel(declaredLevel: string | null, hostLevel: number): string[] {
+  const heavy = declaredLevel === 'L2-F' || declaredLevel === 'L3' || (declaredLevel === null && hostLevel >= 2)
+  if (!heavy) return declaredLevel === 'L2-S' ? ['l2s-short-workflow.md'] : []
+  const set = [
+    'l2f-full-workflow.md',
+    'requirements-challenge.md',
+    'environment-inventory.md',
+    'templates/plan-template.md',
+    'templates/carrier-template.md',
+  ]
+  if (declaredLevel === 'L3' || hostLevel >= 3) set.push('templates/rollback-template.md')
+  return set
+}
+
+// 缺口路径专用：仅"清单缺失"才随打回附分节（判级单独缺失=先补判级、不附文——等级未知无法选道）。
+export function pickSectionsForGapAttach(
+  gap: { needLevel: boolean; needChecklist: boolean },
+  declaredLevel: string | null,
+  hostLevel: number,
+): string[] {
+  if (!gap.needChecklist) return []
+  return pickLayeredSectionsForLevel(declaredLevel, hostLevel)
+}
+
+// 目标模式检测（用户明示授权类；不收录"按最优解走"等歧义短语——防误开自主授权）。
+const GOAL_MODE_INTENT_RE =
+  /目标模式|无人值守|自主推进|自行推进|完全自主|全权处理|你自行决定|由你决定|你自己决定|不用问我|无需询问|无需确认|无需向我确认|尽管做|放手做/
+export function detectGoalModeIntent(text: string): boolean {
+  return GOAL_MODE_INTENT_RE.test(text ?? '')
+}
+
+// 渐进加载目录提示（F10d 可达性修复）：分节目录绝对路径注入常驻核心段末——消费项目工作区无插件文件时，
+// 模型仍可按路由读分节（该通道此前只对插件开发工作区可达）。
+export function buildLayeredDirHint(dirs: string[]): string {
+  if (dirs.length === 0) return ''
+  const list = dirs.map((d, i) => `${i + 1}) ${d}`).join('；')
+  return `## 渐进加载目录（宿主注入）\n- 分节目录（按优先序，读分节用绝对路径）：${list}；路由表=\`00-加载清单.md\`（按需读取，用完不驻留）。`
 }
 
 const layeredSectionCache = new Map<string, { source: 'file' | 'fallback'; text: string; fromPath: string | null; mtimeMs: number }>()
@@ -2256,6 +2284,10 @@ export function apply(ctx: Context) {
   let lastAskTimed: boolean | null = null
   // P5 F8：待送达的压缩重载信号（key=session.id → shadowedTokenCount）
   const pendingCompactionSignal = new Map<string, number>()
+  // F10c（2026-10-19 扩面）：待送达的目标模式授权（key=session.id；用户明示→turn-stopping 附 goal-mode.md）
+  const pendingGoalMode = new Set<string>()
+  // F10b（2026-10-19 扩面）：已覆盖送达的任务（key=session.id；新任务清除——防同任务重复附文）
+  const layeredCoveredTasks = new Set<string>()
   // F8 修复：summary 事件的影子 token 缓存（key=compactionId；end 到达时取用——真机 end 事件无该字段）
   const compactionShadowed = new Map<string, number>()
 
@@ -2341,8 +2373,26 @@ export function apply(ctx: Context) {
         ? '- ⚠完全权限模式：宿主审批卡已按用户全局授权暂停；但工程纪律的 L3 协议不变——命中 L3 仍须先列命令清单停下等确认（本横幅不构成放行）。gate 危险命令仍拒跑；收口强制/零工具护栏保持生效。'
         : '- 审批模式：L3 危险域命中会请求确认；只读豁免以规则包为准。',
     ].join('\n')
+  // F10d（2026-10-19 可达性修复）：分节目录绝对路径注入常驻核心段末——消费项目工作区无插件文件时，
+  // 模型仍可按路由读分节（此前该通道仅对插件开发工作区可达）。
+  const layeredHintDirs = (): string[] => {
+    const out: string[] = []
+    const push = (d: string | null | undefined): void => {
+      if (!d || out.includes(d)) return
+      try { if (existsSync(d) && statSync(d).isDirectory()) out.push(d) } catch { /* 探测失败=跳过 */ }
+    }
+    push(process.env.SHISANUO_LAYERED_DIR)
+    const dh = process.env.DSH_HOME?.trim()
+    push(dh ? join(dh, 'dsh-custom', 'layered') : null)
+    push(join(contentDir, 'layered'))
+    return out
+  }
+  const disciplineSectionText = (() => {
+    const hint = buildLayeredDirHint(layeredHintDirs())
+    return hint ? `${disciplineLoad.text}\n\n${hint}` : disciplineLoad.text
+  })()
   const renderSections = () => [
-    { name: 'shisanxinuo:core-discipline', text: disciplineLoad.text },
+    { name: 'shisanxinuo:core-discipline', text: disciplineSectionText },
     { name: 'shisanxinuo:live-status', text: liveStatusText() },
   ]
   let sectionFingerprintLast = ''
@@ -2396,6 +2446,9 @@ export function apply(ctx: Context) {
         if (isAppend) void log({ kind: 'append-followup', raw: txt.slice(0, 120) })
         openTask(null, isAppend ? 'user-message+append' : 'user-message', sidKeyOf(session, ''))
         taskAppendFollowUp = isAppend
+        // F10b/c：新任务清除覆盖去重；目标模式检测（用户明示授权→turn-stopping 附 goal-mode.md 一次）
+        if (!isAppend) layeredCoveredTasks.delete(sidKeyOf(session, ''))
+        if (detectGoalModeIntent(txt)) pendingGoalMode.add(sidKeyOf(session, ''))
         const derived = ASSERT_LAYER ? deriveAssertionsFromUserText(txt) : []
         const key = sidKeyOf(session)
         if (derived.length > 0 && lastDerivedText.get(key) !== txt) {
@@ -2609,6 +2662,20 @@ export function apply(ctx: Context) {
   })
   console.log('[shisan-xinuo] gate check + session stats installed')
 
+  // F10 附件拼装（2026-10-19 扩面）：按名装载分节——停用跳过、缺失回退 fail-closed、逐节落账；返回拼好的附文与送达名。
+  const attachLayeredSections = (names: string[], trigger: string): { text: string; delivered: string[] } => {
+    const parts: string[] = []
+    const delivered: string[] = []
+    for (const name of names) {
+      if (layeredSectionDisabled(name)) continue
+      const sec = loadLayeredSection(name, join(contentDir, 'layered'), `（分节 ${name} 装载失败——按常驻核心 §1.4 对应档位纪律执行）`)
+      parts.push(`\n\n——附：${name}（${sec.source}）——\n${sec.text}`)
+      delivered.push(name)
+      void log({ kind: 'layered-inject', section: name, source: sec.source, chars: sec.text.length, trigger })
+    }
+    return { text: parts.join(''), delivered }
+  }
+
   // ── v2 收口强制（turn-stopping + steering）：实质工作回合 gate 缺失时，向 inbox steer 一条收口指令，
   // turn 继续不结束——模型被迫补收口（asar 实证：steer() 提交 next-step 输入并唤醒驱动器）。
   // 防死循环：每回合最多 steer 1 次（b.steered 标记），超限放行。A-B 臂不启用。
@@ -2643,6 +2710,17 @@ export function apply(ctx: Context) {
           }
         }
       }
+      // F10c：目标模式送达（被动 notice，非唤醒）——用户明示授权类命中后一次性附 goal-mode.md
+      if (pendingGoalMode.has(bucketKey)) {
+        pendingGoalMode.delete(bucketKey)
+        const gAttach = attachLayeredSections(['goal-mode.md'], 'goal-mode')
+        if (gAttach.delivered.length > 0) {
+          ;(agent as { inject?: (m: unknown) => void })?.inject?.(
+            noticeMessage('目标模式：已附 goal-mode.md 分节', `（宿主检测到用户明示目标模式/无人值守类授权，自动附对应分节——按其执行；本通知非用户发言。）${gAttach.text}`),
+          )
+        }
+      }
+
       // 探针（默认关）：注入探针证实 notice 通道 form/source（SHISANUO_PROBE_NOTICE=1）
       if (process.env.SHISANUO_PROBE_NOTICE === '1' && !noticeProbeDone) {
         noticeProbeDone = true
@@ -2710,15 +2788,12 @@ export function apply(ctx: Context) {
           }
           steerCounts.set(steerKeyF, usedF + 1)
           void log({ kind: 'discipline-steer', turn: payload.turn, needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp, declared: b.declaredLevel ?? '', hostLevel: b.hostLevel })
-          // F10：按判级附加对应 layered 分节全文（检测→注入；装载 fail-closed＋落账；页面侧停用=跳过）
-          const secName = pickLayeredSectionForGap({ ...gap, declaredLevel: b.declaredLevel, hostLevel: b.hostLevel })
-          let sectionText = ''
-          if (secName && !layeredSectionDisabled(secName)) {
-            const sec = loadLayeredSection(secName, join(contentDir, 'layered'), `（分节 ${secName} 装载失败——按常驻核心 §1.4 对应档位纪律执行）`)
-            sectionText = `\n\n——附：${secName}（${sec.source}）——\n${sec.text}`
-            void log({ kind: 'layered-inject', section: secName, source: sec.source, chars: sec.text.length, trigger: 'discipline-gap' })
-          }
-          agent.steer?.(noticeMessage(steerSummaryFor('discipline-gap', { needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp }), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} ${buildDisciplineSteerText({ ...gap, append: taskAppendFollowUp })}${sectionText}`))
+          // F10：按判级附加对应 layered 分节集（检测→注入；同任务去重；装载 fail-closed＋落账；页面侧停用=跳过）
+          const gapAttach = layeredCoveredTasks.has(bucketKey)
+            ? { text: '', delivered: [] as string[] }
+            : attachLayeredSections(pickSectionsForGapAttach(gap, b.declaredLevel, b.hostLevel), 'discipline-gap')
+          if (gapAttach.delivered.length > 0) layeredCoveredTasks.add(bucketKey)
+          agent.steer?.(noticeMessage(steerSummaryFor('discipline-gap', { needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp }), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} ${buildDisciplineSteerText({ ...gap, append: taskAppendFollowUp })}${gapAttach.text}`))
           console.log(`[shisan-xinuo] discipline gap steer for turn ${payload.turn} (level=${gap.needLevel} checklist=${gap.needChecklist} append=${taskAppendFollowUp})`)
           return
         }
@@ -2732,6 +2807,20 @@ export function apply(ctx: Context) {
           console.log(`[shisan-xinuo] read-only turn (hostLevel=${b.hostLevel}) → closeout not required`)
         }
         return
+      }
+      // F10b（2026-10-19 扩面）：判级覆盖送达——声明正确且已进实质工作（过只读早退）时，一次性被动附对应档位分节集
+      //（非唤醒；送达即入上下文，后续回合可见；同任务去重）。判级缺失/低报重活走上方缺口路径。
+      if (!layeredCoveredTasks.has(bucketKey)) {
+        const coverSecs = pickLayeredSectionsForLevel(b.declaredLevel, b.hostLevel)
+        if (coverSecs.length > 0) {
+          layeredCoveredTasks.add(bucketKey)
+          const coverAttach = attachLayeredSections(coverSecs, 'level-coverage')
+          if (coverAttach.delivered.length > 0) {
+            ;(agent as { inject?: (m: unknown) => void })?.inject?.(
+              noticeMessage(`渐进加载：已附 ${b.declaredLevel ?? '低报重档'} 流程分节`, `（宿主按判级覆盖送达自动附流程分节：${coverAttach.delivered.join('、')}——按分节执行；本通知非用户发言。）${coverAttach.text}`),
+            )
+          }
+        }
       }
       const rec = taskRecords.get(bucketKey)
       const pending = [...pinnedRecords, ...(rec?.assertions ?? [])]
@@ -2832,7 +2921,7 @@ export function apply(ctx: Context) {
     const promptDispose = ctx.systemPrompt.section({
       name: 'shisanxinuo:core-discipline',
       order: 300,
-      text: disciplineLoad.text,
+      text: disciplineSectionText,
     })
     console.log('[shisan-xinuo] core discipline section registered')
     statusDisposes.push(promptDispose)

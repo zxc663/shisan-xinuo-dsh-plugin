@@ -1,7 +1,10 @@
-// P6 F10 单测——渐进加载引擎（检测→注入：layered 分节装载 fail-closed＋触发映射）。
-// 三检测点（F1 判级缺失/F2 清单缺失/F8 压缩信号）共用；注入目标=layered 对应分节。
+// P6 F10 单测——渐进加载引擎（检测→注入：分节选道/装载 fail-closed/目标模式/目录提示）。
+// 检测矩阵（2026-10-19 扩面）：缺口路径（判级+清单缺失）＋覆盖送达（判级正确进实质工作）＋目标模式（用户明示）＋压缩信号（F8）。
 import {
-  pickLayeredSectionForGap,
+  pickLayeredSectionsForLevel,
+  pickSectionsForGapAttach,
+  detectGoalModeIntent,
+  buildLayeredDirHint,
   loadLayeredSection,
 } from '../src/shisan-xinuo-core.ts'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
@@ -16,13 +19,43 @@ function t(name, expect, actual) {
   else { fail++; cases.push(`FAIL ${name}\n  expect=${JSON.stringify(expect)}\n  actual=${JSON.stringify(actual)}`) }
 }
 
-// ── 触发→分节映射（路由契约的机器面）──
-t('map: 判级缺失=null（先补判级不注分节——判级未知无法选道）', null, pickLayeredSectionForGap({ needLevel: true, needChecklist: false }))
-t('map: L2-F 清单缺失→l2f', 'l2f-full-workflow.md', pickLayeredSectionForGap({ needLevel: false, needChecklist: true, declaredLevel: 'L2-F' }))
-t('map: L3→l2f', 'l2f-full-workflow.md', pickLayeredSectionForGap({ needLevel: false, needChecklist: true, declaredLevel: 'L3' }))
-t('map: L2-S→l2s', 'l2s-short-workflow.md', pickLayeredSectionForGap({ needLevel: false, needChecklist: true, declaredLevel: 'L2-S' }))
-t('map: 低报重活（hostLevel≥2 无自报）→l2f（宁重勿轻）', 'l2f-full-workflow.md', pickLayeredSectionForGap({ needLevel: false, needChecklist: true, declaredLevel: null, hostLevel: 2 }))
-t('map: 两不需要=null', null, pickLayeredSectionForGap({ needLevel: false, needChecklist: false }))
+const L2F_SET = [
+  'l2f-full-workflow.md',
+  'requirements-challenge.md',
+  'environment-inventory.md',
+  'templates/plan-template.md',
+  'templates/carrier-template.md',
+]
+
+// ── 判级→分节集映射（路由契约的机器面）──
+t('map: L1=空集', [], pickLayeredSectionsForLevel('L1', 3))
+t('map: L2-S→l2s', ['l2s-short-workflow.md'], pickLayeredSectionsForLevel('L2-S', 2))
+t('map: L2-F→流程集（流程+质疑+盘点+两模板）', L2F_SET, pickLayeredSectionsForLevel('L2-F', 2))
+t('map: L3→流程集+回滚模板', [...L2F_SET, 'templates/rollback-template.md'], pickLayeredSectionsForLevel('L3', 2))
+t('map: hostLevel≥3→追加回滚模板（宁重勿轻）', [...L2F_SET, 'templates/rollback-template.md'], pickLayeredSectionsForLevel('L2-F', 3))
+t('map: 低报重活（无自报 hostLevel≥2）→流程集', L2F_SET, pickLayeredSectionsForLevel(null, 2))
+t('map: 无自报轻档（hostLevel<2）=空集', [], pickLayeredSectionsForLevel(null, 1))
+
+// ── 缺口路径：仅清单缺失才附（判级单独缺失=先补判级不注分节）──
+t('gap: 判级单独缺失=空集', [], pickSectionsForGapAttach({ needLevel: true, needChecklist: false }, null, 1))
+t('gap: 两不需要=空集', [], pickSectionsForGapAttach({ needLevel: false, needChecklist: false }, null, 1))
+t('gap: 清单缺失+L2-F→流程集', L2F_SET, pickSectionsForGapAttach({ needLevel: false, needChecklist: true }, 'L2-F', 2))
+t('gap: 判级+清单缺失+L2-S→l2s', ['l2s-short-workflow.md'], pickSectionsForGapAttach({ needLevel: true, needChecklist: true }, 'L2-S', 2))
+
+// ── 目标模式检测（防误开自主授权）──
+t('goal: 命中-目标模式', true, detectGoalModeIntent('目标模式：把页面重构了'))
+t('goal: 命中-无人值守', true, detectGoalModeIntent('无人值守，自行推进'))
+t('goal: 命中-你决定', true, detectGoalModeIntent('小事你自己决定'))
+t('goal: 未命中-普通任务', false, detectGoalModeIntent('帮我修一下这个页面的样式'))
+t('goal: 未命中-按最优解走（歧义短语不收录）', false, detectGoalModeIntent('继继，按最优解走'))
+
+// ── 分节目录提示（可达性修复）──
+t('hint: 空目录=空串', '', buildLayeredDirHint([]))
+{
+  const hint = buildLayeredDirHint(['D:/a/layered', 'D:/b/layered'])
+  t('hint: 含全部目录与路由表名', true, hint.includes('D:/a/layered') && hint.includes('D:/b/layered') && hint.includes('00-加载清单.md'))
+  t('hint: 按优先序排列', true, hint.indexOf('D:/a/layered') < hint.indexOf('D:/b/layered'))
+}
 
 // ── 分节装载（fail-closed）──
 {
