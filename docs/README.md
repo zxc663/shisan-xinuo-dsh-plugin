@@ -51,6 +51,7 @@
 - `design-specs/e1-v5-supplement-prereg-20261016.md` — E1-v5 有效性补样本轮**预注册**（n≥5 四臂当前版重跑；判据/排除规则/门槛冻结；执行待窗口）。
 - `design-specs/e2-large-n-validation-plan-20261019.md` — **E2 大基数有效性验证·准备方案（预注册草案）**（天花板效应裁决→换「有失败面」六任务电池；C/D 主臂＋B 探索臂、Fisher 判据、中止规则冻结；夹具器＝`scripts/e2-battery.mjs`；未开跑）。
 - `design-specs/landing-plan-registry-20261019.md` — **落地计划登记（2026-10-19）**：E2 正式轮＝**延后**（开窗授权触发）＋发行打包＝**冻结**（显式解冻触发）＋插件包整合现状快照＋遗留事务台账。
+- `design-specs/compat-matrix-0.2.1-20261019.md` — **宿主兼容矩阵（0.2.1 线）**：两包接触面与降级行为、版本实测矩阵（0.2.1-rc.2 全链）、升级观察清单六步。
 - `design-specs/config-entry-research-20261017.md` — **配置入口惯例调研**（生态全景 1000 条目录/市场/23 分类；配置入口三 代际机制一手证据；竞品抽样；投稿规范对我们影响）。
 - `design-specs/config-entry-design-20261017.md` — **配置入口设计（冻结）**（插件页卡片→设置页三卡片：执行账本 P0/规则包 P1/纪律文本 P2；文件=权威层、UI=叠加层；双轨兼容）。
 - `design-specs/dsh-custom-prompt-research-20261017.md` — **「DSH自定义」系统提示词管理·调研**（装配链 API 全貌/`complete` 深改机制/0.2.1-rc.1 对照/生态近邻 `dsh-agent-persona` 深核与复用裁定）。

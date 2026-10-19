@@ -558,6 +558,30 @@ export function extractDeclaredLevel(text: string): 'L1' | 'L2-S' | 'L2-F' | 'L3
   return null
 }
 
+// 状态行中文字段解析（2026-10-19 补缺）：state/clarify/approval 三字段按 §0 映射表解码。
+// 当前唯一驱动运行时行为的取值＝clarify:'pending'（触发附 clarify-protocol 分节）；其余解析结果先行可用。
+export function extractStatusFields(text: string): {
+  state?: 'new' | 'resume' | 'single'
+  clarify?: 'none' | 'pending' | 'resolved'
+  approval?: 'not_required' | 'pending' | 'granted' | 'denied' | 'waived'
+} {
+  const t = text ?? ''
+  const out: {
+    state?: 'new' | 'resume' | 'single'
+    clarify?: 'none' | 'pending' | 'resolved'
+    approval?: 'not_required' | 'pending' | 'granted' | 'denied' | 'waived'
+  } = {}
+  const s = t.match(/\bstate\s*=\s*(新任务|续接|单次)/)
+  if (s) out.state = s[1] === '新任务' ? 'new' : s[1] === '续接' ? 'resume' : 'single'
+  const c = t.match(/\bclarify\s*=\s*(无|待澄清|已澄清)/)
+  if (c) out.clarify = c[1] === '无' ? 'none' : c[1] === '待澄清' ? 'pending' : 'resolved'
+  const a = t.match(/\bapproval\s*=\s*(无需|待批准|已批准|已拒绝|豁免)(?::[^\s]*)?/)
+  if (a) {
+    out.approval = a[1] === '无需' ? 'not_required' : a[1] === '待批准' ? 'pending' : a[1] === '已批准' ? 'granted' : a[1] === '已拒绝' ? 'denied' : 'waived'
+  }
+  return out
+}
+
 // ── P2（roadmap F1/F2）：判级强制＋任务清单强制——纯函数面（turn-stopping 检测逻辑单测化）──
 // 追加特征判别：短消息以追加词开头视为"同一任务的追加要求"（长文本=新任务；疑问句不算——提问≠追加）。
 // 误判面如实：本判别只决定 steer 文案用哪个版本（追加判级 vs 补判级），不改变任务边界（R20 每条用户消息仍开新任务）。
@@ -2318,6 +2342,8 @@ export function apply(ctx: Context) {
   const pendingGoalMode = new Set<string>()
   // F10b（2026-10-19 扩面）：已覆盖送达的任务（key=session.id；新任务清除——防同任务重复附文）
   const layeredCoveredTasks = new Set<string>()
+  // F14（2026-10-19 补缺）：clarify=待澄清 附文待送达（key=session.id；新任务清除——同任务一次）
+  const clarifyDeliveredTasks = new Set<string>()
   // F8 修复：summary 事件的影子 token 缓存（key=compactionId；end 到达时取用——真机 end 事件无该字段）
   const compactionShadowed = new Map<string, number>()
 
@@ -2478,6 +2504,7 @@ export function apply(ctx: Context) {
         taskAppendFollowUp = isAppend
         // F10b/c：新任务清除覆盖去重；目标模式检测（用户明示授权→turn-stopping 附 goal-mode.md 一次）
         if (!isAppend) layeredCoveredTasks.delete(sidKeyOf(session, ''))
+        if (!isAppend) clarifyDeliveredTasks.delete(sidKeyOf(session, ''))
         if (detectGoalModeIntent(txt)) pendingGoalMode.add(sidKeyOf(session, ''))
         const derived = ASSERT_LAYER ? deriveAssertionsFromUserText(txt) : []
         const key = sidKeyOf(session)
@@ -2826,6 +2853,16 @@ export function apply(ctx: Context) {
           agent.steer?.(noticeMessage(steerSummaryFor('discipline-gap', { needLevel: gap.needLevel, needChecklist: gap.needChecklist, append: taskAppendFollowUp }), `${STEER_PREFIX} ${STEER_ANTI_REPEAT} ${buildDisciplineSteerText({ ...gap, append: taskAppendFollowUp })}${gapAttach.text}`))
           console.log(`[shisan-xinuo] discipline gap steer for turn ${payload.turn} (level=${gap.needLevel} checklist=${gap.needChecklist} append=${taskAppendFollowUp})`)
           return
+        }
+      }
+      // F14（2026-10-19 补缺）：状态行 clarify=待澄清 → 一次性被动附 clarify-protocol.md（中文枚举解析器首用）
+      if (!clarifyDeliveredTasks.has(bucketKey) && extractStatusFields(`${b.firstText}\n${b.lastText}`).clarify === 'pending') {
+        clarifyDeliveredTasks.add(bucketKey)
+        const clAttach = attachLayeredSections(['clarify-protocol.md'], 'clarify')
+        if (clAttach.delivered.length > 0) {
+          ;(agent as { inject?: (m: unknown) => void })?.inject?.(
+            noticeMessage('澄清协议：已附 clarify-protocol.md 分节', `（宿主检测到状态行 clarify=待澄清，自动附澄清协议分节——按其推进提问；本通知非用户发言。）${clAttach.text}`),
+          )
         }
       }
       // C2：**按客观副作用免 gate**——只读回合（宿主视角 ≤L1，判据在宿主侧不用模型自报）不强制收口；
