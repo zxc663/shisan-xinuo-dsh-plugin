@@ -1,7 +1,21 @@
 {
   "name": "shisan-xinuo-dsh-plugin",
-  "version": "1.0.0-rc.1",
-  "description": "DeepSeek Harness 运行时治理插件：L3 拦截+真值收口+规则 Config 化（工程验收版）",
+  "version": "0.1.0-mvp",
+  "description": "DeepSeek Harness 运行时治理插件：L3 拦截＋真值收口＋规则 Config 化（0.1 MVP）",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "runtime-governance",
+    "agent-workflow",
+    "engineering-discipline",
+    "closeout-verification",
+    "l3-guard"
+  ],
+  "author": "十三希诺 <a13sino@qq.com>",
+  "homepage": "https://github.com/zxc663/shisan-xinuo-dsh-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/zxc663/shisan-xinuo-dsh-plugin/issues"
+  },
   "type": "module",
   "license": "MIT",
   "repository": {

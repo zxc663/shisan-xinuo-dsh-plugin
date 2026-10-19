@@ -1,5 +1,24 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 缺口批：提示词七项补全（2026-10-19）
+
+- **跨仓同步（缺口 1）**：`dsh-custom/content/layered/` 全量同步母仓库净化后版本（含 `.xinuo/`→`memory/` 承载根修正）；`client.js` factorySet 增 `resume-protocol.md`。
+- **agents-md 差异标注（缺口 2）**：顶部加「通用兜底版」差异注（无自包含段／承载根「建议」／无卫生与索引两条）；`content/README.md` 同口径。
+- **续接协议（缺口 3）**：新增 `layered/resume-protocol.md`（S 级，恢复半途任务）；`00-加载清单.md` 路由表＋自觉加载清单同步。
+- **密钥处置正流程（缺口 4）**：§4 红线补「遇疑似密钥→不复制/不回显/不落日志→脱敏→轮换→走私密渠道」。
+- **版本元数据（缺口 5）**：新增 `content/VERSION`（0.1.0-mvp，与 package.json 对齐），不进模型上下文。
+- **字段语义拆行（缺口 6）**：§0 映射表由超长括号拆为 state/clarify/approval 三行映射。
+- **已知坑扩充（缺口 7）**：§7 增 edit 需先 read／Windows 裸 exit 1 是中断／pwsh 捕获子进程 EPERM。
+- 同步：`discipline.md` 与 `CORE_DISCIPLINE` 镜像＋`agents-md`；测试 39/39（母仓）＋134/0（dsh-custom）＋client syntax；重新打 0.1 包（30 文件 161.1kB）。
+
+## 0.1 MVP 收口：提示词净化＋升版＋打包（2026-10-19）
+
+- **提示词模板净化（content/ 全量）**：去除正文无意义字眼——「模型」自指（改祈使/直接陈述）、标题与正文版本号（v8/v9）、实现批次与状态痕迹（F10/P6/C 批号、「已实现/设计要求/尚未注入」、重构/辩证史、日期）；（）内仅保留功能性定义，删实现噪声。`discipline.md` 与 `CORE_DISCIPLINE` 逐字镜像同步；`agents-md-discipline.md`、`layered/` 全分节、`content/README.md`、`rules.json` comment 同口径。
+- **升版**：`package.json` 1.0.0-rc.1 → `0.1.0-mvp`（description 同步为「0.1 MVP」）。
+- **README 重写**：按仓库本质重写——一句话定位／装了什么（提示词层＋挂载工具 discipline_gate/discipline_task/discipline_tools＋运行时自动强制＋强权限管理）／诚实边界／安装测试／反馈。保留「不依赖外部 Skill」「外部 Skill 仅可作为可选参考」（prompt-self-contained 锁定）。
+- **打 0.1 包**：`npm pack` → `memory/artifacts/shisan-xinuo-dsh-plugin-0.1.0-mvp.tgz`（28 文件，158.8 kB，含净化后 content/ 与 lib/）。
+- 验证：`npm run build` 0 错；`npm test` 39/39 套全绿（含镜像逐字/自包含/voice/md-links/docs-index）。
+
 ## dsh-custom 体验批：关于页＋快照删除＋悬停提示＋文案重写（2026-10-19）
 
 - **关于页（第 6 页）**：作者信息（zxc663）＋QQ 交流群/邮箱/GitHub 双仓库链接＋版本显示（`/status` 新增 version 字段，服务端读 package.json 缓存）＋**卸载与还原说明**（数据在 $DSH_HOME/dsh-custom 不随卸载丢失；重装即回位/回滚/导出三路径）。

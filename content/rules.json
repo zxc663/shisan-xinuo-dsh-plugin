@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "L3 危险域规则包（v0.3 Config 化）。用户可改本文件定制红线：加域/删域/改正则。结构无效或列表为空时引擎回退内置默认规则（fail-closed：防护不静默解除）。noExemptDomains 中的域命中即拦、不查豁免。flags 传 RegExp flags（推荐 i）。",
+  "comment": "L3 危险域规则包（Config 化）。用户可改本文件定制红线：加域/删域/改正则。结构无效或列表为空时引擎回退内置默认规则（fail-closed：防护不静默解除）。noExemptDomains 中的域命中即拦、不查豁免。flags 传 RegExp flags（推荐 i）。",
   "l3Domains": [
     {
       "domain": "编码执行",
