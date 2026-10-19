@@ -6,3 +6,5 @@
 - insert:
     - id: shisanxinuo-core
       name: 'shisan-xinuo-dsh-plugin/lib/shisan-xinuo-core.js'
+    - id: dsh-custom
+      name: 'shisan-xinuo-dsh-plugin/lib/dsh-custom.js'

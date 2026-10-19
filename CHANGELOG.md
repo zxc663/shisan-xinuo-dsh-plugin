@@ -1,5 +1,11 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 合并批：dsh-custom 并入母仓库（单包发行）（2026-10-19）
+
+- **单包合并**：dsh-custom（「DSH自定义」提示词管理后台）并入母仓库——`src/index.ts`→`src/dsh-custom.ts`、`client.js` 平移、13 个测试随迁（import 改 `../src/dsh-custom.ts`）。
+- **配置合并**：`cordis.patch.yml` 双 insert（shisanxinuo-core＋dsh-custom）；`package.json` 增 exports（`./client`、`./lib/*`）、files 加 client.js、`dsh.client.platform=web`；description／README 反映单包（运行时治理＋管理后台）。
+- 验证：build 0 错（lib 双产物 shisan-xinuo-core＋dsh-custom）＋npm test 52/52（39＋13）＋voice 0 违规。
+
 ## 缺口批：提示词七项补全（2026-10-19）
 
 - **跨仓同步（缺口 1）**：`dsh-custom/content/layered/` 全量同步母仓库净化后版本（含 `.xinuo/`→`memory/` 承载根修正）；`client.js` factorySet 增 `resume-protocol.md`。
