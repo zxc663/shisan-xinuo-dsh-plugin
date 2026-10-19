@@ -48,8 +48,9 @@
 
 - 通道：优先 **headless**（`scripts/e1-run.mjs` 同构：dsh CLI bin ＋ `headless-home`；批间并行度=1，防相互污染）；GUI 仅用于装置抽查与 T6 审批行为观察。
 - 夹具根：`D:/tmp/e2/<arm>-<task>-r<k>/`（本轮全新；判据档先冻结）。
-- 运行器缺口（开跑前须补，`e2-run.mjs`）：①新电池 prompt/fixture/truth 接线（直接引 `e2-battery.mjs`）；②每样本结果 JSON 落 `memory/tmp/e2-results.json`；③C 臂 boot 行/遥测窗口切分沿用 tally 口径。
-- 时间预估：每会话 ~60–120s（headless）→ 首批 96 会话 ≈ 2–3h；全量 300 会话 ≈ 6–10h，分 2–3 个窗口（免额度限速/机器占用）。
+- 运行器**已实现**（`scripts/e2-run.mjs`）：①电池接线（引 `e2-battery.mjs` 导出 `E2_TASKS`）②结果 JSON 落 `memory/tmp/e2-results.json`（追加式）③遥测＝exec-log 增量切片（C 臂；D 臂无插件自然为空）④D 臂干净家 `headless-home-clean`（`--clean-rebuild` 自动剥离插件挂载并校验残留=0）⑤治理臂运行前自动清 A/B 旗标（防模式残留）。
+- **试点（2026-10-19，4 样本）×就绪判定**：D/T1 ✗ 64/68B（EOL/尾换行丢失）｜C/T1 ✗ 73/68B（行号前缀污染；gatePass=3 未拦下——收口判据非字节级）｜D/T4 ✓ 16｜C/T4 ✗ 15/16（数错，gatePass=1）。**电池失败面成立（3/4 失败，脱离天花板）**、两臂失败模式不同、运行器端到端通（干净家/遥测/真值/落盘）。n=1 仅验机制，不作效果结论。
+- 时间预估：每会话 ~25–160s（headless，试点实测）→ 首批 96 会话 ≈ 1–3h；全量 300 会话 ≈ 4–10h，分 2–3 个窗口（免额度限速/机器占用）。
 - 中止规则：见 §1；额度异常（403/429 连续）→ 停批留痕待窗。
 
 ## 5. 分析口径

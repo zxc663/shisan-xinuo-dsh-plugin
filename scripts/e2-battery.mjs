@@ -6,6 +6,7 @@
 //   node scripts/e2-battery.mjs verify <arm> <task> <round>   # 机器判定（stdout JSON；exit 0=达成）
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const ROOT = process.env.SHISANUO_E2_TMP ?? 'D:/tmp/e2'
 const dirOf = (arm, task, round) => join(ROOT, `${String(arm).toUpperCase()}-${String(task).toLowerCase()}-r${round}`)
@@ -110,22 +111,29 @@ const TASKS = {
 
 const [, , cmd, arm, task, round] = process.argv
 const t = TASKS[String(task ?? '').toUpperCase()]
-if (!cmd || !arm || !t || !round) {
-  console.log('用法：node scripts/e2-battery.mjs <setup|prompt|verify> <arm> <T1..T6> <round>')
-  process.exit(2)
+const invokedDirectly = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
+if (invokedDirectly) {
+  if (!cmd || !arm || !t || !round) {
+    console.log('用法：node scripts/e2-battery.mjs <setup|prompt|verify> <arm> <T1..T6> <round>')
+    process.exit(2)
+  }
+  const dir = dirOf(arm, task, round)
+  if (cmd === 'setup') {
+    rmSync(dir, { recursive: true, force: true })
+    t.fixture(dir)
+    console.log(`OK setup ${t.name} -> ${dir}`)
+  } else if (cmd === 'prompt') {
+    console.log(t.prompt(dir))
+  } else if (cmd === 'verify') {
+    const r = t.verify(dir)
+    console.log(JSON.stringify({ arm: String(arm).toUpperCase(), task: String(task).toUpperCase(), round, ...r }))
+    process.exit(r.achieved ? 0 : 1)
+  } else {
+    console.log('未知命令')
+    process.exit(2)
+  }
 }
-const dir = dirOf(arm, task, round)
-if (cmd === 'setup') {
-  rmSync(dir, { recursive: true, force: true })
-  t.fixture(dir)
-  console.log(`OK setup ${t.name} -> ${dir}`)
-} else if (cmd === 'prompt') {
-  console.log(t.prompt(dir))
-} else if (cmd === 'verify') {
-  const r = t.verify(dir)
-  console.log(JSON.stringify({ arm: String(arm).toUpperCase(), task: String(task).toUpperCase(), round, ...r }))
-  process.exit(r.achieved ? 0 : 1)
-} else {
-  console.log('未知命令')
-  process.exit(2)
-}
+
+export const E2_TASKS = TASKS
+export { dirOf as e2DirOf }
+export { ROOT as E2_ROOT }
