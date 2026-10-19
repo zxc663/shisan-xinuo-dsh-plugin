@@ -33,7 +33,19 @@
 - **本地工作树有一处未提交改动**删除了 `dsh.bundle`（**不影响提交态**；本地直接打包会产出非 bundle 包）。
 - 兼容性口径：见 [`env-matrix-20261016.md`](../env-matrix-20261016.md) 与 [`preview-line-compat-20261016.md`](../preview-line-compat-20261016.md)（预览线@当前 core 复验通过）。
 
-## 五、复跑
+## 五、复验（2026-10-19，F14/兼容矩阵批）：双包 tgz 全链 ＋ 禁用态实测
+
+- **打包**：`npm pack` 双包——engine `shisan-xinuo-dsh-plugin-1.0.0-rc.1.tgz`（158.6KB：lib＋content 全量＋patch）｜custom `dsh-custom-0.1.0.tgz`（61.2KB：lib＋client.js＋patch）；prepack 构建自动触发。
+- **官方安装**（隔离家 `D:\ai本地模型\dsh\itest-home-20261019`，自 headless 模板初始化 `itest` 档）：
+  - `dsh plugin --profile itest add <engine.tgz>` → pnpm 682ms 无警告；
+  - `dsh plugin --profile itest add <custom.tgz>` → 502ms；profile `dependencies` 落 tgz 引用，`dsh.profile.bundles` 自动追加 `shisan-xinuo-dsh-plugin`＋`dsh-custom`；
+  - `--dump-config`：两条目在场（`shisanxinuo-core → …/lib/shisan-xinuo-core.js`；`dsh-custom → dsh-custom/lib/index.js`）。
+- **启动实测**：`dsh itest "<trivial 任务>"` → `[dsh-custom] P0 运行时已装载（存储=隔离家新建 10）`＋`[shisan-xinuo] arm=C`／rules source=**安装包内 content/**（valid、11 域）／护栏/工具全注册——安装态与开发态行为一致。
+- **禁用态（装而不启用）实测**：`profiles/itest/cordis.patch.yml` 写
+  `- id: shisanxinuo-core, disabled: true` ＋ `- id: dsh-custom, disabled: true` → dump-config 保留条目（patched-by 标注）→ 启动**零插件装载行** ✓；恢复＝删两行。三档禁用手段：①本 patch 禁用（实测）②桌面「插件」页开关（plugin-manager UI，同底层机制，未直测——避免动日常档）③插件自身治理开关（总闸/分域/注入，装且启用但静默，粒度最细）。
+- 证据留档：隔离家全目录 `D:\ai本地模型\dsh\itest-home-20261019`（含 packs/装配树/两次启动记录）。
+
+## 六、复跑
 
 ```bash
 git clone https://github.com/zxc663/shisan-xinuo-dsh-plugin && cd shisan-xinuo-dsh-plugin
