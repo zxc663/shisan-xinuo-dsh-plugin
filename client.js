@@ -1263,28 +1263,88 @@ window.__ModuleLoader__.load({
         h(Toast, { msg }));
     }
 
-    // ── ⑥ 关于（2026-10-19）──
+    // ── ⑥ 关于 ──
     function AboutPage() {
       const [st, setSt] = useState(null);
+      const [msg, setMsg] = useState(null);
+      const [modal, setModal] = useState(null);
+      const [busy, setBusy] = useState(false);
       useEffect(() => { void (async () => { try { setSt(await api('status')); } catch { setSt(null); } })(); }, []);
-      const repoAdmin = 'https://github.com/zxc663/dsh-custom';
-      const repoEngine = 'https://github.com/zxc663/shisan-xinuo-dsh-plugin';
+      const repo = 'https://github.com/zxc663/shisan-xinuo-dsh-plugin';
       const kv = (k, v) => h('div', { className: 'dshc_trow', style: { padding: '10px 0' } }, h('div', { className: 'dshc_tlabel' }, k), v);
+      // 版本：package 版本 0.1.0-mvp → 展示 "MVP0.1"
+      const verLabel = (() => {
+        const m = st && st.version ? String(st.version).match(/^(\d+)\.(\d+)/) : null;
+        return m ? 'MVP' + m[1] + '.' + m[2] : '';
+      })();
+      // 出厂分节清单（与包内 content/layered 根文件同步；templates/ 子目录不在列）
+      const factoryNames = ['00-加载清单.md', 'clarify-protocol.md', 'compression-reload.md', 'docking-truth-list.md', 'environment-inventory.md', 'goal-mode.md', 'l2f-full-workflow.md', 'l2s-short-workflow.md', 'requirements-challenge.md', 'resume-protocol.md', 'tool-triggers.md'];
+      const uninstallCmd = 'dsh plugin --profile <你的档名> remove shisan-xinuo-dsh-plugin';
+      const doStopTakeover = async () => {
+        setModal(null); setBusy(true);
+        try {
+          await api('override/enable', { method: 'PUT', body: { enabled: false } });
+          setMsg({ title: '已停止接管', detail: '模型已改回使用官方系统提示词原文；你保存的接管草稿仍在，随时可再开启。' });
+        } catch (e) { setMsg({ title: '操作失败', detail: String((e && e.message) || e) }); } finally { setBusy(false); }
+      };
+      const doReset = async () => {
+        setModal(null); setBusy(true);
+        try {
+          await api('discipline', { method: 'PUT', body: { text: '' } });
+          await api('user-prompt', { method: 'PUT', body: { text: '', enabled: false } });
+          const lv = await api('layered');
+          for (const s of (lv && lv.sections ? lv.sections : [])) {
+            if (factoryNames.indexOf(s.name) < 0) continue;
+            try { await api('layered/' + encodeURIComponent(s.name) + '/reset', { method: 'POST' }); } catch { /* 单节失败不阻断其余 */ }
+          }
+          setMsg({ title: '已重置回默认提示词', detail: '「前置纪律」与「我的提示词」已清空，渐进分节恢复出厂；你自建的分节保留未动。' });
+        } catch (e) { setMsg({ title: '重置失败', detail: String((e && e.message) || e) }); } finally { setBusy(false); }
+      };
       return h('div', { className: 'dshc_panel' },
         h('div', { className: 'dshc_ph' }, h('h3', null, '关于'), h('span', { className: 'dshc_spacer' }),
-          h('span', { className: 'dshc_hint' }, st && st.version ? '管理后台 v' + st.version : '')),
+          h('span', { className: 'dshc_hint' }, verLabel || '')),
         h('div', { className: 'dshc_body', style: { paddingTop: 12 } },
           h('p', { style: { marginTop: 0, lineHeight: '22px' } },
-            '你好，我是 zxc663，欢迎使用我的插件。目前仍然处于最小基线状态，还有很多不完善之处——如果有改进建议，或是想对这个项目进行贡献，十分欢迎开 git 分支和提 issue。'),
+            '你好，我是 zxc663，欢迎使用我的插件。当前是 0.1 MVP：运行时治理 + 提示词管理后台是一个包。仍有不完善之处——有改进建议或想贡献，欢迎开 issue 或提 PR。'),
           kv('QQ 交流群', h('code', null, '1059212846')),
           kv('邮箱反馈', h('code', null, '938566908@qq.com')),
-          kv('GitHub（管理后台）', h('a', { href: repoAdmin, target: '_blank', rel: 'noreferrer' }, repoAdmin)),
-          kv('GitHub（运行时引擎）', h('a', { href: repoEngine, target: '_blank', rel: 'noreferrer' }, repoEngine)),
-          h('div', { className: 'dshc_hint', style: { marginTop: 14, lineHeight: '21px' } },
-            h('div', { style: { fontWeight: 600, color: 'var(--dsw-alias-label-primary)', marginBottom: 4 } }, '卸载与还原'),
-            h('div', null, '卸载：从 DSH 配置档移除本插件即可（dsh plugin --profile <档> remove <包名>；运行时引擎同理）——你的配置数据保存在 $DSH_HOME/dsh-custom，不随卸载丢失。'),
-            h('div', null, '还原：重装后本页各功能直接读同一数据目录（快照/会话覆盖/全局文本自动回位）；也可在「快照与恢复」回滚，或先用「导入/导出」留一份 JSON。'),
-            st && st.root ? h('div', null, '当前数据目录：' + st.root) : null)))
+          kv('GitHub 仓库', h('a', { href: repo, target: '_blank', rel: 'noreferrer' }, repo)),
+          h('div', { style: { marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--dsw-alias-border-l2)' } },
+            h('div', { style: { fontWeight: 600, color: 'var(--dsw-alias-label-primary)', marginBottom: 4 } }, '维护'),
+            h('div', { className: 'dshc_hint', style: { marginBottom: 10, lineHeight: '21px' } },
+              '三个按钮依次是：停止接管（模型改回官方原文）／重置回默认提示词（清掉你的自定义，恢复插件自带）／卸载（从 DSH 移除本插件）。'),
+            h('div', { className: 'dshc_row', style: { flexWrap: 'wrap', gap: 8 } },
+              h('button', { className: 'dshc_btn', disabled: busy, onClick: () => setModal({
+                title: '停止接管，恢复系统默认？',
+                body: h('div', null,
+                  h('p', null, '如果你开过「整段接管」，模型现在看到的是你保存的文本。停止接管后，模型改回使用官方系统提示词原文。'),
+                  h('p', { className: 'dshc_hint' }, '你保存的接管草稿不会丢，随时可以再开启；「前置纪律」和「我的提示词」不受影响。')),
+                actions: h('div', { className: 'dshc_row' },
+                  h('button', { className: 'dshc_btn', onClick: () => void doStopTakeover() }, '确认停止接管'),
+                  h('button', { className: 'dshc_btn', onClick: () => setModal(null) }, '取消')),
+              }) }, '停止接管'),
+              h('button', { className: 'dshc_btn', disabled: busy, onClick: () => setModal({
+                title: '重置回默认提示词？',
+                body: h('div', null,
+                  h('p', null, '将把「前置纪律」和「我的提示词」清空，并把渐进分节恢复成插件自带版本。'),
+                  h('p', { className: 'dshc_hint' }, '你自建的分节保留；此操作会先自动备份当前状态，可在「快照与恢复」回滚。')),
+                actions: h('div', { className: 'dshc_row' },
+                  h('button', { className: 'dshc_btn', 'data-danger': true, onClick: () => void doReset() }, '确认重置'),
+                  h('button', { className: 'dshc_btn', onClick: () => setModal(null) }, '取消')),
+              }) }, '重置回默认提示词'),
+              h('button', { className: 'dshc_btn', 'data-danger': true, onClick: () => setModal({
+                title: '卸载本插件？',
+                body: h('div', null,
+                  h('p', null, '卸载＝从 DSH 配置档移除本插件。请在终端执行下面这条命令（网页后台没有权限替你卸载）：'),
+                  h('p', null, h('code', { style: { wordBreak: 'break-all' } }, uninstallCmd)),
+                  h('p', { className: 'dshc_hint' }, '卸载不会删除你的配置数据（$DSH_HOME/dsh-custom），重装后自动回位；重启 DSH 后生效。')),
+                actions: h('div', { className: 'dshc_row' },
+                  h('button', { className: 'dshc_btn', onClick: async () => { try { await navigator.clipboard.writeText(uninstallCmd); setMsg({ title: '已复制卸载命令', detail: '粘贴到终端执行（记得把 <你的档名> 换成实际档名）' }); } catch { setMsg({ title: '复制失败', detail: '请手动选中命令复制' }); } } }, '复制命令'),
+                  h('button', { className: 'dshc_btn', onClick: () => setModal(null) }, '关闭')),
+              }) }, '卸载'))),
+          st && st.root ? h('div', { className: 'dshc_hint', style: { marginTop: 12 } }, '当前数据目录：' + st.root) : null),
+        h(Modal, { open: modal !== null, title: modal ? modal.title : '', onClose: () => setModal(null), actions: modal ? modal.actions : null }, modal ? modal.body : null),
+        h(Toast, { msg }));
     }
 
     // ── 外壳 ──

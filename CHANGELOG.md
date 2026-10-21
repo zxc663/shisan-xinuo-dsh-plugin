@@ -1,5 +1,15 @@
 # CHANGELOG（内部工程版本记录——非发行公告）
 
+## 关于页改造：版本号＋单仓链接＋卸载/停止接管/重置三按钮（2026-10-19）
+
+- **版本显示**：`0.1.0-mvp` → 页面展示 `MVP0.1`。
+- **链接修正**：移除指向已被吸收仓库 `dsh-custom` 的旧链接，只保留单一 GitHub 仓库链接。
+- **三按钮（均带二次确认弹窗）**：
+  - 「停止接管」→ `PUT override/enable {enabled:false}`（模型改回官方系统提示词原文，草稿保留）。
+  - 「重置回默认提示词」→ 清前置纪律＋清我的提示词＋渐进分节恢复出厂（自建分节保留、先自动快照）。
+  - 「卸载」→ 弹窗给出 `dsh plugin --profile <档> remove shisan-xinuo-dsh-plugin`＋一键复制＋数据保留说明（网页后台无权限代卸）。
+- 验证：`node --check client.js` OK＋`npm test` 52/52（repo-voice 含 client.js）。
+
 ## 合并批：dsh-custom 并入母仓库（单包发行）（2026-10-19）
 
 - **单包合并**：dsh-custom（「DSH自定义」提示词管理后台）并入母仓库——`src/index.ts`→`src/dsh-custom.ts`、`client.js` 平移、13 个测试随迁（import 改 `../src/dsh-custom.ts`）。
